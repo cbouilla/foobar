@@ -1,0 +1,543 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+The combination of the \texttt{FOOBAR}-modified Miner and the
+\texttt{FOOBAR}-server yield \emph{nonce files}, containing (counter, nonce) pairs.
+Each pair requires 16 bytes, and we expect to have 3 lists of $2^{31.7}$
+entries each, for a total storage space of 150Gbyte. 
+
+The nonce lists must be checked (i.e. the corresponding hashes must have 32
+zero bits). They must then be hashed, and 64 bits of each hash stored to disk.
+This yields three hash lists, of $25.4$Gbyte each. These lists have to be
+sorted and checked for duplicates.
+
+We use the following strategy :
+\begin{enumerate}
+\item Split nonce files using bits of the hash as keys. The split nonce files can be made arbitrarily small.
+\item Sort and deduplicate the split nonce files.
+\item Hash the split nonce files (this yields the split hash files). Sort and deduplicate the split hash files.
+\item Concatenate the split hash files. If everything was done correctly, they are sorted.
+\end{enumerate}
+
+To deal with such an amount of data, a collection of tools is necessary. These
+codes use \textsf{OpenSSL}'s implementation of \textsf{SHA256}. We chose to
+use \OMP as much as possible to help parallelization, and to combine it with
+\ZMQ for message-passing.
+
+
+\section{Global Structure}
+
+This program reads a nonce file, and compute all the hashes. It checks that the (counter, nonce) pairs
+indeed yield hashes with 32 leading zero bits. Then, the This file has the usual structure :
+
+<<*>>=
+<<Header files to include>>
+<<Type definitions>>
+<<Global variables>>
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<Header files to include>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <err.h>
+#include <inttypes.h>
+#include <getopt.h>
+#include <assert.h>
+
+#include <omp.h>
+#include <zmq.h>
+#include "sha256.h"
+
+@ The main strategy is as follows. A "reader" thread reads the input files and
+sends blocks of (counter, nonce) pairs to "mapper" threads. The mapper threads
+assemble the plaintext block, hash it, and dispatch it in one of their
+buffers. When a buffer is full, it is flushed to a "writter" thread.
+
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Initialize global communications>>
+	<<Start all the threads>>
+	exit(EXIT_SUCCESS);
+}
+
+@ The possible command-line arguments are the kind of the blocks  ([[FOO]],
+[[BAR]], [[FOOBAR]]), the $\log_2$ of the number of output hash files and the
+input nonce filenames. We enforce that the arguments   are actually present.
+
+<<Global variables>>=
+struct option longopts[3] = {
+	{"kind", required_argument, NULL, 'k'},
+	{"bits", required_argument, NULL, 'b'},
+	{NULL, 0, NULL, 0}
+};
+int kind = -1;
+int bits = -1;
+
+<<Process the command line>>=
+char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+	switch (ch) {
+	case 'k':
+		kind = atoi(optarg);
+		break;
+	case 'b':
+		bits = atoi(optarg);
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+}
+if (kind == -1) 
+	errx(1, "missing required option --kind");
+if (bits == -1) 
+	errx(1, "missing required option --bits");
+if (optind >= argc)
+	errx(1, "missing filenames");
+
+@ Before starting to dwelve into the code of the threads, we must set up a bit
+of global context. The number of output files (and of writter threads) if
+$2^{[[bits]]}$. The number of mappers is the number of cores of the machine,
+which is (in principle) given by [[omp_get_max_threads]].
+
+<<Global variables>>=
+int n_writer;
+int n_mapper;
+
+<<Initialize global communications>>=
+n_writer = 1 << bits;
+n_mapper = omp_get_max_threads();
+
+@ Because the number of writers in only known at runtime, the names of their
+endpoints have to be determined also at runtime.
+
+<<Global variables>>=
+char **writer_endpoints;
+
+<<Initialize global communications>>=
+writer_endpoints = malloc(sizeof(*writer_endpoints) * n_writer);
+if (writer_endpoints == NULL)
+	err(1, "malloc writer_endpoints");
+for (int i = 0; i < n_writer; i++) {
+	char endpoint[255];
+	sprintf(endpoint, "inproc://writer.%d", i);
+	writer_endpoints[i] = strdup(endpoint);
+}
+
+@ A \ZMQ context must be setup before any other communication can take place
+between the threads.
+
+<<Global variables>>=
+void * zmq_context;
+
+<<Initialize global communications>>=
+zmq_context = zmq_ctx_new();
+if (zmq_context == NULL)
+	errx(1, "zmq_ctx_new: %s", zmq_strerror(errno));
+
+@ 
+
+
+
+
+
+
+\section{Reading the Nonces}
+
+A nonce file contains a sequence of [[struct nonce_msg_t]], and the names of
+files to process are given on the command-line.
+
+<<Type definitions>>=
+struct nonce_msg_t {
+	int64_t counter;
+	uint32_t nonce;
+} __attribute__((packed));
+
+@ The reader thread must setup some communication infrastructure. The mapper
+threads will request nonce blocks from the reader. The reader will reply with
+nonce blocks, or an [[EOF]] message, which is simply a block of size zero.
+
+<<Reader thread>>=
+<<Initialize reader communications>>
+int nonces_read = 0;
+while (optind < argc) {
+	char *filename = argv[optind];
+	optind += 1;
+	FILE *f = fopen(filename, "r");
+	if (f == NULL)
+		err(1, "fopen on %s", filename);
+	while (1) {
+		<<Read a nonce block from [[f]] in [[buffer]]>>
+		<<Wait for a request and send back [[buffer]]>>
+		<<Print status report>>
+	}
+}
+for (int i = 0; i < n_mapper; i++) {
+	<<Wait for a request and send back [[EOF]]>>
+}
+<<Shutdown reader communication>>
+
+@ This requires that the reader knows the number of mappers. For now, it's OK.
+
+<<Global variables>>=
+int n_mapper;
+
+@ The reader creates a [[REP]] socket and binds it. The endpoint is constant.
+
+<<Global variables>>=
+static const char * READER_ENDPOINT = "inproc://reader";
+
+<<Initialize reader communications>>=
+assert(sizeof(struct nonce_msg_t) == 12);
+void *socket = zmq_socket(zmq_context, ZMQ_REP);
+if (socket == NULL)
+	errx(1, "zmq_socket reader : %s", zmq_strerror(errno));
+if (zmq_bind(socket, READER_ENDPOINT) != 0)
+	errx(1, "zmq_bind reader : %s", zmq_strerror(errno));
+
+<<Shutdown reader communication>>=
+if (zmq_close(socket) != 0)
+	errx(1, "zmq_close reader : %s", zmq_strerror(errno));
+#pragma omp critical
+printf("\nReader finished. %d nonces read\n", nonces_read);
+
+@ Reading the file is straightforward. We use a buffer of [[struct nonce_msg_t]]
+
+<<Global variables>>=
+static const int READER_BUFFER_SIZE = 65536;
+
+<<Read a nonce block from [[f]] in [[buffer]]>>=
+struct nonce_msg_t buffer[READER_BUFFER_SIZE];
+size_t n_items = fread(buffer, sizeof(struct nonce_msg_t), READER_BUFFER_SIZE, f);
+if (ferror(f))
+	err(1, "fread in reader");
+if (n_items == 0 && feof(f))
+	break;
+int size = n_items * sizeof(struct nonce_msg_t);
+
+@ Sending the block to the mapper is also quite simple.
+
+<<Wait for a request and send back [[buffer]]>>=
+if (zmq_recv(socket, NULL, 0, 0) == -1)
+	errx(1, "zmq_recv reader, main loop : %s", zmq_strerror(errno));
+if (zmq_send(socket, buffer, size, 0) == -1)
+	errx(1, "zmq_send reader, main loop : %s", zmq_strerror(errno));
+nonces_read += n_items;
+
+@ Once all the files have been processed, the mappers must be told to stop
+sending requests. We use an empty block as an [[EOF]] mark.
+
+<<Wait for a request and send back [[EOF]]>>=
+if (zmq_recv(socket, NULL, 0, 0) == -1)
+	errx(1, "zmq_recv reader, shutdown : %s", zmq_strerror(errno));
+if (zmq_send(socket, NULL, 0, 0) == -1)
+	errx(1, "zmq_send reader, shutdown : %s", zmq_strerror(errno));
+
+@ We implement a simple form of verbosity.
+
+<<Print status report>>=
+#pragma omp critical
+{
+	printf("\rNonces read: %d", nonces_read);
+	fflush(stdout);
+}
+
+@
+
+
+
+
+\section{Hashing and Dispatching the Nonces}
+
+Now come the mapper threads. They split input blocks into [[n_writer]] output
+buffers. When an output buffer is full, it is flushed to the corresponding
+writer thread.
+
+<<Mapper thread>>=
+<<Initialize output buffers>>
+<<Initialize mapper communications>>
+int n_processed = 0, n_invalid = 0;
+while (1) {
+	<<Request [[nonces]] from reader; if [[EOF]], then [[break]]>>
+	for (int i = 0; i < n_nonces; i++) {
+		<<Assemble the plaintext>>
+		<<Compute the hash; if invalid then [[continue]]>>
+		<<Push the hash to the output buffer [[slot]]>>
+		if (output_size[slot] == WRITER_BUFFER_SIZE) {
+			<<flush [[output[slot]]] to writer \#[[slot]]>>
+		}
+	}
+}
+<<Flush all buffers and send [[EOF]] message to all writers>>
+<<Shutdown mapper communications>>
+
+@ Dealing with the buffer is as simple as in the reader. So is communication with the reader.
+
+<<Initialize output buffers>>=
+uint64_t output[n_writer][WRITER_BUFFER_SIZE];
+int output_size[n_writer];
+for (int i = 0; i < n_writer; i++)
+	output_size[i] = 0;
+
+<<Initialize mapper communications>>=
+void *reader_socket = zmq_socket(zmq_context, ZMQ_REQ);
+if (reader_socket == NULL)
+	errx(1, "zmq_socket mapper <--> reader: %s", zmq_strerror(errno));
+if (zmq_connect(reader_socket, READER_ENDPOINT) != 0)
+	errx(1, "zmq_connect mapper <--> reader: %s", zmq_strerror(errno));
+
+
+@ When receiving a block from the reader, we receive its size in bytes, so we
+must be careful. We ignore an eventual incomplete [[nonce_msg_t]].
+
+<<Request [[nonces]] from reader; if [[EOF]], then [[break]]>>=
+struct nonce_msg_t nonces[READER_BUFFER_SIZE];
+if (zmq_send(reader_socket, NULL, 0, 0) == -1)
+	errx(1, "zmq_send mapper --> reader: %s", zmq_strerror(errno));
+int block_size = zmq_recv(reader_socket, nonces, sizeof(nonces), 0);
+if (block_size == -1)
+	errx(1, "zmq_recv mapper: %s", zmq_strerror(errno));
+if (block_size == 0)
+	break;
+int n_nonces = block_size / sizeof(struct nonce_msg_t);
+
+
+@ Assembling the block is essentially the same code that has been injected into the modified \textsf{cgminer}.
+
+<<Global variables>>=
+static const char *PREFIXES[3] = {
+	             "FOO-0x0000000000000000                                                          ",
+		     "BAR-0x0000000000000000                                                          ",
+		     "FOOBAR-0x0000000000000000                                                       "
+		};
+
+static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
+ 
+
+<<Assemble the plaintext>>=
+int64_t counter = nonces[i].counter;
+uint32_t nonce = nonces[i].nonce;
+
+char buffer[80];
+memcpy(buffer, PREFIXES[kind], 80);
+	
+int j = (kind == 2) ? 25 : 22;
+while (counter > 0) {
+	int nibble = counter & 0x000f;
+	counter >>= 4;
+	buffer[j] = NIBBLE[nibble];
+	j--;
+}
+
+uint32_t *block = (uint32_t *) buffer;
+block[19] = __builtin_bswap32(nonce);
+
+@ A priori, the nonces are valid at difficulty 33. This means that the top 33
+bits of the hash must be zero.
+
+<<Compute the hash; if invalid then [[continue]]>>=
+unsigned char md[32];
+uint32_t hash[8];
+SHA256((unsigned char *) block, 80, md);
+SHA256((unsigned char *) md, 32, (unsigned char *) hash);
+bool valid = (hash[7] == 0x00000000) && ((hash[6] & 0x80000000) == 0x0000000000);
+if (!valid) {
+	n_invalid += 1;
+	continue;
+}
+
+
+<<print the hash>>=
+printf("%016" PRIx64 " / %08" PRIx32 " -> ", L[i].counter, nonce);
+for (int j = 0; j < 8; j++)
+	printf("%08" PRIx32 " ", hash[j]);
+printf("\n");
+
+
+
+
+@ We must extract 64 bits of the hash from [[hash[5]]] and [[hash[6]]],
+excluding the most-significant bit of [[hash[6]]] which is always zero. We
+replace it with the most-significant bit of [[hash[4]]].
+
+<<Push the hash to the output buffer [[slot]]>>=
+uint64_t x = (((uint64_t) hash[5]) << 32) ^ hash[6] ^ (hash[4] & 0x80000000);
+int slot = bits ? (x >> (64 - bits)) : 0;
+output[slot][output_size[slot]] = x;
+output_size[slot] += 1;
+
+@ Before considering flushing full buffers to the writters, we must connect to
+them.
+
+<<Initialize mapper communications>>=
+void *writer_socket[n_writer];
+for (int i = 0; i < n_writer; i++) {
+	writer_socket[i] = zmq_socket(zmq_context, ZMQ_PUSH);
+	if (writer_socket[i] == NULL)
+		errx(1, "zmq_socket mapper --> writter %d: %s", i, zmq_strerror(errno));
+	if (zmq_connect(writer_socket[i], writer_endpoints[i]) != 0)
+		errx(1, "zmq_connect mapper --> writer %d: %s", i, zmq_strerror(errno));
+}
+#pragma omp critical
+printf("\nMapper %d, started.\n", omp_get_thread_num());
+
+<<Shutdown mapper communications>>=
+if (zmq_close(reader_socket) != 0)
+	errx(1, "zmq_close mapper <--> reader : %s", zmq_strerror(errno));
+for (int i = 0; i < n_writer; i++)
+	if (zmq_close(writer_socket[i]) != 0)
+		errx(1, "zmq_close mapper <--> writer %d: %s", i, zmq_strerror(errno));
+
+		
+<<flush [[output[slot]]] to writer \#[[slot]]>>=
+int msg_size = output_size[slot] * sizeof(uint64_t);
+if (zmq_send(writer_socket[slot], output[slot], msg_size, 0) == -1)
+	errx(1, "zmq_send, mapper --> writer %d: %s", slot, zmq_strerror(errno));
+n_processed += output_size[slot];
+output_size[slot] = 0;
+
+
+@ When we receive the [[EOF]] mark from the reader, we must flush incomplete
+output buffers to the writters. The [[EOF]] mark we send them is also an empty
+buffer.
+
+<<Flush all buffers and send [[EOF]] message to all writers>>=
+for (int slot = 0; slot < n_writer; slot++) {
+	<<flush [[output[slot]]] to writer \#[[slot]]>>
+	if (zmq_send(writer_socket[slot], NULL, 0, 0) == -1)
+		errx(1, "zmq_send, mapper --> writer %d: %s", slot, zmq_strerror(errno));
+}
+#pragma omp critical
+printf("\nMapper %d, finished. %d nonces processed. %d invalid\n", omp_get_thread_num(), n_processed, n_invalid);
+
+@
+
+
+
+
+
+
+\section{Writing Hashes}
+
+It remains to describe the writers, which is almost the simplest.
+
+<<Global variables>>=
+static const int WRITER_BUFFER_SIZE = 2048;
+
+<<Writer thread>>=
+int id;
+int n_eof = 0;
+<<Get writer [[id]]>>
+<<Initialize writer communications>>
+<<Open output file [[f]]>>
+while (1) {
+	uint64_t block[WRITER_BUFFER_SIZE];
+	<<Receive [[block]] from a mapper>>
+	<<If [[n_mapper]] [[EOF]] marks have been receved, then [[break]]>>
+	<<Write [[block]] to [[f]]>>
+}
+<<Close [[f]]>>
+<<Shutdown writer communications>>
+
+@ The writer's [[id]] is its number amongst writer threads. We postpone this
+part, because it is related to the way the threads are started.
+
+<<Initialize writer communications>>=
+void *socket = zmq_socket(zmq_context, ZMQ_PULL);
+if (socket == NULL)
+	errx(1, "zmq_socket writer %d: %s", id, zmq_strerror(errno));
+if (zmq_bind(socket, writer_endpoints[id]) != 0)
+	errx(1, "zmq_bind writer %d: %s", id, zmq_strerror(errno));
+
+@ We derive the output filename from the writer's [[id]]. The output file is
+opened in write mode, so it is truncated to size zero.
+
+<<Open output file [[f]]>>=
+char filename[255];
+char *template[3] = {"foo", "bar", "foobar"};
+sprintf(filename, "%s.%d", template[kind], id);
+FILE *f = fopen(filename, "w");
+if (f == NULL)
+	err(1, "fopen writer %d", id);
+
+<<Receive [[block]] from a mapper>>=
+int size = zmq_recv(socket, block, sizeof(block), 0);
+if (size < 0)
+	errx(1, "zmq_recv writer %d: %s", id, zmq_strerror(errno));
+
+<<If [[n_mapper]] [[EOF]] marks have been receved, then [[break]]>>=
+if (size == 0)
+	n_eof += 1;
+if (n_eof == n_mapper)
+	break;
+
+<<Write [[block]] to [[f]]>>=
+size_t n_items =  size / sizeof(uint64_t);
+size_t tmp = fwrite(block, sizeof(uint64_t), n_items, f);
+if (tmp != n_items)
+	err(1, "fwrite writer %d: %zd vs %d", id, tmp, size);
+
+<<Close [[f]]>>=
+if (fclose(f))
+	err(1, "fclose writer %d", id);
+
+<<Shutdown writer communications>>=
+if (zmq_close(socket) != 0)
+	errx(1, "zmq_close writer %d: %s", id, zmq_strerror(errno));
+
+@
+
+\section{The [[main]] Function}
+
+It remains to start all the threads. We use \OMP for this. 
+
+<<Start all the threads>>=
+printf("Starting 1 reader, %d mappers and %d writers\n", n_mapper, n_writer);
+#pragma omp parallel num_threads(1 + n_mapper + n_writer)
+{
+	int t = omp_get_thread_num();
+	if (t < n_writer) {
+		<<Writer thread>>
+	} else if (t == n_writer) {
+		<<Reader thread>>
+	} else {
+		<<Mapper thread>>
+	}
+}
+
+@ With this setup, getting the writer's [[id]] is simple.
+
+<<Get writer [[id]]>>=
+id = t;
+
+@ And that's it.
+
+\end{document}
