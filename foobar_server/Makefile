@@ -4,7 +4,7 @@ CFLAGS = -std=c99 -g -Wall -Wextra -O3
 
 all: programs doc
 
-programs: server sample_client splitter sorter merger
+programs: server sample_client splitter sorter merger hash_checker
 doc: server.pdf sample_client.pdf splitter.pdf sorter.pdf
 
 server.o:        server.c
@@ -20,75 +20,22 @@ splitter.o: CC = mpicc
 splitter: sha256.o splitter.o
 splitter: CC = mpicc
 
-
 sha256.o: sha256.c sha256.h
 
-server.c: server.nw
+## NOWEB IMPLICIT RULES
+%.c : %.nw
 	notangle -L $^ > $@
 
-server.tex: server.nw
+%.tex : %.nw
 	noweave -x -delay $^ > $@
 
-server.aux: server.tex
+### PDFLATEX IMPLICIT RULES
+
+%.aux: %.tex
 	pdflatex $<
 
-server.pdf: server.aux
-	pdflatex server
-
-############
-
-sample_client.c: sample_client.nw
-	notangle -L $^ > $@
-
-sample_client.tex: sample_client.nw
-	noweave -delay $^ > $@
-
-sample_client.pdf: sample_client.tex
-	pdflatex sample_client
-
-#################
-
-splitter.c: splitter.nw
-	notangle -L $^ > $@
-
-splitter.tex: splitter.nw
-	noweave -x -delay $^ > $@
-
-splitter.aux: splitter.tex
+%.pdf: %.tex %.aux
 	pdflatex $<
-
-splitter.pdf: splitter.aux
-	pdflatex splitter.tex
-
-##################
-
-sorter.c: sorter.nw
-	notangle -L $^ > $@
-
-sorter.tex: sorter.nw
-	noweave -x -delay $^ > $@
-
-sorter.aux: sorter.tex
-	pdflatex $<
-
-sorter.pdf: sorter.aux
-	pdflatex sorter.tex
-
-##################
-
-merger.c: merger.nw
-	notangle -L $^ > $@
-
-merger.tex: merger.nw
-	noweave -x -delay $^ > $@
-
-merger.aux: merger.tex
-	pdflatex $<
-
-merger.pdf: merger.aux
-	pdflatex merger.tex
-
-
 
 clean:
 	rm -rf *.o server sample_client splitter *.pdf *.aux *.bbl *.blg *.log sample_client.c server.c splitter.c *.out *.cweb *.idx

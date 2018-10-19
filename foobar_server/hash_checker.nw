@@ -1,0 +1,89 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Hash File Checker}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program checks that a \textbf{hash file} is actually sorted and without duplicates.
+
+@ This program reads many dictionnary file and merge/deduplicate them. It takes the name of a file on the command-line.
+
+<<*>>=
+<<Header files to include>>
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<Header files to include>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <err.h>
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Open input file and allocate [[buffer]]>>
+	uint64_t prev = 0;
+	size_t processed = 0, size = 0;
+	while (!feof(f)) {
+		<<Fill [[buffer]] from input file>>
+		<<Check that [[buffer]] is in-order and duplicate-free>>
+	}
+	fclose(f);
+	exit(EXIT_SUCCESS);
+}
+
+
+<<Open input file and allocate [[buffer]]>>=
+if (argc < 2)
+	errx(1, "missing input filename");
+FILE *f = fopen(argv[1], "r");
+if (f == NULL)
+	err(1, "cannot open %s for reading", argv[1]);
+static const int BUFFER_SIZE = 131072;
+uint64_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
+if (buffer == NULL)
+	err(1, "cannot allocate buffer");
+
+
+@ [[processed]] counts the number of hashes in previously processed buffers.
+[[size]] is the size of the current buffer.
+
+<<Fill [[buffer]] from input file>>=
+processed += size;
+size = fread(buffer, sizeof(*buffer), BUFFER_SIZE, f);
+if (ferror(f))
+	err(1, "fread failed");
+
+<<Check that [[buffer]] is in-order and duplicate-free>>=
+for (size_t i = 0; i < size; i++) {
+	if (prev >= buffer[i])
+		errx(1, "F[%zd] (%016" PRIx64 ") >= F[%zd] (%016" PRIx64 ")", processed + (i-1), prev, processed + i, buffer[i]);
+	prev = buffer[i];
+}
+
+@
+
+\end{document}
