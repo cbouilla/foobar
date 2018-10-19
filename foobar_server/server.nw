@@ -5,8 +5,9 @@
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
+%\usepackage{tikz}
 \usepackage{xspace}
+\usepackage{hyperref}
 
 
 \def\cweb{{\tt CWEB\/}}
@@ -347,7 +348,7 @@ if (nonce_received > last_counter_saved  + 1000) {
 
 For my own reference: copying nonce files to amazon S3 is done with:
 \begin{verbatim}
-   aws s3 cp [[file]] s3://3sum-foobar/
+   aws s3 cp FILE s3://3sum-foobar/
 \end{verbatim}
 
 TODO : incorporate a watchdog that emails me if the miner stops sending stuff.

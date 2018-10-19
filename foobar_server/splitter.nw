@@ -13,43 +13,105 @@
 \newcommand{\join}{\bowtie}
 
 \newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
 \newcommand{\OMP}{\textsf{OpenMP}\xspace}
 
 \begin{document}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner}
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Splitter}
 \author{Charles Bouillaguet}
 
 \maketitle
 
 The combination of the \texttt{FOOBAR}-modified Miner and the
-\texttt{FOOBAR}-server yield \emph{nonce files}, containing (counter, nonce) pairs.
-Each pair requires 16 bytes, and we expect to have 3 lists of $2^{31.7}$
-entries each, for a total storage space of 150Gbyte. 
+\texttt{FOOBAR}-server yields \emph{preimage files}, containing (counter,
+nonce) pairs. In this document, we call this a \textbf{preimage}. Each pair
+requires 12 bytes, and we expect to have 3 lists of $2^{31.7}$ entries each,
+for a total storage space of 117Gbyte.
 
-The nonce lists must be checked (i.e. the corresponding hashes must have 32
+The nonce files must be checked (i.e. the corresponding hashes must have 32
 zero bits). They must then be hashed, and 64 bits of each hash stored to disk.
 This yields three hash lists, of $25.4$Gbyte each. These lists have to be
-sorted and checked for duplicates.
+sorted and checked for duplicates. Thus in total, we expect to need $\approx
+150$ Gbyte of storage.
+
+Each preimage is associated to a 256-bit \textbf{full hash}, of which 33 at
+least must be zero. From this full hash, we extract a subset of 64 (uniformly
+distributed) bits that we call the \textbf{hash}.
+
+For various reasons, we ensure that the hashes are unique. Because of the
+large number of preimages, we might encounter accidental collisions, so we
+must actively enforce this. We actually maintain a dictionnary $[[hash]]
+\rightarrow [[preimage]]$, where the hashes are unique, and where it is fairly
+easy to add new preimages and to extract all the hashes in sorted order.
+
+The miner generates $\approx 550$ preimages per second, which means roughly
+550 Mbyte per day of fresh data. Ideally, we would like the total amount of
+work required to integrate this much data to the dictionnary to be as low as
+possible.
 
 We use the following strategy :
-\begin{enumerate}
-\item Split nonce files using bits of the hash as keys. The split nonce files can be made arbitrarily small.
-\item Sort and deduplicate the split nonce files.
-\item Hash the split nonce files (this yields the split hash files). Sort and deduplicate the split hash files.
-\item Concatenate the split hash files. If everything was done correctly, they are sorted.
+
+\begin{enumerate}  
+\item When a new preimage file is ready, split it into several \textbf{split dictionnaries}
+by partitionning the hashes according to most significant $b$ bits. This yields 
+$2^b$ buckets. Potential duplicates are now confined into a single bucket.
+
+\item Sort the newly formed split dictionnaries by hash. They must fit in RAM in 
+order to do this easily, but they should be small.
+
+\item For each bucket, perform a multiway merge on all split dictionnaries. 
+Detect duplicate hashes and write down the hashes in order into a \textbf{hash file}.
 \end{enumerate}
 
-To deal with such an amount of data, a collection of tools is necessary. These
-codes use \textsf{OpenSSL}'s implementation of \textsf{SHA256}. We chose to
-use \OMP as much as possible to help parallelization, and to combine it with
-\ZMQ for message-passing.
+To do all this, a collection of tools is necessary. The tool described in this
+file does the first step. We use \textsf{OpenSSL}'s implementation of
+\textsf{SHA256}.
 
+Concretely, a preimage file contains a sequence of [[struct preimage_t]]. A
+split dictionnary contains a sequence of [[dict_t]].
+
+\goodbreak
+
+<<Type definitions>>=
+struct preimage_t {
+	int64_t counter;
+	uint32_t nonce;
+} __attribute__((packed));
+
+struct dict_t {
+	uint64_t hash;
+	struct preimage_t preimage;
+} __attribute__((packed));
+
+
+@ The main strategy is as follows. A "reader" reads the input file and sends
+blocks of (counter, nonce) pairs to "mappers". Each mapper assembles the
+plaintext block, hash it, and dispatch it in one of each buffers. When a
+buffer is full, it is flushed to a "writter".
+
+We considered several options. 
+
+OPTION A: each "worker" is a thread. Threads interract through (concurrent)
+\emph{queues}. The reader thread pushes blocks to a single-writter multiple-
+readers queue. The mapper threads pull from this queue and push to several
+multiple-writer single-reader queues (one for each writer thread). The queues
+are partial and bounded. These queues could be implemented by hand (using
+locks and semaphores, for instance), or could be built using a messaging
+middleware such as \ZMQ or \NN. Threads could be managed using the [[pthread]]
+standard library or using something like \OMP.
+
+OPTION B: each "worker" is a process. Processes interact through the \MPI
+messaging library, using asynchronous IO if possible.
+
+We chose option B, because it is simpler.
 
 \section{Global Structure}
 
-This program reads a nonce file, and compute all the hashes. It checks that the (counter, nonce) pairs
-indeed yield hashes with 32 leading zero bits. Then, the This file has the usual structure :
+This program reads a preimage file, and compute all the hashes. It checks that
+the (counter, nonce) pairs indeed yield hashes with 32 leading zero bits, and
+dispatches the dictionnary items into split dictionnary files.
 
 <<*>>=
 <<Header files to include>>
@@ -70,28 +132,23 @@ indeed yield hashes with 32 leading zero bits. Then, the This file has the usual
 #include <getopt.h>
 #include <assert.h>
 
-#include <omp.h>
-#include <zmq.h>
+#include <mpi.h>
 #include "sha256.h"
-
-@ The main strategy is as follows. A "reader" thread reads the input files and
-sends blocks of (counter, nonce) pairs to "mapper" threads. The mapper threads
-assemble the plaintext block, hash it, and dispatch it in one of their
-buffers. When a buffer is full, it is flushed to a "writter" thread.
-
 
 <<The main program>>=
 int main(int argc, char **argv)
 {
+	<<Initialization>>
 	<<Process the command line>>
-	<<Initialize global communications>>
-	<<Start all the threads>>
+	<<Finish setup>>
+	<<Start reader, mappers and writers>>
+	MPI_Finalize();
 	exit(EXIT_SUCCESS);
 }
 
 @ The possible command-line arguments are the kind of the blocks  ([[FOO]],
 [[BAR]], [[FOOBAR]]), the $\log_2$ of the number of output hash files and the
-input nonce filenames. We enforce that the arguments   are actually present.
+input nonce filenames. We enforce that the arguments are actually present.
 
 <<Global variables>>=
 struct option longopts[3] = {
@@ -103,7 +160,7 @@ int kind = -1;
 int bits = -1;
 
 <<Process the command line>>=
-char ch;
+signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
 	case 'k':
@@ -120,215 +177,217 @@ if (kind == -1)
 	errx(1, "missing required option --kind");
 if (bits == -1) 
 	errx(1, "missing required option --bits");
-if (optind >= argc)
-	errx(1, "missing filenames");
+if (optind != argc - 1)
+	errx(1, "missing (or extra) filenames");
+char *in_filename = argv[optind];
+
 
 @ Before starting to dwelve into the code of the threads, we must set up a bit
 of global context. The number of output files (and of writter threads) if
-$2^{[[bits]]}$. The number of mappers is the number of cores of the machine,
-which is (in principle) given by [[omp_get_max_threads]].
+$2^{[[bits]]}$. The number of mappers is the total number of processes minus
+$[[n_writer]] + 1$.
 
 <<Global variables>>=
-int n_writer;
-int n_mapper;
+int rank, size;
 
-<<Initialize global communications>>=
+<<Initialization>>=
+MPI_Init(&argc, &argv);
+MPI_Comm_size(MPI_COMM_WORLD, &size);
+MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+<<Setup MPI datatype for preimages>>
+<<Setup MPI datatype for dictionnary entries>>
+
+
+@ To easily send / receive arrays of this though \MPI, we setup a
+custom \MPI datatype. Please refer to the MPI guide for details.
+
+<<Setup MPI datatype for preimages>>=
+struct preimage_t sample[2];
+MPI_Datatype PreimageStruct, PreimageType;
+MPI_Datatype type[2] = {MPI_UINT64_T, MPI_UINT32_T};
+int blocklen[2] = {1, 1};
+MPI_Aint disp[2];
+MPI_Aint base, sizeofentry;
+
+/* compute displacements of structure components */
+MPI_Get_address(&sample[0].counter, &disp[0]);
+MPI_Get_address(&sample[0].nonce, &disp[1]);
+MPI_Get_address(sample, &base);
+disp[0] -= base;
+disp[1] -= base;
+MPI_Type_create_struct(2, blocklen, disp, type, &PreimageStruct);
+MPI_Type_commit(&PreimageStruct);
+
+/* If compiler does padding in mysterious ways, the following may be safer */
+MPI_Get_address(sample + 1, &sizeofentry);
+sizeofentry -= base;
+MPI_Type_create_resized(PreimageStruct, 0, sizeofentry, &PreimageType);
+
+/* quick safety check */
+int x;
+MPI_Type_size(PreimageType, &x);
+assert(x == sizeof(struct preimage_t));
+assert(x == 12);
+
+
+<<Setup MPI datatype for dictionnary entries>>=
+struct dict_t sample2[2];
+MPI_Datatype DictStruct, DictType;
+
+/* compute displacements of structure components */
+MPI_Get_address(&sample2[0].hash, &disp[0]);
+MPI_Get_address(&sample2[0].preimage, &disp[1]);
+MPI_Get_address(sample2, &base);
+disp[0] -= base;
+disp[1] -= base;
+MPI_Type_create_struct(2, blocklen, disp, type, &DictStruct);
+MPI_Type_commit(&DictStruct);
+
+MPI_Get_address(sample2 + 1, &sizeofentry);
+sizeofentry -= base;
+MPI_Type_create_resized(DictStruct, 0, sizeofentry, &DictType);
+
+
+@ Using \MPI, processes are numbered starting at zero. The reader is process
+0. The writers are processes $1, \dots, [[n_writer]]$. The remaining processes
+are mappers. To easily distinguish between messages, we use tags.
+
+<<Global variables>>=
+static const int READER_REQUEST_TAG = 0;
+static const int NONCE_BLOCK_TAG = 1;
+static const int HASH_BLOCK_TAG = 2;
+static const int EOF_TAG = 3;
+
+int n_writer, n_mapper;
+
+<<Finish setup>>=
 n_writer = 1 << bits;
-n_mapper = omp_get_max_threads();
+n_mapper = size - n_writer - 1;
+if (rank == 0 && n_mapper <= 0)
+	errx(1, "not enough MPI processes. Need %d, have %d", 2 + n_writer, size);
 
-@ Because the number of writers in only known at runtime, the names of their
-endpoints have to be determined also at runtime.
-
-<<Global variables>>=
-char **writer_endpoints;
-
-<<Initialize global communications>>=
-writer_endpoints = malloc(sizeof(*writer_endpoints) * n_writer);
-if (writer_endpoints == NULL)
-	err(1, "malloc writer_endpoints");
-for (int i = 0; i < n_writer; i++) {
-	char endpoint[255];
-	sprintf(endpoint, "inproc://writer.%d", i);
-	writer_endpoints[i] = strdup(endpoint);
-}
-
-@ A \ZMQ context must be setup before any other communication can take place
-between the threads.
-
-<<Global variables>>=
-void * zmq_context;
-
-<<Initialize global communications>>=
-zmq_context = zmq_ctx_new();
-if (zmq_context == NULL)
-	errx(1, "zmq_ctx_new: %s", zmq_strerror(errno));
-
-@ 
-
-
-
-
-
-
-\section{Reading the Nonces}
-
-A nonce file contains a sequence of [[struct nonce_msg_t]], and the names of
-files to process are given on the command-line.
-
-<<Type definitions>>=
-struct nonce_msg_t {
-	int64_t counter;
-	uint32_t nonce;
-} __attribute__((packed));
-
-@ The reader thread must setup some communication infrastructure. The mapper
-threads will request nonce blocks from the reader. The reader will reply with
-nonce blocks, or an [[EOF]] message, which is simply a block of size zero.
-
-<<Reader thread>>=
-<<Initialize reader communications>>
-int nonces_read = 0;
-while (optind < argc) {
-	char *filename = argv[optind];
-	optind += 1;
-	FILE *f = fopen(filename, "r");
-	if (f == NULL)
-		err(1, "fopen on %s", filename);
-	while (1) {
-		<<Read a nonce block from [[f]] in [[buffer]]>>
-		<<Wait for a request and send back [[buffer]]>>
-		<<Print status report>>
-	}
-}
-for (int i = 0; i < n_mapper; i++) {
-	<<Wait for a request and send back [[EOF]]>>
-}
-<<Shutdown reader communication>>
-
-@ This requires that the reader knows the number of mappers. For now, it's OK.
-
-<<Global variables>>=
-int n_mapper;
-
-@ The reader creates a [[REP]] socket and binds it. The endpoint is constant.
-
-<<Global variables>>=
-static const char * READER_ENDPOINT = "inproc://reader";
-
-<<Initialize reader communications>>=
-assert(sizeof(struct nonce_msg_t) == 12);
-void *socket = zmq_socket(zmq_context, ZMQ_REP);
-if (socket == NULL)
-	errx(1, "zmq_socket reader : %s", zmq_strerror(errno));
-if (zmq_bind(socket, READER_ENDPOINT) != 0)
-	errx(1, "zmq_bind reader : %s", zmq_strerror(errno));
-
-<<Shutdown reader communication>>=
-if (zmq_close(socket) != 0)
-	errx(1, "zmq_close reader : %s", zmq_strerror(errno));
-#pragma omp critical
-printf("\nReader finished. %d nonces read\n", nonces_read);
-
-@ Reading the file is straightforward. We use a buffer of [[struct nonce_msg_t]]
+@ Nonces and hashes are processed in batches.
 
 <<Global variables>>=
 static const int READER_BUFFER_SIZE = 65536;
+<<Global variables>>=
+static const int WRITER_BUFFER_SIZE = 32768;
+
+@
+
+\section{Reading the Preimage Files}
+
+The mapper threads will request preimage blocks from the reader. The reader
+will reply with either a preimage block or an [[EOF]] message.
+
+<<Reader>>=
+printf("Reader started. %d mappers and %d writers.\n", n_mapper, n_writer);
+int preimages_read = 0;
+double start = MPI_Wtime();
+double wait = 0;
+FILE *f = fopen(in_filename, "r");
+if (f == NULL)
+	err(1, "fopen on %s", in_filename);
+while (1) {
+	<<Read a nonce block from [[f]] in [[buffer]]>>
+	<<Wait for a request and send back [[buffer]]>>
+	<<Print status report>>
+}
+fclose(f);
+for (int i = 0; i < n_mapper; i++) {
+	<<Wait for a request and send back [[EOF]]>>
+}
+printf("\nReader finished. %d preimages read, total wait = %.1f s\n", preimages_read, wait);
+
+
+@ Reading the file is straightforward. We use a buffer of [[struct nonce_msg_t]].
 
 <<Read a nonce block from [[f]] in [[buffer]]>>=
-struct nonce_msg_t buffer[READER_BUFFER_SIZE];
-size_t n_items = fread(buffer, sizeof(struct nonce_msg_t), READER_BUFFER_SIZE, f);
+struct preimage_t buffer[READER_BUFFER_SIZE];
+size_t n_items = fread(buffer, sizeof(struct preimage_t), READER_BUFFER_SIZE, f);
 if (ferror(f))
 	err(1, "fread in reader");
 if (n_items == 0 && feof(f))
 	break;
-int size = n_items * sizeof(struct nonce_msg_t);
 
-@ Sending the block to the mapper is also quite simple.
+@ Sending the block to the mapper is also quite simple. Because we accept
+requests from anyone, we must be able to tell who asked us for a block. We
+also use a specific "tag" for block requests. We use [[MPI_Bsend]], because it
+allows us to get back to reading the file faster (at the expense of using a
+bit more memory).
+
 
 <<Wait for a request and send back [[buffer]]>>=
-if (zmq_recv(socket, NULL, 0, 0) == -1)
-	errx(1, "zmq_recv reader, main loop : %s", zmq_strerror(errno));
-if (zmq_send(socket, buffer, size, 0) == -1)
-	errx(1, "zmq_send reader, main loop : %s", zmq_strerror(errno));
-nonces_read += n_items;
+MPI_Status status;
+double wait_start = MPI_Wtime();
+MPI_Recv(NULL, 0, MPI_INT, MPI_ANY_SOURCE, READER_REQUEST_TAG, MPI_COMM_WORLD, &status);
+wait += MPI_Wtime() - wait_start;
+MPI_Send(buffer, n_items, PreimageType, status.MPI_SOURCE, NONCE_BLOCK_TAG, MPI_COMM_WORLD);
+preimages_read += n_items;
 
 @ Once all the files have been processed, the mappers must be told to stop
-sending requests. We use an empty block as an [[EOF]] mark.
+sending requests. We use an empty block with the EOF tag.
 
 <<Wait for a request and send back [[EOF]]>>=
-if (zmq_recv(socket, NULL, 0, 0) == -1)
-	errx(1, "zmq_recv reader, shutdown : %s", zmq_strerror(errno));
-if (zmq_send(socket, NULL, 0, 0) == -1)
-	errx(1, "zmq_send reader, shutdown : %s", zmq_strerror(errno));
+MPI_Status status;
+MPI_Recv(NULL, 0, MPI_INT, MPI_ANY_SOURCE, READER_REQUEST_TAG, MPI_COMM_WORLD, &status);
+MPI_Send(NULL, 0, MPI_INT, status.MPI_SOURCE, EOF_TAG, MPI_COMM_WORLD);
+
 
 @ We implement a simple form of verbosity.
 
 <<Print status report>>=
-#pragma omp critical
-{
-	printf("\rNonces read: %d", nonces_read);
-	fflush(stdout);
-}
+double megabytes = preimages_read * 1.1444091796875e-05;
+double rate = megabytes / (MPI_Wtime() - start);
+printf("\rNonces read: %d (%.1f Mb, %.1f Mb/s)", preimages_read, megabytes, rate);
+fflush(stdout);
 
 @
 
-
-
-
-\section{Hashing and Dispatching the Nonces}
+\section{Hashing and Dispatching the Preimages}
 
 Now come the mapper threads. They split input blocks into [[n_writer]] output
 buffers. When an output buffer is full, it is flushed to the corresponding
-writer thread.
+writer.
 
-<<Mapper thread>>=
+<<Mapper>>=
+int id = rank - n_writer - 1;
 <<Initialize output buffers>>
-<<Initialize mapper communications>>
 int n_processed = 0, n_invalid = 0;
 while (1) {
-	<<Request [[nonces]] from reader; if [[EOF]], then [[break]]>>
-	for (int i = 0; i < n_nonces; i++) {
+	<<Request [[preimages]] from reader; if [[EOF]], then [[break]]>>
+	for (int i = 0; i < n_preimages; i++) {
 		<<Assemble the plaintext>>
 		<<Compute the hash; if invalid then [[continue]]>>
-		<<Push the hash to the output buffer [[slot]]>>
+		<<Push the dictionnary entry to the output buffer [[slot]]>>
 		if (output_size[slot] == WRITER_BUFFER_SIZE) {
 			<<flush [[output[slot]]] to writer \#[[slot]]>>
 		}
 	}
 }
 <<Flush all buffers and send [[EOF]] message to all writers>>
-<<Shutdown mapper communications>>
+printf("\nMapper %d finished. %d dictionnary entries transmitted. %d invalid.\n", id, n_processed, n_invalid);
 
 @ Dealing with the buffer is as simple as in the reader. So is communication with the reader.
 
 <<Initialize output buffers>>=
-uint64_t output[n_writer][WRITER_BUFFER_SIZE];
+struct dict_t output[n_writer][WRITER_BUFFER_SIZE];
 int output_size[n_writer];
 for (int i = 0; i < n_writer; i++)
 	output_size[i] = 0;
 
-<<Initialize mapper communications>>=
-void *reader_socket = zmq_socket(zmq_context, ZMQ_REQ);
-if (reader_socket == NULL)
-	errx(1, "zmq_socket mapper <--> reader: %s", zmq_strerror(errno));
-if (zmq_connect(reader_socket, READER_ENDPOINT) != 0)
-	errx(1, "zmq_connect mapper <--> reader: %s", zmq_strerror(errno));
 
+@ When receiving a block from the reader, we only know an upper bound on its size. We must then query its actual size from \MPI.
 
-@ When receiving a block from the reader, we receive its size in bytes, so we
-must be careful. We ignore an eventual incomplete [[nonce_msg_t]].
-
-<<Request [[nonces]] from reader; if [[EOF]], then [[break]]>>=
-struct nonce_msg_t nonces[READER_BUFFER_SIZE];
-if (zmq_send(reader_socket, NULL, 0, 0) == -1)
-	errx(1, "zmq_send mapper --> reader: %s", zmq_strerror(errno));
-int block_size = zmq_recv(reader_socket, nonces, sizeof(nonces), 0);
-if (block_size == -1)
-	errx(1, "zmq_recv mapper: %s", zmq_strerror(errno));
-if (block_size == 0)
+<<Request [[preimages]] from reader; if [[EOF]], then [[break]]>>=
+struct preimage_t preimages[READER_BUFFER_SIZE];
+MPI_Status status;
+MPI_Send(NULL, 0, MPI_INT, 0, READER_REQUEST_TAG, MPI_COMM_WORLD);
+MPI_Recv(preimages, READER_BUFFER_SIZE, PreimageType, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+if (status.MPI_TAG == EOF_TAG)
 	break;
-int n_nonces = block_size / sizeof(struct nonce_msg_t);
-
+int n_preimages;
+MPI_Get_count(&status, PreimageType, &n_preimages);
 
 @ Assembling the block is essentially the same code that has been injected into the modified \textsf{cgminer}.
 
@@ -343,8 +402,8 @@ static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 
  
 
 <<Assemble the plaintext>>=
-int64_t counter = nonces[i].counter;
-uint32_t nonce = nonces[i].nonce;
+int64_t counter = preimages[i].counter;
+uint32_t nonce = preimages[i].nonce;
 
 char buffer[80];
 memcpy(buffer, PREFIXES[kind], 80);
@@ -375,68 +434,34 @@ if (!valid) {
 }
 
 
-<<print the hash>>=
-printf("%016" PRIx64 " / %08" PRIx32 " -> ", L[i].counter, nonce);
-for (int j = 0; j < 8; j++)
-	printf("%08" PRIx32 " ", hash[j]);
-printf("\n");
-
-
-
-
 @ We must extract 64 bits of the hash from [[hash[5]]] and [[hash[6]]],
 excluding the most-significant bit of [[hash[6]]] which is always zero. We
 replace it with the most-significant bit of [[hash[4]]].
 
-<<Push the hash to the output buffer [[slot]]>>=
+<<Push the dictionnary entry to the output buffer [[slot]]>>=
 uint64_t x = (((uint64_t) hash[5]) << 32) ^ hash[6] ^ (hash[4] & 0x80000000);
 int slot = bits ? (x >> (64 - bits)) : 0;
-output[slot][output_size[slot]] = x;
+output[slot][output_size[slot]].hash = x;
+output[slot][output_size[slot]].preimage = preimages[i];
 output_size[slot] += 1;
 
-@ Before considering flushing full buffers to the writters, we must connect to
-them.
-
-<<Initialize mapper communications>>=
-void *writer_socket[n_writer];
-for (int i = 0; i < n_writer; i++) {
-	writer_socket[i] = zmq_socket(zmq_context, ZMQ_PUSH);
-	if (writer_socket[i] == NULL)
-		errx(1, "zmq_socket mapper --> writter %d: %s", i, zmq_strerror(errno));
-	if (zmq_connect(writer_socket[i], writer_endpoints[i]) != 0)
-		errx(1, "zmq_connect mapper --> writer %d: %s", i, zmq_strerror(errno));
-}
-#pragma omp critical
-printf("\nMapper %d, started.\n", omp_get_thread_num());
-
-<<Shutdown mapper communications>>=
-if (zmq_close(reader_socket) != 0)
-	errx(1, "zmq_close mapper <--> reader : %s", zmq_strerror(errno));
-for (int i = 0; i < n_writer; i++)
-	if (zmq_close(writer_socket[i]) != 0)
-		errx(1, "zmq_close mapper <--> writer %d: %s", i, zmq_strerror(errno));
-
+@ IO is easy thanks to \MPI. Recall that writer \#[[slot]] is actually \MPI
+process $[[slot]] + 1$.
 		
 <<flush [[output[slot]]] to writer \#[[slot]]>>=
-int msg_size = output_size[slot] * sizeof(uint64_t);
-if (zmq_send(writer_socket[slot], output[slot], msg_size, 0) == -1)
-	errx(1, "zmq_send, mapper --> writer %d: %s", slot, zmq_strerror(errno));
+MPI_Send(output[slot], output_size[slot], DictType, slot + 1, HASH_BLOCK_TAG, MPI_COMM_WORLD);
 n_processed += output_size[slot];
 output_size[slot] = 0;
 
 
 @ When we receive the [[EOF]] mark from the reader, we must flush incomplete
-output buffers to the writters. The [[EOF]] mark we send them is also an empty
-buffer.
+output buffers to the writters.
 
 <<Flush all buffers and send [[EOF]] message to all writers>>=
 for (int slot = 0; slot < n_writer; slot++) {
 	<<flush [[output[slot]]] to writer \#[[slot]]>>
-	if (zmq_send(writer_socket[slot], NULL, 0, 0) == -1)
-		errx(1, "zmq_send, mapper --> writer %d: %s", slot, zmq_strerror(errno));
+	MPI_Send(NULL, 0, MPI_INT, slot + 1, EOF_TAG, MPI_COMM_WORLD);
 }
-#pragma omp critical
-printf("\nMapper %d, finished. %d nonces processed. %d invalid\n", omp_get_thread_num(), n_processed, n_invalid);
 
 @
 
@@ -445,99 +470,69 @@ printf("\nMapper %d, finished. %d nonces processed. %d invalid\n", omp_get_threa
 
 
 
-\section{Writing Hashes}
+\section{Writing Split Dictionnaries to Disk}
 
-It remains to describe the writers, which is almost the simplest.
+It remains to describe the writers, which is almost the simplest. The writer's
+[[id]] is its number amongst writer threads. It is its \MPI rank minus one.
+Each writer writes a single split dictionnary.
 
-<<Global variables>>=
-static const int WRITER_BUFFER_SIZE = 2048;
-
-<<Writer thread>>=
-int id;
+<<Writer>>=
+int id = rank - 1;
 int n_eof = 0;
-<<Get writer [[id]]>>
-<<Initialize writer communications>>
 <<Open output file [[f]]>>
-while (1) {
-	uint64_t block[WRITER_BUFFER_SIZE];
-	<<Receive [[block]] from a mapper>>
-	<<If [[n_mapper]] [[EOF]] marks have been receved, then [[break]]>>
+while (n_eof < n_mapper) {
+	<<Receive [[block]] from a mapper; if [[EOF]] then [[continue]]>>
 	<<Write [[block]] to [[f]]>>
 }
 <<Close [[f]]>>
-<<Shutdown writer communications>>
-
-@ The writer's [[id]] is its number amongst writer threads. We postpone this
-part, because it is related to the way the threads are started.
-
-<<Initialize writer communications>>=
-void *socket = zmq_socket(zmq_context, ZMQ_PULL);
-if (socket == NULL)
-	errx(1, "zmq_socket writer %d: %s", id, zmq_strerror(errno));
-if (zmq_bind(socket, writer_endpoints[id]) != 0)
-	errx(1, "zmq_bind writer %d: %s", id, zmq_strerror(errno));
+printf("Writer %d done.\n", id);
 
 @ We derive the output filename from the writer's [[id]]. The output file is
 opened in write mode, so it is truncated to size zero.
 
 <<Open output file [[f]]>>=
-char filename[255];
-char *template[3] = {"foo", "bar", "foobar"};
-sprintf(filename, "%s.%d", template[kind], id);
-FILE *f = fopen(filename, "w");
+char out_filename[255];
+sprintf(out_filename, "%s.dict.%d", in_filename, id);
+FILE *f = fopen(out_filename, "w");
 if (f == NULL)
 	err(1, "fopen writer %d", id);
 
-<<Receive [[block]] from a mapper>>=
-int size = zmq_recv(socket, block, sizeof(block), 0);
-if (size < 0)
-	errx(1, "zmq_recv writer %d: %s", id, zmq_strerror(errno));
+@ When receiving a block from a mapper, we must distinguish between regular
+and EOF messages. We must also observe the size of the hash block.
 
-<<If [[n_mapper]] [[EOF]] marks have been receved, then [[break]]>>=
-if (size == 0)
-	n_eof += 1;
-if (n_eof == n_mapper)
-	break;
+<<Receive [[block]] from a mapper; if [[EOF]] then [[continue]]>>=
+struct dict_t block[WRITER_BUFFER_SIZE];
+MPI_Status status;
+MPI_Recv(block, WRITER_BUFFER_SIZE, DictType, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+if (status.MPI_TAG == EOF_TAG) {
+	n_eof++;
+	continue;
+}
+int n_entries;
+MPI_Get_count(&status, DictType, &n_entries);
 
 <<Write [[block]] to [[f]]>>=
-size_t n_items =  size / sizeof(uint64_t);
-size_t tmp = fwrite(block, sizeof(uint64_t), n_items, f);
-if (tmp != n_items)
-	err(1, "fwrite writer %d: %zd vs %d", id, tmp, size);
+size_t tmp = fwrite(block, sizeof(struct dict_t), n_entries, f);
+if (tmp != (size_t) n_entries)
+	err(1, "fwrite writer %d: %zd vs %d", id, tmp, n_entries);
 
 <<Close [[f]]>>=
 if (fclose(f))
 	err(1, "fclose writer %d", id);
 
-<<Shutdown writer communications>>=
-if (zmq_close(socket) != 0)
-	errx(1, "zmq_close writer %d: %s", id, zmq_strerror(errno));
-
 @
 
-\section{The [[main]] Function}
+\section{Putting it all Toghether}
 
-It remains to start all the threads. We use \OMP for this. 
-
-<<Start all the threads>>=
-printf("Starting 1 reader, %d mappers and %d writers\n", n_mapper, n_writer);
-#pragma omp parallel num_threads(1 + n_mapper + n_writer)
-{
-	int t = omp_get_thread_num();
-	if (t < n_writer) {
-		<<Writer thread>>
-	} else if (t == n_writer) {
-		<<Reader thread>>
-	} else {
-		<<Mapper thread>>
-	}
+<<Start reader, mappers and writers>>=
+if (rank == 0) {
+	<<Reader>>
+} else if (rank < 1 + n_writer) {
+	<<Writer>>
+} else {
+	<<Mapper>>
 }
 
-@ With this setup, getting the writer's [[id]] is simple.
-
-<<Get writer [[id]]>>=
-id = t;
-
-@ And that's it.
+@
 
 \end{document}

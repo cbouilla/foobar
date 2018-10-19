@@ -1,0 +1,145 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Sorter}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program sorts split dictionnary files, which are sequences of contiguous [[struct dict_t]] records.
+
+<<Type definitions>>=
+struct preimage_t {
+	int64_t counter;
+	uint32_t nonce;
+} __attribute__((packed));
+
+struct dict_t {
+	uint64_t hash;
+	struct preimage_t preimage;
+} __attribute__((packed));
+
+
+@ This program reads a dictionnary file, sorts it by hash, and rewrites it.
+
+<<*>>=
+<<Header files to include>>
+<<Type definitions>>
+<<Auxiliary functions>>
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<Header files to include>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <string.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Load the dictionnary in [[dictionnary]]>>
+	<<Sort [[dictionnary]] by increasing hash>>
+	<<Write [[dictionnary]] in a temporary file>>
+	<<Replace the original with the temporary file>>
+	exit(EXIT_SUCCESS);
+}
+
+@ The only accepted command-line argument is the name of file to sort.
+
+<<Process the command line>>=
+if (argc < 2)
+	errx(1, "missing argument: FILENAME");
+char *in_filename = argv[1];
+
+@ To read the dictionnaty file in memory, we first query its size, then
+allocate memory accordingly, then finally read it in the allocated space.
+
+<<Load the dictionnary in [[dictionnary]]>>=
+struct stat infos;
+if (stat(in_filename, &infos))
+	err(1, "fstat");
+struct dict_t *dictionnary = malloc(infos.st_size);
+if (dictionnary == NULL)
+	err(1, "failed to allocate memory");
+FILE *f_in = fopen(in_filename, "r");
+if (f_in == NULL)
+	err(1, "fopen failed");
+size_t check = fread(dictionnary, 1, infos.st_size, f_in);
+if ((check != (size_t) infos.st_size) || ferror(f_in))
+	err(1, "fread : read %zd, expected %zd", check, infos.st_size);
+if (fclose(f_in))
+	err(1, "fclose %s", in_filename);
+
+@ To actually perform the sort, we use the standard [[qsort]] function. It is
+not the fastest possible solution, but it is the simplest. We have to provide
+a comparison function for [[qsort]] and extra care has to be taken, because we
+cannot just substract the [[uint64_t]]. This is an extra source of inefficiency.
+
+<<Auxiliary functions>>=
+int cmp(const void *a_, const void *b_)
+{
+	struct dict_t *a = (struct dict_t *) a_;
+	struct dict_t *b = (struct dict_t *) b_;
+	return (a->hash > b->hash) - (a->hash < b->hash);
+}
+
+<<Sort [[dictionnary]] by increasing hash>>=
+int n_entries = infos.st_size / sizeof(*dictionnary);
+qsort(dictionnary, n_entries, sizeof(*dictionnary), cmp);
+
+@ Once the dictionnary has been sorted in memory, it has to be written back
+down to the file system. To avoid erasing the original file, we write it down
+to \emph{another} file. Only when this has succeeded do we erase the original
+file and rename the new file.
+
+<<Write [[dictionnary]] in a temporary file>>=
+int k = strlen(in_filename) + 6;
+char tmp_filename[k];
+sprintf(tmp_filename, "%s.sort", in_filename);
+FILE *f_out = fopen(tmp_filename, "w");
+if (f_out == NULL)
+	err(1, "cannot create temporary file %s", tmp_filename);
+check = fwrite(dictionnary, sizeof(*dictionnary), n_entries, f_out);
+if (check != (size_t) n_entries)
+	err(1, "fwrite inconsistensy %zd vs %d", check, n_entries);
+if (fclose(f_out))
+	err(1, "fclose %s", tmp_filename);
+
+@ Once the result has been safely writen, we replace the (unsorted) input file
+by renaming the temporary file. Fortunately, the standard [[rename]] function
+does exactly that.
+
+<<Replace the original with the temporary file>>=
+if (rename(tmp_filename, in_filename))
+	err(1, "rename failed");
+
+@
+
+\end{document}
