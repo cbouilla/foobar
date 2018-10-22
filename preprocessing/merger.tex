@@ -1,0 +1,297 @@
+\documentclass{article}% ===> this file was generated automatically by noweave --- better not edit it
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Merger}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program takes sorted split dictionnary files and writes down a
+\textbf{hash file} (i.e. a sequence of {\Tt{}uint64{\_}t\nwendquote}) in ascending order,
+without duplicates. It mostly implements a multi-way merge. This process is
+certainly IO bound, yet we did not make any effort to overlap IO and
+computation.
+
+
+\nwfilename{merger.nw}\nwbegindocs{1}This program reads many dictionnary file and merge/deduplicate them.
+
+\nwenddocs{}\nwbegincode{2}\sublabel{NW3PsaZz-1p0Y9w-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-1p0Y9w-1}}}\moddef{*~{\nwtagstyle{}\subpageref{NW3PsaZz-1p0Y9w-1}}}\endmoddef\nwstartdeflinemarkup\nwenddeflinemarkup
+\LA{}Header files to include~{\nwtagstyle{}\subpageref{NW3PsaZz-4BXCU3-1}}\RA{}
+\LA{}Auxiliary functions~{\nwtagstyle{}\subpageref{NW3PsaZz-1pqJq1-1}}\RA{}
+\LA{}The main program~{\nwtagstyle{}\subpageref{NW3PsaZz-4O9khr-1}}\RA{}
+
+\nwnotused{*}\nwendcode{}\nwbegindocs{3}We need the usual standard headers.
+
+\nwenddocs{}\nwbegincode{4}\sublabel{NW3PsaZz-4BXCU3-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-4BXCU3-1}}}\moddef{Header files to include~{\nwtagstyle{}\subpageref{NW3PsaZz-4BXCU3-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-1p0Y9w-1}}\nwenddeflinemarkup
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <string.h>
+#include <err.h>
+#include <getopt.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/time.h>
+#include "hasher.h"
+
+\nwused{\\{NW3PsaZz-1p0Y9w-1}}\nwendcode{}\nwbegindocs{5}We use a small function to measure the passage of time accurately.
+
+\nwenddocs{}\nwbegincode{6}\sublabel{NW3PsaZz-1pqJq1-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-1pqJq1-1}}}\moddef{Auxiliary functions~{\nwtagstyle{}\subpageref{NW3PsaZz-1pqJq1-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-1p0Y9w-1}}\nwenddeflinemarkup
+double wtime()
+\{
+        struct timeval ts;
+        gettimeofday(&ts, NULL);
+        return (double)ts.tv_sec + ts.tv_usec / 1E6;
+\}
+
+
+\nwused{\\{NW3PsaZz-1p0Y9w-1}}\nwendcode{}\nwbegincode{7}\sublabel{NW3PsaZz-4O9khr-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-4O9khr-1}}}\moddef{The main program~{\nwtagstyle{}\subpageref{NW3PsaZz-4O9khr-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-1p0Y9w-1}}\nwenddeflinemarkup
+int main(int argc, char **argv)
+\{
+        \LA{}Process the command line~{\nwtagstyle{}\subpageref{NW3PsaZz-9FeVG-1}}\RA{}
+        \LA{}Open all files~{\nwtagstyle{}\subpageref{NW3PsaZz-4gSbGz-1}}\RA{}
+        \LA{}Merge input dictionnaries~{\nwtagstyle{}\subpageref{NW3PsaZz-2SeLhR-1}}\RA{}
+        \LA{}Close all files~{\nwtagstyle{}\subpageref{NW3PsaZz-4W3Dcd-1}}\RA{}
+        exit(EXIT_SUCCESS);
+\}
+
+\nwused{\\{NW3PsaZz-1p0Y9w-1}}\nwendcode{}\nwbegindocs{8}The name of input and output files are given on the command-line. Let us deal with the technicalities first.
+
+\nwenddocs{}\nwbegincode{9}\sublabel{NW3PsaZz-9FeVG-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-9FeVG-1}}}\moddef{Process the command line~{\nwtagstyle{}\subpageref{NW3PsaZz-9FeVG-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-4O9khr-1}}\nwenddeflinemarkup
+struct option longopts[2] = \{
+        \{"output", required_argument, NULL, 'o'\},
+        \{NULL, 0, NULL, 0\}
+\};
+char *out_filename = NULL;
+signed char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) \{
+        switch (ch) \{
+        case 'o':
+                out_filename = optarg;
+                break;
+        default:
+                errx(1, "Unknown option\\n");
+        \}
+\}
+if (out_filename == NULL)
+        errx(1, "missing --output FILE");
+if (optind >= argc)
+        errx(1, "missing input filenames");
+int P = argc - optind;
+char **in_filenames = argv + optind;
+
+\nwused{\\{NW3PsaZz-4O9khr-1}}\nwendcode{}\nwbegincode{10}\sublabel{NW3PsaZz-4gSbGz-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-4gSbGz-1}}}\moddef{Open all files~{\nwtagstyle{}\subpageref{NW3PsaZz-4gSbGz-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-4O9khr-1}}\nwenddeflinemarkup
+FILE *f_in[P];
+for (int i = 0; i < P; i++) \{
+        f_in[i] = fopen(in_filenames[i], "r");
+        if (f_in[i] == NULL)
+                err(1, "cannot open %s for reading", in_filenames[i]);
+\}
+
+FILE *f_out = fopen(out_filename, "w");
+if (f_out == NULL)
+        err(1, "cannot open %s for writing", out_filename);
+
+\nwused{\\{NW3PsaZz-4O9khr-1}}\nwendcode{}\nwbegincode{11}\sublabel{NW3PsaZz-4W3Dcd-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-4W3Dcd-1}}}\moddef{Close all files~{\nwtagstyle{}\subpageref{NW3PsaZz-4W3Dcd-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-4O9khr-1}}\nwenddeflinemarkup
+for (int i = 0; i < P; i++)
+        if (fclose(f_in[i]))
+                err(1, "fclose on %s", in_filenames[i]);
+if (fclose(f_out))
+        err(1, "fclose on %s", out_filename);
+
+
+\nwused{\\{NW3PsaZz-4O9khr-1}}\nwendcode{}\nwbegindocs{12}The actual ``meat" of the program is the $P$-way merge procedure. Two
+options present themselves: using a heap or a tournament tree. We chose the
+latter (somewhat arbitrarily). This implementation is based on Knuth's
+``replacement selection'' algorithm.
+
+We maintain a binary tree with $P$ internal nodes and $P$ leaves. The $i$-th
+leave is associated with the $i$-th input file. Each internal node contains
+two fields: the {\Tt{}struct\ dict{\_}t\nwendquote} of the loser of the match between its two
+children and the ``input file index'' of this value. Nodes are numbered from
+$1$ to $P$, so that the parent of {\Tt{}i\nwendquote} is {\Tt{}i\ /\ 2\nwendquote}. The zero_th node is
+implicitly represented by {\Tt{}Q\nwendquote}; it contains the winner of the tournament (the
+smallest hash).
+
+Each leaf of the tree is attached to a buffer, read from the $i$-th input
+file. We use the special hash value {\Tt{}0xffffffffffffffff\nwendquote} as a sentinel to mark
+the end of each files. At all times, the ``champion'' (smallest hash) is in
+{\Tt{}Q\nwendquote} and its file of origin is in {\Tt{}i\nwendquote}.
+
+\nwenddocs{}\nwbegincode{13}\sublabel{NW3PsaZz-2SeLhR-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-2SeLhR-1}}}\moddef{Merge input dictionnaries~{\nwtagstyle{}\subpageref{NW3PsaZz-2SeLhR-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-4O9khr-1}}\nwenddeflinemarkup
+static const uint64_t SENTINEL = 0xffffffffffffffffull;
+\LA{}Allocate buffers~{\nwtagstyle{}\subpageref{NW3PsaZz-35VW48-1}}\RA{}
+\LA{}Initialize the tournament tree~{\nwtagstyle{}\subpageref{NW3PsaZz-3RcFZL-1}}\RA{}
+while (Q.hash < SENTINEL) \{
+        \LA{}Append \code{}Q\edoc{} to the output buffer if not duplicate~{\nwtagstyle{}\subpageref{NW3PsaZz-29uJeK-1}}\RA{}
+        \LA{}If the \code{}i\edoc{}-th input buffer is empty, try to refill it~{\nwtagstyle{}\subpageref{NW3PsaZz-27glBj-1}}\RA{}
+        \LA{}Read the next hash from the \code{}i\edoc{}-th buffer into \code{}Q\edoc{}~{\nwtagstyle{}\subpageref{NW3PsaZz-1rJl93-1}}\RA{}
+        \LA{}Update tournament tree ; update \code{}Q\edoc{} and \code{}i\edoc{}~{\nwtagstyle{}\subpageref{NW3PsaZz-oSyb9-1}}\RA{}
+\}
+\LA{}Flush the output buffer to disk~{\nwtagstyle{}\subpageref{NW3PsaZz-20c3NS-1}}\RA{}
+printf("\\n");
+
+\nwused{\\{NW3PsaZz-4O9khr-1}}\nwendcode{}\nwbegindocs{14}Let us start with the setup. We need one input buffer for each input file,
+and one output buffer. We must be careful that these buffer may not be full,
+and will be partially consumed.
+
+\nwenddocs{}\nwbegincode{15}\sublabel{NW3PsaZz-35VW48-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-35VW48-1}}}\moddef{Allocate buffers~{\nwtagstyle{}\subpageref{NW3PsaZz-35VW48-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+static const int OUT_BUFFER_SIZE = 131072;
+static const int IN_BUFFER_SIZE = 52428;
+struct dict_t *buffer_in[P];
+int size_in[P], ptr_in[P];
+for (int i = 0; i < P; i++) \{
+        buffer_in[i] = malloc(IN_BUFFER_SIZE * sizeof(struct dict_t));
+        if (buffer_in[i] == NULL)
+                err(1, "malloc failed (input buffer)");
+        size_in[i] = 0;
+        ptr_in[i] = 0;
+\}
+uint64_t *buffer_out = malloc(OUT_BUFFER_SIZE * sizeof(uint64_t));
+if (buffer_out == NULL)
+        err(1, "malloc failed (output buffer)");
+int ptr_out = 0;
+int64_t flushed = 0;
+double start = wtime();
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}\nwbegindocs{16}Duplicates are detected on output. We simply keep the previous value
+actually written and discard an eventual output if it is equal to this value.
+As a bonus, initializing this to zero automatically discards the parasitic
+inputs we used to build the tree! Writing the sorted elements to the output
+file is easy. We take the opportunity to implement some verbosity.
+
+\nwenddocs{}\nwbegincode{17}\sublabel{NW3PsaZz-29uJeK-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-29uJeK-1}}}\moddef{Append \code{}Q\edoc{} to the output buffer if not duplicate~{\nwtagstyle{}\subpageref{NW3PsaZz-29uJeK-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+// printf("taking %016" PRIx64 " from file %d\\n", Q, i);
+if (ptr_out == OUT_BUFFER_SIZE) \{
+        \LA{}Flush the output buffer to disk~{\nwtagstyle{}\subpageref{NW3PsaZz-20c3NS-1}}\RA{}
+\}
+if (Q.hash != Q_prev.hash) \{
+        buffer_out[ptr_out++] = Q.hash;
+\} else \{
+        /* diagnose duplicate */
+        if ((Q.preimage.counter == Q_prev.preimage.counter) && (Q.preimage.nonce == Q_prev.preimage.nonce))
+                full_dupes++;
+        else
+                partial_dupes++;
+\}
+Q_prev = Q;
+
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}\nwbegincode{18}\sublabel{NW3PsaZz-20c3NS-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-20c3NS-1}}}\moddef{Flush the output buffer to disk~{\nwtagstyle{}\subpageref{NW3PsaZz-20c3NS-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}\\{NW3PsaZz-29uJeK-1}}\nwenddeflinemarkup
+flushed += ptr_out;
+size_t check_out = fwrite(buffer_out, sizeof(*buffer_out), ptr_out, f_out);
+if (check_out != (size_t) ptr_out)
+        err(1, "fwrite inconsistency : %zd vs %d", check_out, ptr_out);
+ptr_out = 0;
+double mhash = flushed * 1e-6;
+double rate = mhash / (wtime() - start);
+printf("\\rItem processed: %.1fM (%.1fM/s)  hash collisions=%d,   duplicate preimages=%d,   IN=%.1f Mb/s   OUT =%.1f Mb/s", 
+        mhash, rate, partial_dupes, full_dupes, 20*rate, 8*rate);
+fflush(stdout);
+
+
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}\\{NW3PsaZz-29uJeK-1}}\nwendcode{}\nwbegindocs{19}To bootstrap the tree construction, we use a trick: we create $P$ fake
+records whose hash is set to zero, each supposedly originating from a
+different input file. We will \emph{not} write these special zero hashes to
+the output. But ``extracting" them from the tree will cause a fresh, actual
+value to be fetched from each input file.
+
+\nwenddocs{}\nwbegincode{20}\sublabel{NW3PsaZz-3RcFZL-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-3RcFZL-1}}}\moddef{Initialize the tournament tree~{\nwtagstyle{}\subpageref{NW3PsaZz-3RcFZL-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+struct dict_t loser[P];
+int origin[P];
+for (int j = 0; j < P; j++) \{
+        loser[j].hash = 0;
+        loser[j].preimage.counter = 0;
+        loser[j].preimage.nonce = 0;
+        origin[j] = j;
+\}
+struct dict_t Q = \{0, \{0, 0\}\}, Q_prev = \{0, \{0, 0\}\};
+int i = 0, partial_dupes = -P, full_dupes = -P;
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}\nwbegindocs{21}Now that the top of the tree has been dealt with, we must replace it with a
+new value from input buffer $i$. First, we take care of the fact that this
+buffer may be empty.
+
+\nwenddocs{}\nwbegincode{22}\sublabel{NW3PsaZz-27glBj-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-27glBj-1}}}\moddef{If the \code{}i\edoc{}-th input buffer is empty, try to refill it~{\nwtagstyle{}\subpageref{NW3PsaZz-27glBj-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+if (ptr_in[i] == size_in[i]) \{
+        // printf("reading from %s\\n", in_filenames[i]);
+        size_in[i] = fread(buffer_in[i], sizeof(struct dict_t), IN_BUFFER_SIZE, f_in[i]);
+        if (ferror(f_in[i]))
+                err(1, "fread on %s", in_filenames[i]);
+        ptr_in[i] = 0;
+\}
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}\nwbegindocs{23}If refill was attempted but the buffer is still empty, we inject {\Tt{}SENTINEL\nwendquote}.
+
+\nwenddocs{}\nwbegincode{24}\sublabel{NW3PsaZz-1rJl93-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-1rJl93-1}}}\moddef{Read the next hash from the \code{}i\edoc{}-th buffer into \code{}Q\edoc{}~{\nwtagstyle{}\subpageref{NW3PsaZz-1rJl93-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+if (size_in[i] == 0)
+        Q.hash = SENTINEL;
+else
+        Q = buffer_in[i][ptr_in[i]++];
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}\nwbegindocs{25}And now the moment you have all been waiting for: the update of the
+tournament tree. At this stage {\Tt{}Q\nwendquote} is no longer the champion.
+
+\nwenddocs{}\nwbegincode{26}\sublabel{NW3PsaZz-oSyb9-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3PsaZz-oSyb9-1}}}\moddef{Update tournament tree ; update \code{}Q\edoc{} and \code{}i\edoc{}~{\nwtagstyle{}\subpageref{NW3PsaZz-oSyb9-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3PsaZz-2SeLhR-1}}\nwenddeflinemarkup
+int T = (P + i) / 2;
+//printf("New value read from file %d: %016" PRIx64 ", injected in node %d\\n", i, Q, T);
+while (T >= 1) \{
+        //printf("update : comparing Q=%016" PRIx64 " with LOSER[%d]=%016" PRIx64" (origin=%d)\\n", Q, T, loser[T], origin[T]);
+        if (loser[T].hash < Q.hash) \{
+                //printf("\\tSWAP\\n");
+                struct dict_t foo = loser[T];
+                int bar = origin[T];
+                loser[T] = Q;
+                origin[T] = i;
+                Q = foo;
+                i = bar;
+        \}
+        T = T / 2;
+\}
+//printf("State: Q = %016" PRIx64", i = %d\\n", Q, i);
+//for (int j = 0; j < P; j++)
+//      printf("LOSER[%d] = %016" PRIx64 " / ORIGIN[%d] = %d\\n", j, loser[j], j, origin[j]);
+//printf("=====================\\n");
+
+\nwused{\\{NW3PsaZz-2SeLhR-1}}\nwendcode{}
+
+\nwixlogsorted{c}{{*}{NW3PsaZz-1p0Y9w-1}{\nwixd{NW3PsaZz-1p0Y9w-1}}}%
+\nwixlogsorted{c}{{Allocate buffers}{NW3PsaZz-35VW48-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-35VW48-1}}}%
+\nwixlogsorted{c}{{Append \code{}Q\edoc{} to the output buffer if not duplicate}{NW3PsaZz-29uJeK-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-29uJeK-1}}}%
+\nwixlogsorted{c}{{Auxiliary functions}{NW3PsaZz-1pqJq1-1}{\nwixu{NW3PsaZz-1p0Y9w-1}\nwixd{NW3PsaZz-1pqJq1-1}}}%
+\nwixlogsorted{c}{{Close all files}{NW3PsaZz-4W3Dcd-1}{\nwixu{NW3PsaZz-4O9khr-1}\nwixd{NW3PsaZz-4W3Dcd-1}}}%
+\nwixlogsorted{c}{{Flush the output buffer to disk}{NW3PsaZz-20c3NS-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixu{NW3PsaZz-29uJeK-1}\nwixd{NW3PsaZz-20c3NS-1}}}%
+\nwixlogsorted{c}{{Header files to include}{NW3PsaZz-4BXCU3-1}{\nwixu{NW3PsaZz-1p0Y9w-1}\nwixd{NW3PsaZz-4BXCU3-1}}}%
+\nwixlogsorted{c}{{If the \code{}i\edoc{}-th input buffer is empty, try to refill it}{NW3PsaZz-27glBj-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-27glBj-1}}}%
+\nwixlogsorted{c}{{Initialize the tournament tree}{NW3PsaZz-3RcFZL-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-3RcFZL-1}}}%
+\nwixlogsorted{c}{{Merge input dictionnaries}{NW3PsaZz-2SeLhR-1}{\nwixu{NW3PsaZz-4O9khr-1}\nwixd{NW3PsaZz-2SeLhR-1}}}%
+\nwixlogsorted{c}{{Open all files}{NW3PsaZz-4gSbGz-1}{\nwixu{NW3PsaZz-4O9khr-1}\nwixd{NW3PsaZz-4gSbGz-1}}}%
+\nwixlogsorted{c}{{Process the command line}{NW3PsaZz-9FeVG-1}{\nwixu{NW3PsaZz-4O9khr-1}\nwixd{NW3PsaZz-9FeVG-1}}}%
+\nwixlogsorted{c}{{Read the next hash from the \code{}i\edoc{}-th buffer into \code{}Q\edoc{}}{NW3PsaZz-1rJl93-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-1rJl93-1}}}%
+\nwixlogsorted{c}{{The main program}{NW3PsaZz-4O9khr-1}{\nwixu{NW3PsaZz-1p0Y9w-1}\nwixd{NW3PsaZz-4O9khr-1}}}%
+\nwixlogsorted{c}{{Update tournament tree ; update \code{}Q\edoc{} and \code{}i\edoc{}}{NW3PsaZz-oSyb9-1}{\nwixu{NW3PsaZz-2SeLhR-1}\nwixd{NW3PsaZz-oSyb9-1}}}%
+\nwbegindocs{27}\nwdocspar
+
+\end{document}
+\nwenddocs{}

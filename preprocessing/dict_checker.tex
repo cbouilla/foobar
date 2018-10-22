@@ -1,0 +1,139 @@
+\documentclass{article}% ===> this file was generated automatically by noweave --- better not edit it
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Dictionnary Checker}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program checks that a \textbf{(split) dictionnary file} is correct (i.e.
+the preimages are valid and the hash match). It will also detect if it is
+sorted by increasing hashes, with or without duplicates.
+
+This program takes the name of a single dictionnary file on the command-line.
+
+\nwfilename{dict_checker.nw}\nwbegincode{1}\sublabel{NW1TZlNG-1p0Y9w-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-1p0Y9w-1}}}\moddef{*~{\nwtagstyle{}\subpageref{NW1TZlNG-1p0Y9w-1}}}\endmoddef\nwstartdeflinemarkup\nwenddeflinemarkup
+\LA{}Header files to include~{\nwtagstyle{}\subpageref{NW1TZlNG-4BXCU3-1}}\RA{}
+\LA{}The main program~{\nwtagstyle{}\subpageref{NW1TZlNG-4O9khr-1}}\RA{}
+
+\nwnotused{*}\nwendcode{}\nwbegindocs{2}We need the usual standard headers.
+
+\nwenddocs{}\nwbegincode{3}\sublabel{NW1TZlNG-4BXCU3-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-4BXCU3-1}}}\moddef{Header files to include~{\nwtagstyle{}\subpageref{NW1TZlNG-4BXCU3-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-1p0Y9w-1}}\nwenddeflinemarkup
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <err.h>
+#include <getopt.h>
+#include "hasher.h"
+
+\nwused{\\{NW1TZlNG-1p0Y9w-1}}\nwendcode{}\nwbegincode{4}\sublabel{NW1TZlNG-4O9khr-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-4O9khr-1}}}\moddef{The main program~{\nwtagstyle{}\subpageref{NW1TZlNG-4O9khr-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-1p0Y9w-1}}\nwenddeflinemarkup
+int main(int argc, char **argv)
+\{
+        \LA{}Process the command line~{\nwtagstyle{}\subpageref{NW1TZlNG-9FeVG-1}}\RA{}
+        \LA{}Open input file and allocate \code{}buffer\edoc{}~{\nwtagstyle{}\subpageref{NW1TZlNG-3q2sKM-1}}\RA{}
+        struct dict_t prev = \{0, \{0, 0\}\};
+        size_t processed = 0, size = 0;
+        bool in_order = true;
+        int full_dupes = 0, partial_dupes = 0;
+        while (!feof(f)) \{
+                \LA{}Fill \code{}buffer\edoc{} from input file~{\nwtagstyle{}\subpageref{NW1TZlNG-3so4SI-1}}\RA{}
+                \LA{}Verify \code{}buffer\edoc{}~{\nwtagstyle{}\subpageref{NW1TZlNG-4d8FM5-1}}\RA{}
+        \}
+        processed += size;
+        fclose(f);
+        printf("%zd items processed. In order: %d. Hash collisions: %d. Duplicate preimages: %d\\n",
+                processed, in_order, partial_dupes, full_dupes);
+        exit(EXIT_SUCCESS);
+\}
+
+\nwused{\\{NW1TZlNG-1p0Y9w-1}}\nwendcode{}\nwbegincode{5}\sublabel{NW1TZlNG-9FeVG-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-9FeVG-1}}}\moddef{Process the command line~{\nwtagstyle{}\subpageref{NW1TZlNG-9FeVG-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-4O9khr-1}}\nwenddeflinemarkup
+struct option longopts[2] = \{
+        \{"kind", required_argument, NULL, 'k'\},
+        \{NULL, 0, NULL, 0\}
+\};
+int kind = -1;
+signed char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) \{
+        switch (ch) \{
+        case 'k':
+                kind = atoi(optarg);
+                break;
+        default:
+                errx(1, "Unknown option\\n");
+        \}
+\}
+if (kind < 0)
+        errx(1, "missing --kind");
+if (optind >= argc)
+        errx(1, "missing input filename");
+char *in_filename = argv[optind];
+
+
+\nwused{\\{NW1TZlNG-4O9khr-1}}\nwendcode{}\nwbegincode{6}\sublabel{NW1TZlNG-3q2sKM-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-3q2sKM-1}}}\moddef{Open input file and allocate \code{}buffer\edoc{}~{\nwtagstyle{}\subpageref{NW1TZlNG-3q2sKM-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-4O9khr-1}}\nwenddeflinemarkup
+FILE *f = fopen(in_filename, "r");
+if (f == NULL)
+        err(1, "cannot open %s for reading", in_filename);
+static const int BUFFER_SIZE = 131072;
+struct dict_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
+if (buffer == NULL)
+        err(1, "cannot allocate buffer");
+
+
+\nwused{\\{NW1TZlNG-4O9khr-1}}\nwendcode{}\nwbegindocs{7}{\Tt{}processed\nwendquote} counts the number of items in previously processed buffers.
+{\Tt{}size\nwendquote} is the size of the current buffer.
+
+\nwenddocs{}\nwbegincode{8}\sublabel{NW1TZlNG-3so4SI-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-3so4SI-1}}}\moddef{Fill \code{}buffer\edoc{} from input file~{\nwtagstyle{}\subpageref{NW1TZlNG-3so4SI-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-4O9khr-1}}\nwenddeflinemarkup
+processed += size;
+size = fread(buffer, sizeof(*buffer), BUFFER_SIZE, f);
+if (ferror(f))
+        err(1, "fread failed");
+
+\nwused{\\{NW1TZlNG-4O9khr-1}}\nwendcode{}\nwbegincode{9}\sublabel{NW1TZlNG-4d8FM5-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW1TZlNG-4d8FM5-1}}}\moddef{Verify \code{}buffer\edoc{}~{\nwtagstyle{}\subpageref{NW1TZlNG-4d8FM5-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW1TZlNG-4O9khr-1}}\nwenddeflinemarkup
+for (size_t i = 0; i < size; i++) \{
+        /* check preimage validity */
+        uint32_t full_hash[8];
+        if (!compute_full_hash(kind, &buffer[i].preimage, full_hash))
+                errx(1, "invalid preimage %zd", processed + i);
+        if (buffer[i].hash != extract_partial_hash(full_hash))
+                errx(1, "partial hash mismatch %zd", processed + i);
+        if (prev.hash == buffer[i].hash)
+                partial_dupes++;
+        if (prev.hash > buffer[i].hash)
+                in_order = false;
+        if (prev.preimage.counter == buffer[i].preimage.counter && prev.preimage.nonce == buffer[i].preimage.nonce)
+                full_dupes++;
+        prev = buffer[i];
+\}
+
+\nwused{\\{NW1TZlNG-4O9khr-1}}\nwendcode{}
+
+\nwixlogsorted{c}{{*}{NW1TZlNG-1p0Y9w-1}{\nwixd{NW1TZlNG-1p0Y9w-1}}}%
+\nwixlogsorted{c}{{Fill \code{}buffer\edoc{} from input file}{NW1TZlNG-3so4SI-1}{\nwixu{NW1TZlNG-4O9khr-1}\nwixd{NW1TZlNG-3so4SI-1}}}%
+\nwixlogsorted{c}{{Header files to include}{NW1TZlNG-4BXCU3-1}{\nwixu{NW1TZlNG-1p0Y9w-1}\nwixd{NW1TZlNG-4BXCU3-1}}}%
+\nwixlogsorted{c}{{Open input file and allocate \code{}buffer\edoc{}}{NW1TZlNG-3q2sKM-1}{\nwixu{NW1TZlNG-4O9khr-1}\nwixd{NW1TZlNG-3q2sKM-1}}}%
+\nwixlogsorted{c}{{Process the command line}{NW1TZlNG-9FeVG-1}{\nwixu{NW1TZlNG-4O9khr-1}\nwixd{NW1TZlNG-9FeVG-1}}}%
+\nwixlogsorted{c}{{The main program}{NW1TZlNG-4O9khr-1}{\nwixu{NW1TZlNG-1p0Y9w-1}\nwixd{NW1TZlNG-4O9khr-1}}}%
+\nwixlogsorted{c}{{Verify \code{}buffer\edoc{}}{NW1TZlNG-4d8FM5-1}{\nwixu{NW1TZlNG-4O9khr-1}\nwixd{NW1TZlNG-4d8FM5-1}}}%
+\nwbegindocs{10}\nwdocspar
+
+\end{document}
+\nwenddocs{}

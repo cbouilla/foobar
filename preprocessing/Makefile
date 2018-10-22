@@ -1,19 +1,10 @@
 CFLAGS = -std=c99 -g -Wall -Wextra -O3
 #CC = arm-linux-gnueabihf-gcc
 
-
 all: programs doc
 
-programs: server sample_client splitter dict_checker sorter merger hash_checker indexer
-doc: server.pdf sample_client.pdf splitter.pdf sorter.pdf
-
-server.o:        server.c
-server.o:        CFLAGS += -I/usr/local/include
-server:          LDLIBS += -lnanomsg
-
-sample_client.o: sample_client.c
-sample_client:   LDLIBS += -lnanomsg
-sample_client:   sample_client.o
+programs: splitter dict_checker sorter merger hash_checker indexer
+doc: splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf
 
 splitter.o: splitter.c sha256.h hasher.h
 splitter.o: CC = mpicc
@@ -43,4 +34,7 @@ sha256.o: sha256.c sha256.h
 	pdflatex $<
 
 clean:
-	rm -rf *.o server sample_client splitter *.pdf *.aux *.bbl *.blg *.log sample_client.c server.c splitter.c *.out *.cweb *.idx
+	rm -f *.o  *.pdf *.aux *.bbl *.blg *.log *.out 
+	rm -f splitter dict_checker sorter merger hash_checker indexer
+	rm -f splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf
+	rm -f hasher.c splitter.c dict_checker.c sorter.c merger.c hash_checker.c indexer.c

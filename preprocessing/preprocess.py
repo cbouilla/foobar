@@ -20,14 +20,14 @@ cores = 4
 
 
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
-PREIMAGE_DIR = 'preimages'
-DICT_DIR = 'dict'
-HASH_DIR = 'hash'
-SPLITTER = '../foobar_server/splitter'
-DICT_CHECKER = '../foobar_server/dict_checker'
-SORTER = '../foobar_server/sorter'
-MERGER = '../foobar_server/merger'
-HASH_CHECKER = '../foobar_server/hash_checker'
+PREIMAGE_DIR = '../data/preimages'
+DICT_DIR = '../data/dict'
+HASH_DIR = '../data/hash'
+SPLITTER = './splitter'
+DICT_CHECKER = './dict_checker'
+SORTER = './sorter'
+MERGER = './merger'
+HASH_CHECKER = './hash_checker'
 
 do_split = False
 check_split = False

@@ -1,0 +1,145 @@
+\documentclass{article}% ===> this file was generated automatically by noweave --- better not edit it
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Sorter}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program sorts split dictionnary files, which are sequences of contiguous {\Tt{}struct\ dict{\_}t\nwendquote} records.
+
+
+\nwfilename{sorter.nw}\nwbegindocs{1}This program reads a dictionnary file, sorts it by hash, and rewrites it.
+
+\nwenddocs{}\nwbegincode{2}\sublabel{NW3FZmBK-1p0Y9w-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-1p0Y9w-1}}}\moddef{*~{\nwtagstyle{}\subpageref{NW3FZmBK-1p0Y9w-1}}}\endmoddef\nwstartdeflinemarkup\nwenddeflinemarkup
+\LA{}Header files to include~{\nwtagstyle{}\subpageref{NW3FZmBK-4BXCU3-1}}\RA{}
+\LA{}Auxiliary functions~{\nwtagstyle{}\subpageref{NW3FZmBK-1pqJq1-1}}\RA{}
+\LA{}The main program~{\nwtagstyle{}\subpageref{NW3FZmBK-4O9khr-1}}\RA{}
+
+\nwnotused{*}\nwendcode{}\nwbegindocs{3}We need the usual standard headers.
+
+\nwenddocs{}\nwbegincode{4}\sublabel{NW3FZmBK-4BXCU3-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-4BXCU3-1}}}\moddef{Header files to include~{\nwtagstyle{}\subpageref{NW3FZmBK-4BXCU3-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-1p0Y9w-1}}\nwenddeflinemarkup
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <string.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include "hasher.h"
+
+\nwused{\\{NW3FZmBK-1p0Y9w-1}}\nwendcode{}\nwbegincode{5}\sublabel{NW3FZmBK-4O9khr-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-4O9khr-1}}}\moddef{The main program~{\nwtagstyle{}\subpageref{NW3FZmBK-4O9khr-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-1p0Y9w-1}}\nwenddeflinemarkup
+int main(int argc, char **argv)
+\{
+        \LA{}Process the command line~{\nwtagstyle{}\subpageref{NW3FZmBK-9FeVG-1}}\RA{}
+        \LA{}Load the dictionnary in \code{}dictionnary\edoc{}~{\nwtagstyle{}\subpageref{NW3FZmBK-2b11rs-1}}\RA{}
+        \LA{}Sort \code{}dictionnary\edoc{} by increasing hash~{\nwtagstyle{}\subpageref{NW3FZmBK-2Lc4R3-1}}\RA{}
+        \LA{}Write \code{}dictionnary\edoc{} in a temporary file~{\nwtagstyle{}\subpageref{NW3FZmBK-2C6HWO-1}}\RA{}
+        \LA{}Replace the original with the temporary file~{\nwtagstyle{}\subpageref{NW3FZmBK-2D3Exx-1}}\RA{}
+        exit(EXIT_SUCCESS);
+\}
+
+\nwused{\\{NW3FZmBK-1p0Y9w-1}}\nwendcode{}\nwbegindocs{6}The only accepted command-line argument is the name of file to sort.
+
+\nwenddocs{}\nwbegincode{7}\sublabel{NW3FZmBK-9FeVG-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-9FeVG-1}}}\moddef{Process the command line~{\nwtagstyle{}\subpageref{NW3FZmBK-9FeVG-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-4O9khr-1}}\nwenddeflinemarkup
+if (argc < 2)
+        errx(1, "missing argument: FILENAME");
+char *in_filename = argv[1];
+
+\nwused{\\{NW3FZmBK-4O9khr-1}}\nwendcode{}\nwbegindocs{8}To read the dictionnaty file in memory, we first query its size, then
+allocate memory accordingly, then finally read it in the allocated space.
+
+\nwenddocs{}\nwbegincode{9}\sublabel{NW3FZmBK-2b11rs-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-2b11rs-1}}}\moddef{Load the dictionnary in \code{}dictionnary\edoc{}~{\nwtagstyle{}\subpageref{NW3FZmBK-2b11rs-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-4O9khr-1}}\nwenddeflinemarkup
+struct stat infos;
+if (stat(in_filename, &infos))
+        err(1, "fstat");
+struct dict_t *dictionnary = malloc(infos.st_size);
+if (dictionnary == NULL)
+        err(1, "failed to allocate memory");
+FILE *f_in = fopen(in_filename, "r");
+if (f_in == NULL)
+        err(1, "fopen failed");
+size_t check = fread(dictionnary, 1, infos.st_size, f_in);
+if ((check != (size_t) infos.st_size) || ferror(f_in))
+        err(1, "fread : read %zd, expected %zd", check, infos.st_size);
+if (fclose(f_in))
+        err(1, "fclose %s", in_filename);
+
+\nwused{\\{NW3FZmBK-4O9khr-1}}\nwendcode{}\nwbegindocs{10}To actually perform the sort, we use the standard {\Tt{}qsort\nwendquote} function. It is
+not the fastest possible solution, but it is the simplest. We have to provide
+a comparison function for {\Tt{}qsort\nwendquote} and extra care has to be taken, because we
+cannot just substract the {\Tt{}uint64{\_}t\nwendquote}. This is an extra source of inefficiency.
+
+\nwenddocs{}\nwbegincode{11}\sublabel{NW3FZmBK-1pqJq1-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-1pqJq1-1}}}\moddef{Auxiliary functions~{\nwtagstyle{}\subpageref{NW3FZmBK-1pqJq1-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-1p0Y9w-1}}\nwenddeflinemarkup
+int cmp(const void *a_, const void *b_)
+\{
+        struct dict_t *a = (struct dict_t *) a_;
+        struct dict_t *b = (struct dict_t *) b_;
+        return (a->hash > b->hash) - (a->hash < b->hash);
+\}
+
+\nwused{\\{NW3FZmBK-1p0Y9w-1}}\nwendcode{}\nwbegincode{12}\sublabel{NW3FZmBK-2Lc4R3-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-2Lc4R3-1}}}\moddef{Sort \code{}dictionnary\edoc{} by increasing hash~{\nwtagstyle{}\subpageref{NW3FZmBK-2Lc4R3-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-4O9khr-1}}\nwenddeflinemarkup
+int n_entries = infos.st_size / sizeof(*dictionnary);
+qsort(dictionnary, n_entries, sizeof(*dictionnary), cmp);
+
+\nwused{\\{NW3FZmBK-4O9khr-1}}\nwendcode{}\nwbegindocs{13}Once the dictionnary has been sorted in memory, it has to be written back
+down to the file system. To avoid erasing the original file, we write it down
+to \emph{another} file. Only when this has succeeded do we erase the original
+file and rename the new file.
+
+\nwenddocs{}\nwbegincode{14}\sublabel{NW3FZmBK-2C6HWO-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-2C6HWO-1}}}\moddef{Write \code{}dictionnary\edoc{} in a temporary file~{\nwtagstyle{}\subpageref{NW3FZmBK-2C6HWO-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-4O9khr-1}}\nwenddeflinemarkup
+int k = strlen(in_filename) + 6;
+char tmp_filename[k];
+sprintf(tmp_filename, "%s.sort", in_filename);
+FILE *f_out = fopen(tmp_filename, "w");
+if (f_out == NULL)
+        err(1, "cannot create temporary file %s", tmp_filename);
+check = fwrite(dictionnary, sizeof(*dictionnary), n_entries, f_out);
+if (check != (size_t) n_entries)
+        err(1, "fwrite inconsistensy %zd vs %d", check, n_entries);
+if (fclose(f_out))
+        err(1, "fclose %s", tmp_filename);
+
+\nwused{\\{NW3FZmBK-4O9khr-1}}\nwendcode{}\nwbegindocs{15}Once the result has been safely writen, we replace the (unsorted) input file
+by renaming the temporary file. Fortunately, the standard {\Tt{}rename\nwendquote} function
+does exactly that.
+
+\nwenddocs{}\nwbegincode{16}\sublabel{NW3FZmBK-2D3Exx-1}\nwmargintag{{\nwtagstyle{}\subpageref{NW3FZmBK-2D3Exx-1}}}\moddef{Replace the original with the temporary file~{\nwtagstyle{}\subpageref{NW3FZmBK-2D3Exx-1}}}\endmoddef\nwstartdeflinemarkup\nwusesondefline{\\{NW3FZmBK-4O9khr-1}}\nwenddeflinemarkup
+if (rename(tmp_filename, in_filename))
+        err(1, "rename failed");
+
+\nwused{\\{NW3FZmBK-4O9khr-1}}\nwendcode{}
+
+\nwixlogsorted{c}{{*}{NW3FZmBK-1p0Y9w-1}{\nwixd{NW3FZmBK-1p0Y9w-1}}}%
+\nwixlogsorted{c}{{Auxiliary functions}{NW3FZmBK-1pqJq1-1}{\nwixu{NW3FZmBK-1p0Y9w-1}\nwixd{NW3FZmBK-1pqJq1-1}}}%
+\nwixlogsorted{c}{{Header files to include}{NW3FZmBK-4BXCU3-1}{\nwixu{NW3FZmBK-1p0Y9w-1}\nwixd{NW3FZmBK-4BXCU3-1}}}%
+\nwixlogsorted{c}{{Load the dictionnary in \code{}dictionnary\edoc{}}{NW3FZmBK-2b11rs-1}{\nwixu{NW3FZmBK-4O9khr-1}\nwixd{NW3FZmBK-2b11rs-1}}}%
+\nwixlogsorted{c}{{Process the command line}{NW3FZmBK-9FeVG-1}{\nwixu{NW3FZmBK-4O9khr-1}\nwixd{NW3FZmBK-9FeVG-1}}}%
+\nwixlogsorted{c}{{Replace the original with the temporary file}{NW3FZmBK-2D3Exx-1}{\nwixu{NW3FZmBK-4O9khr-1}\nwixd{NW3FZmBK-2D3Exx-1}}}%
+\nwixlogsorted{c}{{Sort \code{}dictionnary\edoc{} by increasing hash}{NW3FZmBK-2Lc4R3-1}{\nwixu{NW3FZmBK-4O9khr-1}\nwixd{NW3FZmBK-2Lc4R3-1}}}%
+\nwixlogsorted{c}{{The main program}{NW3FZmBK-4O9khr-1}{\nwixu{NW3FZmBK-1p0Y9w-1}\nwixd{NW3FZmBK-4O9khr-1}}}%
+\nwixlogsorted{c}{{Write \code{}dictionnary\edoc{} in a temporary file}{NW3FZmBK-2C6HWO-1}{\nwixu{NW3FZmBK-4O9khr-1}\nwixd{NW3FZmBK-2C6HWO-1}}}%
+\nwbegindocs{17}\nwdocspar
+
+\end{document}
+\nwenddocs{}
