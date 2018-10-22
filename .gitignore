@@ -1,6 +1,7 @@
 data/hash/*
 data/dict/*
 data/preimages/*
+data/tmphash/*
 /3XORv2.sublime-workspace
 /mining/server.out
 built_0MQ_lib
@@ -39,3 +40,8 @@ opkg
 /preprocessing/splitter.o
 /preprocessing/splitter.out
 /preprocessing/splitter.pdf
+/preprocessing/index_checker.log
+/preprocessing/index_checker.out
+/preprocessing/index_checker.pdf
+/preprocessing/index_checker.tex
+/preprocessing/merger.tex

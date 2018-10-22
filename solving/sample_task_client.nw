@@ -1,0 +1,176 @@
+\documentclass{article}
+
+\usepackage[a4paper]{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+
+\def\cweb{{\tt noweb\/}}
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+
+\begin{document}
+
+\title{An Application-Agnostic Task Server \\ Demonstration Client }
+\author{Charles Bouillaguet}
+
+\maketitle
+
+\section{Introduction}
+
+This sample client does nothing but interaction with the
+server. Familiarity with the server and the communication protocol is assumed.
+
+The client has the usual structure :
+
+<<democlient.c>>=
+<<Header files to include>>
+<<Actual work function>>
+<<The main program>>
+
+<<Header...>>=
+#define _POSIX_C_SOURCE 200112L 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <limits.h>
+#include <getopt.h>
+#include <string.h>
+#include <err.h>
+#include <zmq.h>
+#include "server.h"
+
+@ The ``actual work function'' takes a task [[id]] and returns a result, which
+is just a sequence of bytes. This demonstration doesnt perform any actual
+work, and just computes $[[r]] \gets 4 [[id]] + 3$. It allocates space to
+store the result and returns its size.
+
+<<Actual work...>>=
+void work(int task_id, int *size, void **result)
+{
+	*size = sizeof(int);
+	int *r = malloc(*size);
+	*r = 4 * task_id + 3;
+	*result = (void *) r;
+}
+
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Initialize networking>>
+	<<Main client loop>>
+	<<Exit cleanly>>
+}
+
+@ The only command-line argument is the address of the server.
+
+<<Process the command...>>=
+struct option longopts[2] = {
+	{"server-address", required_argument, NULL, 'a'},
+	{NULL, 0, NULL, 0}
+};
+char *server_address = NULL;
+char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+	switch (ch) {
+	case 'a':
+		server_address = optarg;
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+}
+if (server_address == NULL)
+	errx(1, "missing required option --server-address");
+
+
+@ Because we are in the non-static part of the infrastructure, we do not
+\emph{bind} our \ZMQ socket to a network address, but we \emph{connect} it to
+the address of the server. While the server has a [[ZMQ_REP]] socket, we have
+a  [[ZMQ_REQ]].
+
+<<Initialize networking...>>=
+void *context = zmq_ctx_new();
+void *socket = zmq_socket(context, ZMQ_REQ);
+if (0 != zmq_connect(socket, server_address))
+	errx(1, "zmq_connect : %s", zmq_strerror(errno));
+
+
+@ We are now ready for the client loop: ask for work, do it, send
+result. Simulate timeout in 50\% of the cases.
+
+<<Main client loop>>=
+<<Send ``Hello'' message>>
+while (1) {
+	<<Wait for task message; set [[task_msg]] and [[task_msg_size]]>>
+	if (task_msg->id < 0)
+		break;
+	printf("got id=%d\n", task_msg->id);
+	if (rand() & 0x01) {
+		printf("oops, waiting\n");
+		sleep(2);
+	}
+	<<Run the task>>
+	<<Send back result message>>
+	<<Release [[result]] and both messages>>
+}
+
+@ Running the task is the simple part. The [[work]] function is responsible
+for giving us back the result. The [[result]] will be [[free]]d later.
+
+<<Run the task>>=
+void *result;
+int result_size;
+work(task_msg->id, &result_size, &result);
+
+@ The ``Hello" message is the first that a client should send. It contains the
+hostname.
+
+<<Send ``Hello'' message>>=
+struct task_msg_t *hello = malloc(sizeof(struct task_msg_t) + HOST_NAME_MAX);
+hello->id = -1;
+if (gethostname(hello->hostname, HOST_NAME_MAX))
+	err(1, "gethostname failed");
+hello->hostname_length = strlen(hello->hostname) + 1;
+int hello_size = sizeof(struct task_msg_t) + hello->hostname_length;
+zmq_send(socket, hello, hello_size, 0);
+free(hello);
+
+@ Receiving the (variable-length) task message is similar to what happens in the server.
+
+<<Wait for task message...>>=
+zmq_msg_t zmsg;
+zmq_msg_init (&zmsg);
+int task_msg_size = zmq_msg_recv(&zmsg, socket, 0);
+if (task_msg_size < 0)
+	errx(1, "zmq_msg_recv %s", zmq_strerror(errno));
+struct task_msg_t *task_msg = zmq_msg_data(&zmsg);
+
+<<Release...>>=
+zmq_msg_close(&zmsg);
+free(result);
+free(response_msg);
+
+
+@ To return the result to the server, the client must prepare a message encapsulating the result.
+
+% this is ugly. Multi-part messages ?
+
+<<Send back result...>>=
+int response_size = task_msg_size + sizeof(int) + result_size;
+char *response_msg = malloc(response_size);
+memcpy(response_msg, task_msg, task_msg_size);
+memcpy(response_msg + task_msg_size, &result_size, sizeof(int));
+memcpy(response_msg + task_msg_size + sizeof(int), result, result_size);
+zmq_send(socket, response_msg, response_size, 0);
+
+
+<<Exit...>>=
+printf("Bye.\n");
+zmq_close (socket);
+zmq_ctx_destroy (context);
+return(EXIT_SUCCESS);
+
+@ \end{document}

@@ -35,6 +35,7 @@ fit in RAM, the index should.
 
 <<*>>=
 <<Header files to include>>
+<<Auxiliary functions>>
 <<The main program>>
 
 @ We need the usual standard headers.
@@ -44,9 +45,23 @@ fit in RAM, the index should.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <sys/time.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <err.h>
+#include <assert.h>
+
+@ We again use a small function to measure the passage of time accurately.
+
+<<Auxiliary functions>>=
+double wtime()
+{
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+	return (double)ts.tv_sec + ts.tv_usec / 1E6;
+}
+
 
 <<The main program>>=
 int main(int argc, char **argv)
@@ -64,7 +79,7 @@ int main(int argc, char **argv)
 
 <<Process the command line>>=
 struct option longopts[2] = {
-	{"width", required_argument, NULL, 'p'},
+	{"bits", required_argument, NULL, 'p'},
 	{NULL, 0, NULL, 0}
 };
 int k = - 1;
@@ -79,20 +94,18 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	}
 }
 if (k < 0)
-	errx(1, "missing --width K");
+	errx(1, "missing --bits");
 if (optind != argc - 1)
 	errx(1, "missing (or extra) filenames");
 char *in_filename = argv[optind];
-
+printf("bulding index on %d bits\n", k);
 
 <<Open input/output files>>=
-if (argc < 2)
-	errx(1, "missing input filename");
 FILE *f_in = fopen(in_filename, "r");
 if (f_in == NULL)
-	err(1, "cannot open %s for reading", argv[1]);
+	err(1, "cannot open %s for reading", in_filename);
 char out_filename[strlen(in_filename) + 7];
-sprintf(out_filename, "%s.index", out_filename);
+sprintf(out_filename, "%s.index", in_filename);
 FILE *f_out = fopen(out_filename, "w");
 if (f_out == NULL)
 	err(1, "Cannot open %s for writing", out_filename);
@@ -102,7 +115,7 @@ if (f_out == NULL)
 (and write the index ``in flight''), this does not seem necessary.
 
 <<Allocate memory>>=
-int I_size = (1 << k) + 1;
+uint64_t I_size = (1 << k) + 1;
 uint32_t *I = malloc(I_size * sizeof(*I));
 if (I == NULL)
 	err(1, "cannot alloc I");
@@ -112,53 +125,60 @@ if (I == NULL)
 iterate over possible prefixes to ensure that no ``holes'' happen.
 
 <<Build the index>>=
-<<Prepare read buffer>>
+<<Prepare the read buffer>>
 int hashes_read = 0;
+bool EOF_flag = false;
 uint64_t h_prefix = 0;
-for (uint64_t prefix = 0; prefix < I_size; prefix++) {
-	if (h_prefix > prefix || feof(f_in)) {
-		I[prefix] = hashes_read;
-		continue;
+I[0] = 0;
+for (uint64_t prefix = 0; prefix < (1 << k); prefix++) {
+	while (!EOF_flag && (h_prefix <= prefix)) {
+		<<Get next hash value [[h]]; Set [[EOF_flag]] when no more data can be read>>
+		hashes_read++;
 	}
-	<<Get next hash value [[h]]; if End-Of-File, [[continue]]>>
-	hashes_read++;
+	// printf("detecting change ! after reading %d hashes, I now find h_prefix=%08" PRIx32 "\n", hashes_read, h_prefix);
+	I[prefix + 1] = hashes_read - 1;
 }
-I[1 << k] = hashes_read;
 
 @ The only other detail is reading from the input file. We use a [[buffer]]
 for this purpose. Let [[size]] denotes its size, and [[ptr]] denote the index
 of the next unread.
 
 
-<<Prepare read buffer>>=
+<<Prepare the read buffer>>=
 size_t size = 0;
 size_t ptr = 0;
 static const int BUFFER_SIZE = 131072;
 uint64_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
 if (buffer == NULL)
 	err(1, "cannot allocate buffer");
+double start = wtime();
 
 
-<<Get next hash value [[h]]; if End-Of-File, [[continue]]>>=
+<<Get next hash value [[h]]; Set [[EOF_flag]] when no more data can be read>>=
 if (ptr >= size) {
 	size = fread(buffer, sizeof(*buffer), BUFFER_SIZE, f_in);
+	double mhashes = hashes_read * 9.5367431640625e-07;
+	double rate = mhashes * 8 / (wtime() - start);
+	printf("\rRead %.1fM hashes (%.1fMbyte/s)", mhashes, rate);
+	fflush(stdout);
 	if (ferror(f_in))
 		err(1, "fread failed");
-	if (feof(f_in))
+	if (size == 0 && feof(f_in)) {
+		EOF_flag = true;
 		continue;
+	}
 	ptr = 0;
 }
 uint64_t h = buffer[ptr++];
 h_prefix = h >> (64 - k); 
 
 
-
 <<Write the index>>=
+printf("\nWriting...\n");
 size_t check = fwrite(I, sizeof(*I), I_size, f_out);
 if (check != (size_t) I_size)
-	err(1, "fwrite inconsistency : %zd vs %d", check, I_size);
+	err(1, "fwrite inconsistency : %zd vs %" PRId64, check, I_size);
 fclose(f_out);
-
 
 @
 

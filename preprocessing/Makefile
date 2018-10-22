@@ -3,8 +3,8 @@ CFLAGS = -std=c99 -g -Wall -Wextra -O3
 
 all: programs doc
 
-programs: splitter dict_checker sorter merger hash_checker indexer
-doc: splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf
+programs: splitter dict_checker sorter merger hash_checker indexer index_checker
+doc: splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf index_checker.pdf
 
 splitter.o: splitter.c sha256.h hasher.h
 splitter.o: CC = mpicc
