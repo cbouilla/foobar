@@ -45,3 +45,6 @@ opkg
 /preprocessing/index_checker.pdf
 /preprocessing/index_checker.tex
 /preprocessing/merger.tex
+/solving/task_server.log
+/solving/task_server.pdf
+/solving/task_server.tex
