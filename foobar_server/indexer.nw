@@ -1,0 +1,165 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Hash File Indexer}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program builds an \textbf{index} from a sorted hash file. 
+
+Given a parameter $k$, and a hash file $H$, the index is a table $I$ of size
+$2^k + 1$ such that the hash values whose $k$-bit prefix is $x$ are precisely
+$[[H[I[x]:I[x + 1]]]]$. The assumption is that, while the hash file may not
+fit in RAM, the index should.
+
+@ This program reads a single hash file produces the index. It takes the name of a file on the command-line.
+
+<<*>>=
+<<Header files to include>>
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<Header files to include>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <getopt.h>
+#include <inttypes.h>
+#include <err.h>
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Open input/output files>>
+	<<Allocate memory>>
+	<<Build the index>>
+	fclose(f_in);
+	<<Write the index>>
+	exit(EXIT_SUCCESS);
+}
+
+@ The name of input file is given on the command-line, along with the prefix width $k$.
+
+<<Process the command line>>=
+struct option longopts[2] = {
+	{"width", required_argument, NULL, 'p'},
+	{NULL, 0, NULL, 0}
+};
+int k = - 1;
+signed char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+	switch (ch) {
+	case 'p':
+		k = atoi(optarg);
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+}
+if (k < 0)
+	errx(1, "missing --width K");
+if (optind != argc - 1)
+	errx(1, "missing (or extra) filenames");
+char *in_filename = argv[optind];
+
+
+<<Open input/output files>>=
+if (argc < 2)
+	errx(1, "missing input filename");
+FILE *f_in = fopen(in_filename, "r");
+if (f_in == NULL)
+	err(1, "cannot open %s for reading", argv[1]);
+char out_filename[strlen(in_filename) + 7];
+sprintf(out_filename, "%s.index", out_filename);
+FILE *f_out = fopen(out_filename, "w");
+if (f_out == NULL)
+	err(1, "Cannot open %s for writing", out_filename);
+
+
+@ We must allocate space for the index. While it could be possible to use less
+(and write the index ``in flight''), this does not seem necessary.
+
+<<Allocate memory>>=
+int I_size = (1 << k) + 1;
+uint32_t *I = malloc(I_size * sizeof(*I));
+if (I == NULL)
+	err(1, "cannot alloc I");
+
+
+@ The meat of the program is the loop that builds the index. We explicitly
+iterate over possible prefixes to ensure that no ``holes'' happen.
+
+<<Build the index>>=
+<<Prepare read buffer>>
+int hashes_read = 0;
+uint64_t h_prefix = 0;
+for (uint64_t prefix = 0; prefix < I_size; prefix++) {
+	if (h_prefix > prefix || feof(f_in)) {
+		I[prefix] = hashes_read;
+		continue;
+	}
+	<<Get next hash value [[h]]; if End-Of-File, [[continue]]>>
+	hashes_read++;
+}
+I[1 << k] = hashes_read;
+
+@ The only other detail is reading from the input file. We use a [[buffer]]
+for this purpose. Let [[size]] denotes its size, and [[ptr]] denote the index
+of the next unread.
+
+
+<<Prepare read buffer>>=
+size_t size = 0;
+size_t ptr = 0;
+static const int BUFFER_SIZE = 131072;
+uint64_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
+if (buffer == NULL)
+	err(1, "cannot allocate buffer");
+
+
+<<Get next hash value [[h]]; if End-Of-File, [[continue]]>>=
+if (ptr >= size) {
+	size = fread(buffer, sizeof(*buffer), BUFFER_SIZE, f_in);
+	if (ferror(f_in))
+		err(1, "fread failed");
+	if (feof(f_in))
+		continue;
+	ptr = 0;
+}
+uint64_t h = buffer[ptr++];
+h_prefix = h >> (64 - k); 
+
+
+
+<<Write the index>>=
+size_t check = fwrite(I, sizeof(*I), I_size, f_out);
+if (check != (size_t) I_size)
+	err(1, "fwrite inconsistency : %zd vs %d", check, I_size);
+fclose(f_out);
+
+
+@
+
+\end{document}

@@ -65,25 +65,8 @@ order to do this easily, but they should be small.
 Detect duplicate hashes and write down the hashes in order into a \textbf{hash file}.
 \end{enumerate}
 
-To do all this, a collection of tools is necessary. The tool described in this
-file does the first step. We use \textsf{OpenSSL}'s implementation of
-\textsf{SHA256}.
-
 Concretely, a preimage file contains a sequence of [[struct preimage_t]]. A
-split dictionnary contains a sequence of [[dict_t]].
-
-\goodbreak
-
-<<Type definitions>>=
-struct preimage_t {
-	int64_t counter;
-	uint32_t nonce;
-} __attribute__((packed));
-
-struct dict_t {
-	uint64_t hash;
-	struct preimage_t preimage;
-} __attribute__((packed));
+split dictionnary contains a sequence of [[dict_t]]. These types are described in [[hasher.h]].
 
 
 @ The main strategy is as follows. A "reader" reads the input file and sends
@@ -115,7 +98,6 @@ dispatches the dictionnary items into split dictionnary files.
 
 <<*>>=
 <<Header files to include>>
-<<Type definitions>>
 <<Global variables>>
 <<The main program>>
 
@@ -131,9 +113,11 @@ dispatches the dictionnary items into split dictionnary files.
 #include <inttypes.h>
 #include <getopt.h>
 #include <assert.h>
+#include <libgen.h>
 
 #include <mpi.h>
-#include "sha256.h"
+#include "hasher.h"
+
 
 <<The main program>>=
 int main(int argc, char **argv)
@@ -148,16 +132,20 @@ int main(int argc, char **argv)
 
 @ The possible command-line arguments are the kind of the blocks  ([[FOO]],
 [[BAR]], [[FOOBAR]]), the $\log_2$ of the number of output hash files and the
-input nonce filenames. We enforce that the arguments are actually present.
+input nonce filenames. We enforce that the arguments are actually present. An
+optionnal argument specifies the output directory of the split dictionnary
+files.
 
 <<Global variables>>=
-struct option longopts[3] = {
+struct option longopts[4] = {
 	{"kind", required_argument, NULL, 'k'},
 	{"bits", required_argument, NULL, 'b'},
+	{"output-dir", required_argument, NULL, 'd'},
 	{NULL, 0, NULL, 0}
 };
 int kind = -1;
 int bits = -1;
+char *output_dir = NULL;
 
 <<Process the command line>>=
 signed char ch;
@@ -168,6 +156,9 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		break;
 	case 'b':
 		bits = atoi(optarg);
+		break;
+	case 'd':
+		output_dir = optarg;
 		break;
 	default:
 		errx(1, "Unknown option\n");
@@ -232,6 +223,7 @@ assert(x == 12);
 
 <<Setup MPI datatype for dictionnary entries>>=
 struct dict_t sample2[2];
+MPI_Datatype type2[2] = {MPI_UINT64_T, PreimageType};
 MPI_Datatype DictStruct, DictType;
 
 /* compute displacements of structure components */
@@ -240,7 +232,7 @@ MPI_Get_address(&sample2[0].preimage, &disp[1]);
 MPI_Get_address(sample2, &base);
 disp[0] -= base;
 disp[1] -= base;
-MPI_Type_create_struct(2, blocklen, disp, type, &DictStruct);
+MPI_Type_create_struct(2, blocklen, disp, type2, &DictStruct);
 MPI_Type_commit(&DictStruct);
 
 MPI_Get_address(sample2 + 1, &sizeofentry);
@@ -357,7 +349,6 @@ int n_processed = 0, n_invalid = 0;
 while (1) {
 	<<Request [[preimages]] from reader; if [[EOF]], then [[break]]>>
 	for (int i = 0; i < n_preimages; i++) {
-		<<Assemble the plaintext>>
 		<<Compute the hash; if invalid then [[continue]]>>
 		<<Push the dictionnary entry to the output buffer [[slot]]>>
 		if (output_size[slot] == WRITER_BUFFER_SIZE) {
@@ -389,46 +380,13 @@ if (status.MPI_TAG == EOF_TAG)
 int n_preimages;
 MPI_Get_count(&status, PreimageType, &n_preimages);
 
-@ Assembling the block is essentially the same code that has been injected into the modified \textsf{cgminer}.
-
-<<Global variables>>=
-static const char *PREFIXES[3] = {
-	             "FOO-0x0000000000000000                                                          ",
-		     "BAR-0x0000000000000000                                                          ",
-		     "FOOBAR-0x0000000000000000                                                       "
-		};
-
-static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
- 
-
-<<Assemble the plaintext>>=
-int64_t counter = preimages[i].counter;
-uint32_t nonce = preimages[i].nonce;
-
-char buffer[80];
-memcpy(buffer, PREFIXES[kind], 80);
-	
-int j = (kind == 2) ? 25 : 22;
-while (counter > 0) {
-	int nibble = counter & 0x000f;
-	counter >>= 4;
-	buffer[j] = NIBBLE[nibble];
-	j--;
-}
-
-uint32_t *block = (uint32_t *) buffer;
-block[19] = __builtin_bswap32(nonce);
 
 @ A priori, the nonces are valid at difficulty 33. This means that the top 33
 bits of the hash must be zero.
 
 <<Compute the hash; if invalid then [[continue]]>>=
-unsigned char md[32];
-uint32_t hash[8];
-SHA256((unsigned char *) block, 80, md);
-SHA256((unsigned char *) md, 32, (unsigned char *) hash);
-bool valid = (hash[7] == 0x00000000) && ((hash[6] & 0x80000000) == 0x0000000000);
-if (!valid) {
+uint32_t full_hash[8];
+if (!compute_full_hash(kind, preimages + i, full_hash)) {
 	n_invalid += 1;
 	continue;
 }
@@ -439,10 +397,11 @@ excluding the most-significant bit of [[hash[6]]] which is always zero. We
 replace it with the most-significant bit of [[hash[4]]].
 
 <<Push the dictionnary entry to the output buffer [[slot]]>>=
-uint64_t x = (((uint64_t) hash[5]) << 32) ^ hash[6] ^ (hash[4] & 0x80000000);
+uint64_t x = extract_partial_hash(full_hash);
 int slot = bits ? (x >> (64 - bits)) : 0;
 output[slot][output_size[slot]].hash = x;
-output[slot][output_size[slot]].preimage = preimages[i];
+output[slot][output_size[slot]].preimage.counter = preimages[i].counter;
+output[slot][output_size[slot]].preimage.nonce = preimages[i].nonce;
 output_size[slot] += 1;
 
 @ IO is easy thanks to \MPI. Recall that writer \#[[slot]] is actually \MPI
@@ -485,17 +444,22 @@ while (n_eof < n_mapper) {
 	<<Write [[block]] to [[f]]>>
 }
 <<Close [[f]]>>
-printf("Writer %d done.\n", id);
+printf("Writer %d done (%s).\n", id, out_filename);
 
-@ We derive the output filename from the writer's [[id]]. The output file is
-opened in write mode, so it is truncated to size zero.
+@ We derive the output filename from the input filename, the (optional) output
+directory and the writer's [[id]]. The output file is opened in write mode, so
+it is truncated to size zero.
 
 <<Open output file [[f]]>>=
 char out_filename[255];
-sprintf(out_filename, "%s.dict.%d", in_filename, id);
+char *input_base = basename(in_filename);
+if (output_dir)
+	sprintf(out_filename, "%s/%s.dict.%d", output_dir, input_base, id);
+else
+	sprintf(out_filename, "%s.dict.%d", in_filename, id);
 FILE *f = fopen(out_filename, "w");
 if (f == NULL)
-	err(1, "fopen writer %d", id);
+	err(1, "[writer] Cannot open %s for writing", out_filename);
 
 @ When receiving a block from a mapper, we must distinguish between regular
 and EOF messages. We must also observe the size of the hash block.

@@ -4,3 +4,12 @@
 /foobar_server/splitter
 /foobar_server/splitter.out
 /foobar_server/merger
+/foobar_server/hash_checker
+data/hash/*
+data/dict/*
+data/preimage/*
+/3XORv2.sublime-workspace
+/foobar_server/dict_checker
+/foobar_server/dict_checker.out
+/foobar_server/indexer
+/foobar_server/indexer.out

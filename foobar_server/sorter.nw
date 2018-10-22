@@ -26,23 +26,11 @@
 
 This program sorts split dictionnary files, which are sequences of contiguous [[struct dict_t]] records.
 
-<<Type definitions>>=
-struct preimage_t {
-	int64_t counter;
-	uint32_t nonce;
-} __attribute__((packed));
-
-struct dict_t {
-	uint64_t hash;
-	struct preimage_t preimage;
-} __attribute__((packed));
-
 
 @ This program reads a dictionnary file, sorts it by hash, and rewrites it.
 
 <<*>>=
 <<Header files to include>>
-<<Type definitions>>
 <<Auxiliary functions>>
 <<The main program>>
 
@@ -58,7 +46,7 @@ struct dict_t {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include "hasher.h"
 
 <<The main program>>=
 int main(int argc, char **argv)

@@ -1,0 +1,119 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Hasher}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This file describes a shared function that computes the hash associated to a
+given preimage. This code is embedded into the (modified) code that runs on
+the miner. We use \textsf{OpenSSL}'s implementation of \textsf{SHA256}.
+
+<<*>>=
+#include <inttypes.h>
+#include <string.h>
+#include "sha256.h"
+#include "hasher.h"
+
+<<Public functions>>
+
+
+@ Given a [[struct preimage_t]], we compute either the full hash, or just a
+64-bit substring, known to be uniformly distributed. For the full hash, the
+function gets a pointer to an array of $8 \times [[uint32_t]]$.
+
+<<Public functions>>=
+bool compute_full_hash(int kind, struct preimage_t *preimage, uint32_t *hash)
+{
+	char buffer[80];
+	<<Assemble plaintext block>>
+	<<Compute full hash of plaintext block>>
+	<<Return [[true]] if hash is valid>>
+}
+
+uint64_t extract_partial_hash(uint32_t *hash)
+{
+	<<Return partial hash>>
+}
+
+@ To hash a preimage, we must first build the 80-byte ``plaintext block'', i.e. the input of the hash function.
+
+<<Assemble plaintext block>>=
+static const char *TEMPLATE[3] = {
+	             "FOO-0x0000000000000000                                                          ",
+		     "BAR-0x0000000000000000                                                          ",
+		     "FOOBAR-0x0000000000000000                                                       "
+		};
+static const char NIBBLE[16] = {48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 65, 66, 67, 68, 69, 70};
+<<Start from the template given by [[kind]]>>
+<<Write down [[counter]] as ASCII hexadecimal>>
+<<Write the (byteswapped) [[nonce]] at the end>>
+
+
+@ Let's do this.
+
+
+uint32_t nonce = preimages->nonce;
+
+<<Start from the template given by [[kind]]>>=
+memcpy(buffer, TEMPLATE[kind], 80);
+	
+<<Write down [[counter]] as ASCII hexadecimal>>=
+int64_t counter = preimage->counter;
+int j = (kind == 2) ? 25 : 22;
+while (counter > 0) {
+	int nibble = counter & 0x000f;
+	counter >>= 4;
+	buffer[j] = NIBBLE[nibble];
+	j--;
+}
+
+<<Write the (byteswapped) [[nonce]] at the end>>=
+uint32_t *block = (uint32_t *) buffer;
+block[19] = __builtin_bswap32(preimage->nonce);
+
+@ At this stage, the plaintext block is ready. We apply the \textsf{SHA256}
+hash function \emph{twice}, and that's it.
+
+<<Compute full hash of plaintext block>>=
+unsigned char md[32];
+SHA256((unsigned char *) block, 80, md);
+SHA256((unsigned char *) md, 32, (unsigned char *) hash);
+
+
+@ A priori, the nonces are valid at difficulty 33. This means that the top 33
+bits of the hash must be zero. 
+
+<<Return [[true]] if hash is valid>>=
+return (hash[7] == 0x00000000) && ((hash[6] & 0x80000000) == 0x0000000000);
+
+
+@ We extract 64 bits of the hash from [[hash[5]]] and [[hash[6]]], excluding
+the most-significant bit of [[hash[6]]] which is always zero. We replace it
+with the most-significant bit of [[hash[4]]].
+
+<<Return partial hash>>=
+return (((uint64_t) hash[5]) << 32) ^ hash[6] ^ (hash[4] & 0x80000000);
+
+@
+
+\end{document}

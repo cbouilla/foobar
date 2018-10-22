@@ -1,3 +1,5 @@
+#include <stddef.h>
+
 # define SHA_LONG unsigned int
 # define SHA_LBLOCK      16
 # define SHA256_CBLOCK   (SHA_LBLOCK*4)/* SHA-256 treats input data as a

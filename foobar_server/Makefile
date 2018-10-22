@@ -4,7 +4,7 @@ CFLAGS = -std=c99 -g -Wall -Wextra -O3
 
 all: programs doc
 
-programs: server sample_client splitter sorter merger hash_checker
+programs: server sample_client splitter dict_checker sorter merger hash_checker indexer
 doc: server.pdf sample_client.pdf splitter.pdf sorter.pdf
 
 server.o:        server.c
@@ -15,16 +15,21 @@ sample_client.o: sample_client.c
 sample_client:   LDLIBS += -lnanomsg
 sample_client:   sample_client.o
 
-splitter.o: splitter.c sha256.h
+splitter.o: splitter.c sha256.h hasher.h
 splitter.o: CC = mpicc
-splitter: sha256.o splitter.o
+splitter: sha256.o hasher.o splitter.o
 splitter: CC = mpicc
+
+sorter.o: hasher.h sorter.c
+
+dict_checker.o: dict_checker.c hasher.h
+dict_checker: sha256.o hasher.o dict_checker.o
 
 sha256.o: sha256.c sha256.h
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@
