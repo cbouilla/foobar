@@ -129,7 +129,7 @@ We maintain a binary tree with $P$ internal nodes and $P$ leaves. The $i$-th
 leave is associated with the $i$-th input file. Each internal node contains
 two fields: the [[struct dict_t]] of the loser of the match between its two
 children and the ``input file index'' of this value. Nodes are numbered from
-$1$ to $P$, so that the parent of [[i]] is [[i / 2]]. The zero_th node is
+$1$ to $P$, so that the parent of [[i]] is [[i / 2]]. The zero-th node is
 implicitly represented by [[Q]]; it contains the winner of the tournament (the
 smallest hash).
 
