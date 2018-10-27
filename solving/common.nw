@@ -1,0 +1,146 @@
+\documentclass{article}
+
+\usepackage[a4paper]{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing}
+
+
+\begin{document}
+
+\title{Solving Instances of the \textsf{3XOR} Problem}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+\section{Introduction}
+
+Given tree lists $A, B$ and $C$ (whose size are also denoted by $A, B$ and $C$), 
+we wish to find all the triples $(i,j,k)$ such that $A[i] \oplus B[j] \oplus C[k] = 0$. 
+It is assumed that the lists are sorted. The elements of the lists are bitstrings. 
+More precisely, the \emph{actual} problem solved by our codes finds pairs $(x, y)$
+such that $x \in A, y \in B$ and $x \oplus y \in C$.
+
+Given an integer $k$, we denote by $L^{[i]}$ the subset of $L$ formed by all
+the elements of $L$ whose $k$-bit prefix is $i$. Because $L$ is sorted, it is in
+fact a slice $L[P[i]:P[i+1]]$, for some index array $P$.
+
+It is easily seen that for all 3XOR pair $(x, y)$, there exists
+$i, j \in \{0, 1\}^k$ such that $x \in A^{[i]}, y \in B^{[j]}$ and 
+$x \oplus y \in C{[i \oplus j]}$. It follows that
+\[
+  \textsf{3XOR}(A, B, C) = \bigcup_{0 \leq i,j < 2^k} \textsf{3XOR}(A^{[i]}, B^{[j]}, C^{[i \oplus j]})
+\]
+
+For a given instance $(A, B, C)$ of the problem, we may split it into a 2D array of size $2^k \times 2^k$, where the 
+sub-instance of coordinates $(i, j)$ is $(A^{[i]}, B^{[j]}, C^{[i \oplus j]})$.
+
+
+The computation is in reality organised along a three-level partition of the original instance.
+
+\begin{description}
+\item[Tasks] The original instance is split into a 2D array of 
+\textbf{tasks} of size $2^k \times 2^k$. Tasks are distributed amongst machines. 
+A task thus only deals with \emph{slices} of the three input lists.
+The value of $k$ is chosen to adjust the granularity of the parallel computation, 
+and to limit to memory consumption on worker machines (the slices have to be 
+loaded in RAM). Tasks should ideally be processed in a moderate amount of time, 
+say, several minutes. 
+
+\item[Blocks] On a single machine, tasks are split into a 2D array of size 
+$2^\ell \times 2^\ell$. A \textbf{block} is a \emph{row} on this grid. 
+Inside a given task, a block thus corresponds to a \emph{sub-slice} of $A$ 
+(and complete slices of $B, C$). Blocks should be sufficiently small so that
+this sub-slice fits in the fastest cache available on computing units.
+
+\item[Chunks] Blocks are split in \textbf{chunks} (column-wise). 
+A chunk thus deals with sub-slices of all three lists. The intention that a chunk
+is processed by a single hardware thread. All the chunks of a given block 
+should be processed at the same time, either sequentially or concurrently, 
+and as they may benefit from the use of shared memory (as opposed to tasks and blocks).
+\end{description}
+
+\begin{center}
+  \begin{tikzpicture}[scale=0.9]
+    \draw[<->] (-1, 0) -- node[above,sloped] {List $A$} +(0, 8);
+    \draw[<->] (0, -1) -- node[below] {List $B$} +(8, 0);
+
+    \node[anchor=south] at (4, 8) {Full instance};
+    \draw[step=4cm, dashed] (0, 0) grid (8, 8);
+    \draw[ultra thick] (0, 0) rectangle (8, 8);
+    
+    \node[anchor=south] at (6, 4) {Task $(1, 1)$};
+    \draw[step=1cm, dashed] (4, 0) grid +(4, 4);
+    \draw[very thick] (4, 0) rectangle +(4, 4);
+    
+    \draw[thick] (4, 1) rectangle +(4, 1);
+    \draw[step=1cm, thick] (4, 1) grid +(4, 1);
+
+    \draw[xshift=-1mm, decoration=brace, decorate] (4, 1) -- node[left] {Block 2} +(0, 1);
+
+    \path (7, 1) rectangle node[rotate=45,font=\scriptsize] {Chunk 3} +(1, 1);
+    
+  \end{tikzpicture}
+\end{center}
+
+Splitting the computation in tasks enables the use of several machines. 
+Splitting a task in blocks enable the use of several computing units on the same 
+machine. Splitting a block in chunks enable the use of several threads per 
+computing unit.
+
+\section{Work Distribution}
+
+A \textbf{task description} is thus a quadruplet $(k, i, j, i \oplus j)$ with $0 \leq i,j < 2^k$. 
+A \textbf{task result} is the list of all pairs $(x, y)$ such that $x \in A^{[i]}, y \in B^{[j]}$ and  $x \oplus y \in C{[i \oplus j]}$.
+
+The \textbf{task server} sends task descriptions to the \textbf{workers}, 
+and gets task results in return. The server is always on, but the workers may come and go. 
+The workers may use any algorithm.
+
+\section{Processing Tasks}
+
+A task-processing function takes a task description and find all the solution pairs. A 
+[[struct task_t]] contains the prefix length $k$ and a three-dimensional index,
+with the constraint that [[idx[0] ^ idx[1] ^ idx[1] == 0]]). In fact, only the first two 
+components are mandatory, but it is slighlty easier this way.
+
+<<*>>=
+#include <inttypes.h>
+<<Type definitions>>
+
+<<Type definitions>>=
+struct task_t {
+	int k;
+	int idx[3];
+};
+
+struct solution_t {
+	uint64_t x, y;
+};
+
+@ In addition, these functions must have access to the lists. This is achieved thanks to a ``context'' object.
+
+<<Type definitions>>=
+struct context_t {
+	int l;                         // log2 blocks grid dimension
+	int depth;                     // index depth
+	uint32_t * indexes[3];
+	FILE * files[3];               // handles to read the hashes
+};
+
+@ Results are returned in a dynamic array.
+
+<<Type definitions>>=
+struct task_result_t {
+	int size;
+	int capacity;
+	struct solution_t *solutions;
+};
+
+
+@ \end{document}

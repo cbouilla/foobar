@@ -80,7 +80,8 @@ if (ferror(f))
 <<Check that [[buffer]] is in-order and duplicate-free>>=
 for (size_t i = 0; i < size; i++) {
 	if (prev >= buffer[i])
-		errx(1, "F[%zd] (%016" PRIx64 ") >= F[%zd] (%016" PRIx64 ")", processed + (i-1), prev, processed + i, buffer[i]);
+		errx(1, "F[%zd] (%016" PRIx64 ") >= F[%zd] (%016" PRIx64 ")", 
+		          processed + (i-1), prev, processed + i, buffer[i]);
 	prev = buffer[i];
 }
 

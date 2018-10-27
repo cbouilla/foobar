@@ -18,7 +18,7 @@ split_bits = 2
 # number of most-significant bits of the hashes used to build the indexes.
 # relevant only for the quadratic algorithm.
 # Most be chosen such that |C| / (1 << index_bits) yields a slice that fits in L1.
-index_bits = 13
+index_bits = 14
 
 # number of CPU cores of this machine.
 cores = 4
@@ -129,7 +129,7 @@ def sorting():
     for kind, kind_id in KINDS.items():
         for file in glob.glob('{}/{}.*'.format(DICT_DIR, kind)):
             jobs.append((kind_id, file))
-    with multiprocessing.Pool(processes=cores) as pool:
+    with multiprocessing.Pool(processes=1) as pool:
         pool.map(_do_sort, jobs, chunksize=1)
 
 def _do_check_dict(job):
@@ -147,7 +147,7 @@ def check_dict():
     for kind, kind_id in KINDS.items():
         for file in glob.glob('{}/{}.*'.format(DICT_DIR, kind)):
             jobs.append((kind_id, file))
-    with multiprocessing.Pool(processes=cores) as pool:
+    with multiprocessing.Pool(processes=1) as pool:
         pool.map(_do_check_dict, jobs, chunksize=1)
 
 

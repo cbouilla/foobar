@@ -1,0 +1,141 @@
+\documentclass{article}
+
+\usepackage[a4paper,vmargin=1in]{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing}
+
+
+
+
+\begin{document}
+
+\title{Solving Instances of the \textsf{3XOR} Problem: \\ a Standalone Driver for the Quadratic Algorithm}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+\section{Introduction}
+
+This file describes a standalone program that solves whole instances using the quadratic algorithm on a single core.
+
+<<*>>=
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <err.h>
+#include <getopt.h>
+#include <string.h>
+#include "common.h"
+
+extern struct task_result_t * quadratic_task(struct context_t *ctx, struct task_t *task);
+
+<<The main function>>
+
+@
+
+<<The main function>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Prepare the context>>
+	<<Process all the tasks>>
+}
+
+
+<<Process the command line>>=
+struct option longopts[4] = {
+	{"task-size", required_argument, NULL, 'k'},
+	{"grid-size", required_argument, NULL, 'l'},
+	{"index-depth", required_argument, NULL, 'd'},
+	{NULL, 0, NULL, 0}
+};
+int k = -1;
+int l = -1;
+int depth = -1;
+char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+    	switch (ch) {
+	case 'd':
+		depth = atoi(optarg);
+		break;
+	case 'k':
+		k = atoi(optarg);
+		break;
+	case 'l':
+		l = atoi(optarg);
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+  }
+if (depth < 0)
+	errx(1, "missing option --index-depth");
+if (k < 0)
+	errx(1, "missing option --task-size");
+if (l < 0)
+	errx(1, "missing option --grid-size");
+if (argc - optind != 3)
+	errx(1, "missing (or extra) hash filenames");
+if (k + l > depth)
+	errx(1, "k + l must be <= depth");
+
+
+<<Prepare the context>>=
+struct context_t ctx;
+ctx.l = l;
+ctx.depth = depth;
+char **hash_filename = argv + optind;
+for (int kind = 0; kind < 3; kind++) {
+	<<Open hash file>>
+	<<Load index file>>
+}
+
+<<Open hash file>>=
+ctx.files[kind] = fopen(hash_filename[kind], "r");
+if (ctx.files[kind] == NULL)
+	err(1, "cannot open %s for reading", hash_filename[kind]);
+
+<<Load index file>>=
+char index_filename[strlen(hash_filename[kind]) + 7];
+sprintf(index_filename, "%s.index", hash_filename[kind]);
+FILE *f = fopen(index_filename, "r");
+if (f == NULL)
+	err(1, "Cannot open %s for reading", index_filename);
+ctx.indexes[kind] = malloc((1 << depth) * sizeof(uint32_t));
+if (ctx.indexes[kind] == NULL)
+	err(1, "cannot allocate index");
+size_t size = 1 + (1 << depth);
+size_t check = fread(ctx.indexes[kind], sizeof(uint32_t), size, f);
+if (check != size)
+	errx(1, "incomplete index read (%zd vs %d)", check, size);
+fclose(f);
+fprintf(stderr, "index[%d] claims list size is %d\n", kind, ctx.indexes[kind][size - 1]);
+
+
+
+<<Process all the tasks>>=
+int problem_size = 1 << k;
+for (int i = 0; i < problem_size; i++)
+	for (int j = 0; j < problem_size; j++) {
+		struct task_t task;
+		task.k = k;
+		task.idx[0] = i;
+		task.idx[1] = j;
+		task.idx[2] = i ^ j;
+		printf("task (%d, %d) : \n", i, j);
+		fflush(stdout);
+		struct task_result_t *solutions = quadratic_task(&ctx, &task);
+		printf("%d solutions\n", solutions->size);
+		free(solutions->solutions);
+		free(solutions);
+	}
+
+@ 
+\end{document}

@@ -1,0 +1,145 @@
+\documentclass{article}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{tikz}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\title{Tools for the \texttt{FOOBAR}-modified Miner: Forging solutions}
+\author{Charles Bouillaguet}
+
+\maketitle
+
+This program forges three \textbf{hash file} with known solutions. 
+This is helpful to ensure that the solving code is correct.
+
+
+<<*>>=
+<<Header files to include>>
+<<Auxiliary functions>>
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<Header files to include>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <err.h>
+#include "hasher.h"
+
+	
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Generate random lists>>
+	<<Sort $A$ and $B$>>
+	<<``Fix'' solutions and display them>>
+	<<Sort $C$>>
+	<<Write hash files>>
+	exit(EXIT_SUCCESS);
+}
+
+@ The average size of lists to generate is given on the command-line.
+
+<<Process the command line>>=
+if (argc < 2)
+	errx(1, "missing argument N");
+uint32_t avg_size = atoi(argv[1]);
+
+@ To generate random lists, we use SHA256 in counter mode. The sizes of the list may fluctuate.
+
+<<Generate random lists>>=
+uint32_t N[3];
+uint64_t *H[3];
+srand48(42);
+for (int k = 0; k < 3; k++) {
+	N[k] = avg_size / 2 + (((uint32_t) mrand48()) % avg_size);
+	printf("H[%d] has size %d\n", k, N[k]);
+	H[k] = malloc(N[k] * sizeof(uint64_t));
+	if (H[k] == NULL)
+		err(1, "cannot allocate hashes");
+	struct preimage_t pre;
+	pre.nonce = 0;
+	pre.counter = 0;
+	int ptr = 4;
+	uint32_t hash[8];
+	uint64_t *randomness = (uint64_t *) hash;
+	for (int n = 0; n < N[k]; n++) {
+		if (ptr == 4) {
+			compute_full_hash(k, &pre, hash);
+			pre.counter++;
+			ptr = 0;
+		}
+		H[k][n] = randomness[ptr++];
+	}
+}
+
+@ To sort the lists, we again use [[qsort]] with a comparator.
+
+<<Auxiliary functions>>=
+int cmp(const void *a_, const void *b_)
+{
+	const uint64_t *const a = (uint64_t *) a_;
+	const uint64_t *const b = (uint64_t *) b_;
+	return (*a > *b) - (*a < *b);
+}
+
+<<Sort $A$ and $B$>>=
+qsort(H[1], N[1], sizeof(uint64_t), cmp);
+qsort(H[2], N[2], sizeof(uint64_t), cmp);
+
+<<Sort $C$>>=
+qsort(H[0], N[0], sizeof(uint64_t), cmp);
+
+@ To ensure that there are solutions we know, we force solutions at the very 
+begining and at the very end of $A$ and $B$. We also impose a random solution.
+
+<<``Fix'' solutions and display them>>=
+H[0][0] = H[1][0] ^ H[2][0];
+H[0][N[0] - 1] = H[1][N[1] - 1] ^ H[2][N[2] - 1];
+uint32_t a = ((uint32_t) mrand48()) % N[0];
+uint32_t b = ((uint32_t) mrand48()) % N[1];
+uint32_t c = ((uint32_t) mrand48()) % N[2];
+H[0][c] = H[1][a] ^ H[2][b];
+printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
+	H[0][0], H[1][0], H[2][0]);
+printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
+	H[0][N[0] - 1], H[1][N[1] - 1], H[2][N[2] - 1]);
+printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
+	H[0][a], H[1][b], H[2][c]);
+
+
+@ finally, we write down the hashes in fixed files.
+
+<<Write hash files>>=
+char *names[3] = {"badfoo.hash", "badbar.hash", "badfoobar.hash"};
+for (int k = 0; k < 3; k++) {
+	FILE *f = fopen(names[k], "w");
+	if (f == NULL)
+		err(1, "cannot open %s for writing", names[k]);
+	size_t check = fwrite(H[k], sizeof(uint64_t), N[k], f);
+	if (check != N[k])
+		errx(1, "incomplete write");
+	fclose(f);
+}
+
+@
+
+\end{document}

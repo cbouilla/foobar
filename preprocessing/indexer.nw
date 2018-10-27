@@ -135,9 +135,9 @@ for (uint64_t prefix = 0; prefix < (1 << k); prefix++) {
 		<<Get next hash value [[h]]; Set [[EOF_flag]] when no more data can be read>>
 		hashes_read++;
 	}
-	// printf("detecting change ! after reading %d hashes, I now find h_prefix=%08" PRIx32 "\n", hashes_read, h_prefix);
 	I[prefix + 1] = hashes_read - 1;
 }
+I[1 << k] = hashes_read;
 
 @ The only other detail is reading from the input file. We use a [[buffer]]
 for this purpose. Let [[size]] denotes its size, and [[ptr]] denote the index

@@ -3,15 +3,24 @@ LDLIBS = -lnanomsg
 
 all: programs doc
 
-programs: task_server sample_task_client
-doc: server.pdf sample_client.pdf
+programs: quad_standalone
+doc: common.pdf quadratic.pdf quad_standalone.pdf
+
+quadratic.o: quadratic.c common.h
+quad_standalone.o: quad_standalone.c common.h
+quad_standalone: quad_standalone.o quadratic.o
+
+
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
 	notangle -filter disambiguate -L $^ > $@
 
+%.h : %.nw
+	notangle -L $^ > $@
+
 %.tex : %.nw
-	noweave -x -filter disambiguate -delay $^ > $@
+	noweave -x -delay $^ > $@
 
 ### PDFLATEX IMPLICIT RULES
 
@@ -22,5 +31,5 @@ doc: server.pdf sample_client.pdf
 	pdflatex $<
 
 clean:
-	rm -rf *.o *.c *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx
+	rm -rf *.o *.c *.h *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx
 	rm -rf task_server sample_task_client
