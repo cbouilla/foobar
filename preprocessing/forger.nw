@@ -52,6 +52,7 @@ int main(int argc, char **argv)
 	<<Sort $A$ and $B$>>
 	<<``Fix'' solutions and display them>>
 	<<Sort $C$>>
+	<<Display collision indexes>>
 	<<Write hash files>>
 	exit(EXIT_SUCCESS);
 }
@@ -81,7 +82,7 @@ for (int k = 0; k < 3; k++) {
 	int ptr = 4;
 	uint32_t hash[8];
 	uint64_t *randomness = (uint64_t *) hash;
-	for (int n = 0; n < N[k]; n++) {
+	for (uint32_t n = 0; n < N[k]; n++) {
 		if (ptr == 4) {
 			compute_full_hash(k, &pre, hash);
 			pre.counter++;
@@ -112,18 +113,33 @@ qsort(H[0], N[0], sizeof(uint64_t), cmp);
 begining and at the very end of $A$ and $B$. We also impose a random solution.
 
 <<``Fix'' solutions and display them>>=
-H[0][0] = H[1][0] ^ H[2][0];
-H[0][N[0] - 1] = H[1][N[1] - 1] ^ H[2][N[2] - 1];
 uint32_t a = ((uint32_t) mrand48()) % N[0];
 uint32_t b = ((uint32_t) mrand48()) % N[1];
-uint32_t c = ((uint32_t) mrand48()) % N[2];
-H[0][c] = H[1][a] ^ H[2][b];
+H[0][0] = H[1][0] ^ H[2][0];
+H[0][1] = H[1][N[1] - 1] ^ H[2][N[2] - 1];
+H[0][2] = H[1][a] ^ H[2][b];
+uint64_t x[3] = { H[0][0], H[0][1], H[0][2] };
 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
-	H[0][0], H[1][0], H[2][0]);
+	x[0], H[1][0], H[2][0]);
 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
-	H[0][N[0] - 1], H[1][N[1] - 1], H[2][N[2] - 1]);
+	x[1], H[1][N[1] - 1], H[2][N[2] - 1]);
 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " = 0\n", 
-	H[0][a], H[1][b], H[2][c]);
+	x[2], H[1][a], H[2][b]);
+
+@ After $C$ has been sorted, we must scan it to find the values of $x[i]$.
+
+<<Display collision indexes>>=
+uint32_t y[3];
+for (int k = 0; k < 3; k++) {
+	uint32_t d;
+	for (d = 0; d < N[0]; d++)
+		if (H[0][d] == x[k])
+			break;
+	y[k] = d;
+}
+printf("H[0][%08x] ^ H[1][%08x] ^ H[2][%08x] = 0\n", y[0], 0, 0);
+printf("H[0][%08x] ^ H[1][%08x] ^ H[2][%08x] = 0\n", y[1], N[1] - 1, N[2] - 1);
+printf("H[0][%08x] ^ H[1][%08x] ^ H[2][%08x] = 0\n", y[2], a, b);
 
 
 @ finally, we write down the hashes in fixed files.

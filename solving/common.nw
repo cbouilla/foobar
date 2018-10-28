@@ -109,9 +109,12 @@ A task-processing function takes a task description and find all the solution pa
 with the constraint that [[idx[0] ^ idx[1] ^ idx[1] == 0]]). In fact, only the first two 
 components are mandatory, but it is slighlty easier this way.
 
-<<*>>=
+<<common.h>>=
 #include <inttypes.h>
+#include <stdio.h>
+
 <<Type definitions>>
+<<Functions declarations>>
 
 <<Type definitions>>=
 struct task_t {
@@ -142,5 +145,31 @@ struct task_result_t {
 	struct solution_t *solutions;
 };
 
+@ \section{Utilities}
+
+Some very common function, such as timing, are also here.
+
+<<Functions declarations>>=
+double wtime();
+uint64_t ticks();
+
+
+<<common.c>>=
+#include <sys/time.h>
+#include "common.h"
+
+double wtime()
+{
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+	return (double)ts.tv_sec + ts.tv_usec / 1E6;
+}
+
+uint64_t ticks()
+{
+	uint64_t low, high;
+	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
+	return (high << 32) | low;
+}
 
 @ \end{document}
