@@ -23,7 +23,7 @@ sha256.o: sha256.c sha256.h
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@

@@ -48,6 +48,8 @@ Several options are possible :
 
 @ \section{Linear Hashing}
 
+TODO. Consider doing it ``à la Knuth'', i.e. get rid of the power-of-two thing.
+
 This section describes a hash table using linear probing (cf. Knuth). 
 The size of the table is a power of two. We assume that 0 does not belong to the hash 
 table, because 0 denotes empty cells. This is enforced during hash table build.

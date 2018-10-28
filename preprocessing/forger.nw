@@ -113,8 +113,8 @@ qsort(H[0], N[0], sizeof(uint64_t), cmp);
 begining and at the very end of $A$ and $B$. We also impose a random solution.
 
 <<``Fix'' solutions and display them>>=
-uint32_t a = ((uint32_t) mrand48()) % N[0];
-uint32_t b = ((uint32_t) mrand48()) % N[1];
+uint32_t a = ((uint32_t) mrand48()) % N[1];
+uint32_t b = ((uint32_t) mrand48()) % N[2];
 H[0][0] = H[1][0] ^ H[2][0];
 H[0][1] = H[1][N[1] - 1] ^ H[2][N[2] - 1];
 H[0][2] = H[1][a] ^ H[2][b];

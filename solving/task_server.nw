@@ -5,12 +5,12 @@
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{parskip}
 \usepackage{xspace}
+\usepackage{hyperref}
 
-\newcommand{\CEE}{\texttt{C}\xspace}
 \usepackage{tikz}
 \usetikzlibrary{arrows,automata}
 
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\nanomsg}{\textsf{nanomsg}\xspace}
 
 \begin{document}
 
@@ -39,7 +39,7 @@ reusable in a variety of contexts.
 
 The server is (almost) stateless. It can be restarted at any time without
 problem. It could have used the \textsf{HTTP} protocol, but instead it uses the
-\ZMQ library to handle networking, in part because \ZMQ handles failures more
+\nanomsg library to handle networking, in part because \nanomsg handles failures more
 gracefully (and does a fraction of the job for us).
 
 The global structure of the server program is classical.
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 \texttt{server.h} file contains type declaration shared between the server and
 other programs.
 
-<<Header...>>=
+<<Header files to include>>=
 #include <stdlib.h>
 #include <stdio.h>
 #include <err.h>
@@ -86,14 +86,13 @@ options. The server takes four parameters:
 \begin{itemize}
 \item The number of tasks $N$ (mandatory).
 \item The network address at which to listen (optional).
-\item The name of the ``journal file'' to which task results are written
-  (optional).
-\item The duration after which tasks are in timeout and must be restarted.
+\item The name of the ``journal file'' to which task results are written (optional).
+\item The duration after which tasks are in timeout and must be restarted (optional).
 \end{itemize}
 
-We use the standard POSIX |getopt()| function to deal with command-line options.
+We use the standard POSIX [[getopt]] functions to deal with command-line options.
 
-<<Global...>>=
+<<Global variables>>=
 struct option longopts[5] = {
 		{"N", required_argument, NULL, 'N'},
 		{"journal-file", required_argument, NULL, 'j'},
@@ -115,7 +114,7 @@ static const char * DEFAULT_FILENAME = "journal.log";
 static const char * DEFAULT_ADDRESS = "tcp://*:5555";
 static const int DEFAULT_TIMEOUT = 3600;
 
-<<Set sensible...>>=
+<<Set sensible default settings>>=
 server_address = strdup(DEFAULT_ADDRESS);
 journal_filename = strdup(DEFAULT_FILENAME);
 task_timeout = DEFAULT_TIMEOUT;
@@ -181,118 +180,123 @@ execution, being run, or completed.
 \end{center}
 
 
-The tasks are arranged in three lists (one
-by task state) ; they move between lists at they are executed, completed
-or when they expire. We thus use doubly-linked lists.
+The tasks are arranged in three lists (one by task state) ; 
+they move between lists at they are executed, completed
+or when they expire. We thus use doubly-linked lists, with a special
+``head'' node with an invalid task id. As such, lists are never empty. 
 
-<<Type...>>=
+<<Type definitions>>=
 enum state_t { PENDING, RUNNING, DONE };
 struct task_t {
-	int id;                /* this is task number |id| */
-	enum state_t state;
-	double since;          /* time of last state change */
+	int id;                        /* this is task number id */
+	enum state_t state;            /* current state */
+	double since;                  /* time of last state change */
 	struct task_t *prev, *next;
 };
  
 
 @ The task lists are ordered: tasks are always added at the end of the
-list. They can be removed arbitrarily, and access to the first task of the list
-must be efficient. We thus keep pointers to the |first| and |last| item of each
-list. 
+list. They can be removed arbitrarily. Access to the first/last task 
+of the list is easy thanks to the head node.
 
-<<Global...>>=
+<<Global variables>>=
 int N;                   /* total number of tasks */
 struct task_t *tasks;    /* all tasks */
 int n_tasks[3];          /* number of tasks in each state */
-struct task_t *first[3]; /* first item of each list */
-struct task_t *last[3];  /* last item of each list */
+struct task_t head[3];   /* head node of each list */
+
+<<Functions>>=
+void task_insert(struct task_t *t, enum state_t list)
+{
+	t->prev = head[list].prev;
+	t->next = &head[list];
+	t->prev->next = t;
+	t->next->prev = t;
+}
+
+void task_delete(struct task_t *t)
+{
+	t->prev->next = t->next;
+	t->next->prev = t->prev;
+}
 
 
 @ When the server starts, $N$ tasks are created, and they are all pending
 execution. The [[tasks]] array holding all the tasks is dynamically allocated (it
 allows direct access to the tasks by index), and the chained links are
-setup. Note that the global variables [[n_tasks]], [[first]] and [[last]] are
-initialized to zero, as per the \CEE language specification.
+set up. Note that the global variables [[n_tasks]] and [[head]] are
+initialized to zero, as per the C language specification.
 
 <<Initialize $N$ [[PENDING]] tasks>>=
-tasks = malloc(N * sizeof(struct task_t));
+<<Initialize the head nodes>>
+tasks = malloc(N * sizeof(*tasks));
 if (tasks == NULL)
 	err(1, "failed to allocate all tasks");
 for (int i = 0; i < N; i++) {
 	tasks[i].id = i;
 	tasks[i].state = PENDING;
 }
-tasks[0].prev = NULL;
-for (int i = 1; i < N; i++)
-	tasks[i].prev = &tasks[i - 1];
-for (int i = 0; i < N - 1; i++)
-	tasks[i].next = &tasks[i + 1];
-tasks[N-1].next = NULL;
-first[PENDING] = &tasks[0];
-last[PENDING] = &tasks[N - 1];
+for (int i = 0; i < N; i++)
+	task_insert(&tasks[i], PENDING);
 n_tasks[PENDING] = N;
 
+@ On startup, the linked lists are empty, so the head nodes 
+(with invalid task id) points to themselves. Only once the head nodes 
+are ready can the insertion/deletion functions be invoked. 
 
-@ When tasks change state, the links must be adjusted. This is classical
-doubly-linked lists manipulation.
-
-<<Functions>>=
-void set_task_state(int i, enum state_t new_state)
-{
-	struct task_t *t = &tasks[i];
-	t->since = wtime();
-	<<Remove [[t]] from its current list>>
-	<<Append [[t]] at the right end of the target list>>
+<<Initialize the head nodes>>=
+for (int class = 0; class < 3; class++) {
+	head[class].id = -1;
+	head[class].next = &head[class];
+	head[class].prev = &head[class];
 }
 
-<<Remove [[t]]...>>=
-if (t->prev != NULL) 
-	t->prev->next = t->next;
-else 
-	first[t->state] = t->next;
+@ In addition to the above low-level functions, a few more administrative 
+records have to be changed when a task changes state.
 
-if (t->next != NULL)
-	t->next->prev = t->prev;
-else 
-	last[t->state] = t->prev;
-n_tasks[t->state]--;
-
-<<Append [[t]]...>>=
-t->state = new_state;
-t->prev = last[new_state];
-if (t->prev != NULL)
-	t->prev->next = t;
-else 
-	first[new_state] = t;
-last[new_state] = t;
-t->next = NULL;
-n_tasks[new_state]++;
+<<Functions>>=
+void task_set_state(int i, enum state_t new_state)
+{
+	struct task_t *t = &tasks[i];
+	n_tasks[t->state]--;
+	task_delete(t);
+	t->state = new_state;
+	t->since = wtime();
+	n_tasks[new_state]++;
+	task_insert(t, new_state);
+}
 
   
 @ If a client is interrupted, the result of the task it was processing will
 never be returned, and the task must be restarted at a later time. The server
 detects this using a timeout mecanism. Tasks that have been attributed to a
-client appear in the list of |RUNNING| tasks in increasing order of start
+client appear in the list of [[RUNNING]] tasks in increasing order of start
 date. Checking for expired tasks amounts to check the first entries of this list.
+This functions demonstrates the iteration over a circular doubly-linked list 
+with special head node.
 
-<<Check for expired tasks...>>=
-double threshold = wtime() - task_timeout;
-while (first[RUNNING] != NULL && first[RUNNING]->since < threshold) {
-	printf("Task %d timeout after %.0fs\n", first[RUNNING]->id, 
-			wtime() - first[RUNNING]->since);
-	set_task_state(first[RUNNING]->id, PENDING); /* too old */
+<<Functions>>=
+void task_refresh()
+{
+	double threshold = wtime() - task_timeout;
+	for (struct task_t *t = head[RUNNING].next; t->id != -1; t = t->next) {
+		if (t->since > threshold)
+			break;
+		printf("Task %d timeout after %.0fs\n", t->id, wtime() - t->since);
+		task_set_state(t->id, PENDING);
+	}
 }
-
 
 
 @ \section{Networking} 
 
-To ease dealing with network sockets, we use the \ZMQ middleware
-library~\cite{zeromq}. It transfers messages asynchronously between hosts, and
+To ease dealing with network sockets, we use the \nanomsg middleware
+library. It transfers messages asynchronously between hosts, and
 does not interpret them.
 
-<<Header...>>=
-#include <zmq.h>
+<<Header files to include>>=
+#include <nanomsg/nn.h>
+#include <nanomsg/reqrep.h>
 
 @ Our server waits for requests from the clients and... serves them. Clients can
 send two types of messages:
@@ -307,7 +311,7 @@ also responds with a new [[task_msg_t]].
 
 This construction ensures that all messages received by the server begin with
 a [[task_msg_t]] (only [[task_id]], [[hostname_length]] and [[hostname]] are
-there in the ``hello'' message).
+meaningful in the ``hello'' message).
 
 Both types are shared between the server and the client (note that the client
 should only read [[id]] in it in the [[task_msg_t]]). The client should not
@@ -315,6 +319,9 @@ attempt to access [[start_time]] or [[completion_time]].
 
 This has the drawback that two [[double]]s and the hostname are transmitted
 several times for nothing, but it keeps the whole system quite simple.
+
+If the server has no more tasks to dispatch, it sends a task id of $-1$, 
+upon which clients exit.
 
 <<server.h>>=
 struct task_msg_t {
@@ -330,75 +337,67 @@ struct result_t {
 	char payload[];
 };
 
-@ To communicate using \ZMQ, we need to setup a [[context]], and then
-a[[socket]] can be created and bound to a network address. The user may choose
-which IP adress and/or which network interface can be bound to the socket
-using a command-line argument. We also need to allocate some memory to hold
-received messages.
+@ To communicate using \nanomsg, we need to setup a [[socket]], which is then 
+bound or connected to a network address. The user may choose which IP adress 
+and/or which network interface can be bound to the socket using a command-line
+argument. We also need to allocate some memory to hold received messages.
 
 <<Initialize networking>>=
-void *context = zmq_ctx_new();
-void *socket = zmq_socket(context, ZMQ_REP);
-if (zmq_bind(socket, server_address) != 0)
-	errx(1, "zmq_bind : %s\n", zmq_strerror(errno));	
+int socket = nn_socket(AF_SP, NN_REP);
+if (socket < 0)
+	errx(1, "nn_socket : %s\n", nn_strerror(nn_errno()));
+if (nn_bind(socket, server_address) < 0)
+	errx(1, "nn_bind : %s\n", nn_strerror(nn_errno()));
 
 
 @ The main loop run indefinitely. The server must be manually stopped.
 
 <<Main server loop>>=
-printf("Server ready\n");
+printf("Server ready on %s\n", server_address);
 while (1) {
-	struct task_msg_t *msg;
-	int msg_size;
-	<<Check for expired tasks; Mark them as [[PENDING]]>>
 	<<Wait for incoming message; define [[msg]], [[msg_size]]>>
+	task_refresh();
 	if (msg->id >= 0) {
 		<<Mark task [[msg->id]] as [[DONE]] and store [[msg]] in the journal>>
 	}
 	<<Send next [[PENDING]] task and mark it as [[RUNNING]]>>
-	<<Release message memory>>    
+	<<Release message memory>>
 	<<Display progress information>>
 }
 
 
-@ To receive a message, we must first create an (empty) \ZMQ \emph{message
-  object}, call [[zmq_msg_recv]], then access the actual content of the message
-with [[zmq_msg_data]].
+@ We block on message reception (TODO: this may be a bad idea). The \nanomsg 
+allocate enough space to hold the message (which makes us vulnerable to a DOS 
+attack, but hey...).
 
-<<Wait for incoming message...>>=
-zmq_msg_t zmsg;
-zmq_msg_init(&zmsg);
-msg_size = zmq_msg_recv(&zmsg, socket, 0);
+<<Wait for incoming message; define [[msg]], [[msg_size]]>>=
+struct task_msg_t *msg = NULL;
+int msg_size = nn_recv(socket, &msg, NN_MSG, 0);
 if (msg_size < 0)
-	errx(1, "zmq_msg_recv %s", zmq_strerror(errno));
-msg = zmq_msg_data(&zmsg);
+	errx(1, "nn_recv : %s\n", nn_strerror(nn_errno()));
+
 
 @ Once message processing is over, we must release the memory used to store the
 message (which is of arbitrary size).
 
-<<Release...>>=
-zmq_msg_close(&zmsg);
+<<Release message memory>>=
+nn_freemsg(msg);
 
 @ When a client requests work, we send the identifier of the next [[PENDING]]
 task. If there are no more pending tasks, we send $-1$.
 
-<<Send next [[PENDING]] task...>>=
+<<Send next [[PENDING]] task and mark it as [[RUNNING]]>>=
 int response_size = sizeof(struct task_msg_t) + msg->hostname_length;
 struct task_msg_t *response = malloc(response_size);
 response->start_time = wtime();
 response->hostname_length = msg->hostname_length;
 memcpy(response->hostname, msg->hostname, msg->hostname_length);
-int i;
-if (first[PENDING] == NULL) {
-	i = -1;
-} else {
-	i = first[PENDING]->id;
-	set_task_state(i, RUNNING);
-}
-response->id = i;
+response->id = head[PENDING].next->id;
+if (response->id >= 0)
+	task_set_state(response->id, RUNNING);
 printf("Sending task %d to %s\n", response->id, response->hostname);
-if (zmq_send(socket, response, response_size, 0) < 0)
-	errx(1, "zmq_send : %s", zmq_strerror(errno));
+if (nn_send(socket, response, response_size, 0) < 0)
+	errx(1, "nn_send : %s\n", nn_strerror(nn_errno()));
 free(response);
  
 
@@ -422,7 +421,7 @@ set by the server. The journal file thus contains a sequence of
 ([[task_msg_t]], [[result_t]]) pairs, each of which is of variable length.
 
 
-<<Global...>>=
+<<Global variables>>=
 FILE *journal_file;
 double total_time;
 
@@ -450,7 +449,8 @@ if (x != 1) {
 	else 
 		err(1, "reading journal file");
 }
-set_task_state(task.id, DONE);
+task_set_state(task.id, DONE);
+
 
 <<Skip over the hostname and read a [[result_t]]>>=
 fseek(journal_file, task.hostname_length, SEEK_CUR);
@@ -476,12 +476,12 @@ if (journal_file == NULL)
 time of the task has already been set by the server in the [[task_msg_t]] sent
 to the client and relayed back to the server.
 
-<<Mark task [[msg->id]] as [[DONE]]...>>=
+<<Mark task [[msg->id]] as [[DONE]] and store [[msg]] in the journal>>=
 printf("collecting task %d\n", msg->id);
-set_task_state(msg->id, DONE);
+task_set_state(msg->id, DONE);
 msg->completion_time = wtime();
 size_t tmp = fwrite(msg, 1, msg_size, journal_file);
-if (tmp != msg_size)
+if (tmp != (size_t) msg_size)
 	err(1, "fwrite journal file");
 if (fflush(journal_file))
 	err(1, "fflush journal file");
@@ -491,12 +491,11 @@ if (fflush(journal_file))
 
 And now the part we were all waiting for: verbosity.
 
-<<Display progress...>>=
+<<Display progress information>>=
 printf("task %d/%d, %d active, %.0f CPU.s, ", 
-n_tasks[DONE], N, n_tasks[RUNNING], total_time);
+	n_tasks[DONE], N, n_tasks[RUNNING], total_time);
    
-@ \bibliographystyle{plain}
-\bibliography{biblio}
+@
 
 \end{document}
 

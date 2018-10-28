@@ -171,7 +171,7 @@ for (int i = 0; i < problem_size; i++)
 <<Display timing results>>=
 double wall = wtime() - start;
 uint64_t cycles = ticks() - clock;
-double n_pairs = N[1] * N[2];
+double n_pairs = (1.0 * N[1]) * (1.0 * N[2]);
 double rate = n_pairs / wall;
 double inv_throughput = cycles / n_pairs;
 printf("Wall time: %.1fs, %" PRId64 " CPU ticks.\n", wall, cycles);

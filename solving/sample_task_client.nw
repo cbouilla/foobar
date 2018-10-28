@@ -5,9 +5,9 @@
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{parskip}
 \usepackage{xspace}
+\usepackage{hyperref}
 
-\def\cweb{{\tt noweb\/}}
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\nanomsg}{\textsf{nanomsg}\xspace}
 
 \begin{document}
 
@@ -23,12 +23,12 @@ server. Familiarity with the server and the communication protocol is assumed.
 
 The client has the usual structure :
 
-<<democlient.c>>=
+<<*>>=
 <<Header files to include>>
 <<Actual work function>>
 <<The main program>>
 
-<<Header...>>=
+<<Header files to include>>=
 #define _POSIX_C_SOURCE 200112L 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +37,8 @@ The client has the usual structure :
 #include <getopt.h>
 #include <string.h>
 #include <err.h>
-#include <zmq.h>
+#include <nanomsg/nn.h>
+#include <nanomsg/reqrep.h>
 #include "server.h"
 
 @ The ``actual work function'' takes a task [[id]] and returns a result, which
@@ -45,7 +46,7 @@ is just a sequence of bytes. This demonstration doesnt perform any actual
 work, and just computes $[[r]] \gets 4 [[id]] + 3$. It allocates space to
 store the result and returns its size.
 
-<<Actual work...>>=
+<<Actual work function>>=
 void work(int task_id, int *size, void **result)
 {
 	*size = sizeof(int);
@@ -66,7 +67,7 @@ int main(int argc, char **argv)
 
 @ The only command-line argument is the address of the server.
 
-<<Process the command...>>=
+<<Process the command line>>=
 struct option longopts[2] = {
 	{"server-address", required_argument, NULL, 'a'},
 	{NULL, 0, NULL, 0}
@@ -87,15 +88,16 @@ if (server_address == NULL)
 
 
 @ Because we are in the non-static part of the infrastructure, we do not
-\emph{bind} our \ZMQ socket to a network address, but we \emph{connect} it to
-the address of the server. While the server has a [[ZMQ_REP]] socket, we have
-a  [[ZMQ_REQ]].
+\emph{bind} our \nanomsg socket to a network address, but we \emph{connect} it to
+the address of the server. While the server has a [[NN_REP]] socket, we have
+an [[NN_REQ]].
 
-<<Initialize networking...>>=
-void *context = zmq_ctx_new();
-void *socket = zmq_socket(context, ZMQ_REQ);
-if (0 != zmq_connect(socket, server_address))
-	errx(1, "zmq_connect : %s", zmq_strerror(errno));
+<<Initialize networking>>=
+int socket = nn_socket(AF_SP, NN_REQ);
+if (socket < 0)
+	errx(1, "nn_socket : %s\n", nn_strerror(nn_errno()));
+if (nn_connect(socket, server_address) < 0)
+	errx(1, "nn_bind : %s\n", nn_strerror(nn_errno()));
 
 
 @ We are now ready for the client loop: ask for work, do it, send
@@ -109,7 +111,7 @@ while (1) {
 		break;
 	printf("got id=%d\n", task_msg->id);
 	if (rand() & 0x01) {
-		printf("oops, waiting\n");
+		printf("oops, timeout\n");
 		sleep(2);
 	}
 	<<Run the task>>
@@ -135,42 +137,39 @@ if (gethostname(hello->hostname, HOST_NAME_MAX))
 	err(1, "gethostname failed");
 hello->hostname_length = strlen(hello->hostname) + 1;
 int hello_size = sizeof(struct task_msg_t) + hello->hostname_length;
-zmq_send(socket, hello, hello_size, 0);
+nn_send(socket, hello, hello_size, 0);
 free(hello);
 
 @ Receiving the (variable-length) task message is similar to what happens in the server.
 
-<<Wait for task message...>>=
-zmq_msg_t zmsg;
-zmq_msg_init (&zmsg);
-int task_msg_size = zmq_msg_recv(&zmsg, socket, 0);
+<<Wait for task message; set [[task_msg]] and [[task_msg_size]]>>=
+struct task_msg_t *task_msg = NULL;
+int task_msg_size = nn_recv(socket, &task_msg, NN_MSG, 0);
 if (task_msg_size < 0)
-	errx(1, "zmq_msg_recv %s", zmq_strerror(errno));
-struct task_msg_t *task_msg = zmq_msg_data(&zmsg);
+	errx(1, "nn_recv : %s\n", nn_strerror(nn_errno()));
 
-<<Release...>>=
-zmq_msg_close(&zmsg);
+<<Release [[result]] and both messages>>=
 free(result);
 free(response_msg);
+nn_freemsg(task_msg);
 
 
 @ To return the result to the server, the client must prepare a message encapsulating the result.
 
-% this is ugly. Multi-part messages ?
-
-<<Send back result...>>=
+<<Send back result message>>=
 int response_size = task_msg_size + sizeof(int) + result_size;
 char *response_msg = malloc(response_size);
 memcpy(response_msg, task_msg, task_msg_size);
 memcpy(response_msg + task_msg_size, &result_size, sizeof(int));
 memcpy(response_msg + task_msg_size + sizeof(int), result, result_size);
-zmq_send(socket, response_msg, response_size, 0);
+if (nn_send(socket, response_msg, response_size, 0) < 0)
+	errx(1, "nn_send : %s\n", nn_strerror(nn_errno()));
 
 
-<<Exit...>>=
+<<Exit cleanly>>=
 printf("Bye.\n");
-zmq_close (socket);
-zmq_ctx_destroy (context);
+if (nn_close (socket) < 0)
+	errx(1, "nn_close : %s\n", nn_strerror(nn_errno()));
 return(EXIT_SUCCESS);
 
 @ \end{document}
