@@ -1,4 +1,4 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
 
 \usepackage{amsmath,amsfonts,amssymb}
@@ -9,92 +9,26 @@
 \usepackage{xspace}
 \usepackage{hyperref}
 
-\def\noweb{{\tt noweb\/}}
-\newcommand{\join}{\bowtie}
-
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
-\newcommand{\NN}{\textsf{nanomsg}\xspace}
 \newcommand{\MPI}{\textsf{MPI}\xspace}
-\newcommand{\OMP}{\textsf{OpenMP}\xspace}
 
 \begin{document}
-
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Splitter}
-\author{Charles Bouillaguet}
-
-\maketitle
-
-The combination of the \texttt{FOOBAR}-modified Miner and the
-\texttt{FOOBAR}-server yields \emph{preimage files}, containing (counter,
-nonce) pairs. In this document, we call this a \textbf{preimage}. Each pair
-requires 12 bytes, and we expect to have 3 lists of $2^{31.7}$ entries each,
-for a total storage space of 117Gbyte.
-
-The nonce files must be checked (i.e. the corresponding hashes must have 32
-zero bits). They must then be hashed, and 64 bits of each hash stored to disk.
-This yields three hash lists, of $25.4$Gbyte each. These lists have to be
-sorted and checked for duplicates. Thus in total, we expect to need $\approx
-150$ Gbyte of storage.
-
-Each preimage is associated to a 256-bit \textbf{full hash}, of which 33 at
-least must be zero. From this full hash, we extract a subset of 64 (uniformly
-distributed) bits that we call the \textbf{hash}.
-
-For various reasons, we ensure that the hashes are unique. Because of the
-large number of preimages, we might encounter accidental collisions, so we
-must actively enforce this. We actually maintain a dictionnary $[[hash]]
-\rightarrow [[preimage]]$, where the hashes are unique, and where it is fairly
-easy to add new preimages and to extract all the hashes in sorted order.
-
-The miner generates $\approx 550$ preimages per second, which means roughly
-550 Mbyte per day of fresh data. Ideally, we would like the total amount of
-work required to integrate this much data to the dictionnary to be as low as
-possible.
-
-We use the following strategy :
-
-\begin{enumerate}  
-\item When a new preimage file is ready, split it into several \textbf{split dictionnaries}
-by partitionning the hashes according to most significant $b$ bits. This yields 
-$2^b$ buckets. Potential duplicates are now confined into a single bucket.
-
-\item Sort the newly formed split dictionnaries by hash. They must fit in RAM in 
-order to do this easily, but they should be small.
-
-\item For each bucket, perform a multiway merge on all split dictionnaries. 
-Detect duplicate hashes and write down the hashes in order into a \textbf{hash file}.
-\end{enumerate}
-
-Concretely, a preimage file contains a sequence of [[struct preimage_t]]. A
-split dictionnary contains a sequence of [[dict_t]]. These types are described in [[hasher.h]].
-
-
-@ The main strategy is as follows. A "reader" reads the input file and sends
-blocks of (counter, nonce) pairs to "mappers". Each mapper assembles the
-plaintext block, hash it, and dispatch it in one of each buffers. When a
-buffer is full, it is flushed to a "writter".
-
-We considered several options. 
-
-OPTION A: each "worker" is a thread. Threads interract through (concurrent)
-\emph{queues}. The reader thread pushes blocks to a single-writter multiple-
-readers queue. The mapper threads pull from this queue and push to several
-multiple-writer single-reader queues (one for each writer thread). The queues
-are partial and bounded. These queues could be implemented by hand (using
-locks and semaphores, for instance), or could be built using a messaging
-middleware such as \ZMQ or \NN. Threads could be managed using the [[pthread]]
-standard library or using something like \OMP.
-
-OPTION B: each "worker" is a process. Processes interact through the \MPI
-messaging library, using asynchronous IO if possible.
-
-We chose option B, because it is simpler.
+\setcounter{chapter}{2}
+\chapter{Splitter}
 
 \section{Global Structure}
 
+Splitting preimage files requires computing all the hashes, and this is CPU-bound. 
+Therefore, we parallelize the hash computations.
+
+The main strategy is as follows. A ``reader'' reads the input file and sends
+blocks of (counter, nonce) pairs to ``mappers''. Each mapper assembles the
+plaintext block, hash it, and dispatch it in one of its output buffers. When a
+buffer is full, it is flushed to the ``writer''. Each of these workers is an independent process. 
+Processes interact through the \MPI messaging library.
+
 This program reads a preimage file, and compute all the hashes. It checks that
-the (counter, nonce) pairs indeed yield hashes with 32 leading zero bits, and
-dispatches the dictionnary items into split dictionnary files.
+the (counter, nonce) pairs indeed yield hashes with 33 leading zero bits, and
+dispatches the dictionnary items into sub-dictionnary files.
 
 <<*>>=
 <<Header files to include>>
@@ -105,17 +39,14 @@ dispatches the dictionnary items into split dictionnary files.
 
 <<Header files to include>>=
 #define _XOPEN_SOURCE 500
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <err.h>
-#include <inttypes.h>
 #include <getopt.h>
-#include <assert.h>
-#include <libgen.h>
-
 #include <mpi.h>
+#include "preprocessing.h"
 #include "hasher.h"
 
 
@@ -130,20 +61,17 @@ int main(int argc, char **argv)
 	exit(EXIT_SUCCESS);
 }
 
-@ The possible command-line arguments are the kind of the blocks  ([[FOO]],
-[[BAR]], [[FOOBAR]]), the $\log_2$ of the number of output hash files and the
-input nonce filenames. We enforce that the arguments are actually present. An
-optionnal argument specifies the output directory of the split dictionnary
-files.
+@ The possible command-line arguments are the size $k$ of the partitionning key, 
+the output directory ([[dict/]]) and the preimage file. 
+We enforce that these arguments are actually present.
+The ``kind'' of the preimage file is inferred from its name.
 
 <<Global variables>>=
-struct option longopts[4] = {
-	{"kind", required_argument, NULL, 'k'},
-	{"bits", required_argument, NULL, 'b'},
+struct option longopts[3] = {
+	{"partitioning-bits", required_argument, NULL, 'b'},
 	{"output-dir", required_argument, NULL, 'd'},
 	{NULL, 0, NULL, 0}
 };
-int kind = -1;
 int bits = -1;
 char *output_dir = NULL;
 
@@ -151,9 +79,6 @@ char *output_dir = NULL;
 signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
-	case 'k':
-		kind = atoi(optarg);
-		break;
 	case 'b':
 		bits = atoi(optarg);
 		break;
@@ -164,22 +89,21 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		errx(1, "Unknown option\n");
 	}
 }
-if (kind == -1) 
-	errx(1, "missing required option --kind");
 if (bits == -1) 
-	errx(1, "missing required option --bits");
+	errx(1, "missing required option --partitioning-bits");
 if (optind != argc - 1)
 	errx(1, "missing (or extra) filenames");
+if (output_dir == NULL)
+	errx(1, "missing required option --output-dir");
 char *in_filename = argv[optind];
-
+enum kind_t kind = file_get_kind(in_filename);
 
 @ Before starting to dwelve into the code of the threads, we must set up a bit
-of global context. The number of output files (and of writter threads) if
-$2^{[[bits]]}$. The number of mappers is the total number of processes minus
-$[[n_writer]] + 1$.
+of global context. The number of output files is $2^{[[bits]]}$. 
+The number of mappers is the total number of processes minus $2$.
 
 <<Global variables>>=
-int rank, size;
+i32 rank, size;
 
 <<Initialization>>=
 MPI_Init(&argc, &argv);
@@ -217,8 +141,8 @@ MPI_Type_create_resized(PreimageStruct, 0, sizeofentry, &PreimageType);
 /* quick safety check */
 int x;
 MPI_Type_size(PreimageType, &x);
-assert(x == sizeof(struct preimage_t));
-assert(x == 12);
+if ((x != sizeof(struct preimage_t)) || (x != 12))
+	errx(1, "data types size mismatch");
 
 
 <<Setup MPI datatype for dictionnary entries>>=
@@ -240,30 +164,42 @@ sizeofentry -= base;
 MPI_Type_create_resized(DictStruct, 0, sizeofentry, &DictType);
 
 
-@ Using \MPI, processes are numbered starting at zero. The reader is process
-0. The writers are processes $1, \dots, [[n_writer]]$. The remaining processes
-are mappers. To easily distinguish between messages, we use tags.
+@ \MPI processes are numbered starting at zero. The reader is process
+0. The writer is process 1. The remaining processes are mappers. 
+To easily distinguish between messages, we use tags.
 
 <<Global variables>>=
 static const int READER_REQUEST_TAG = 0;
 static const int NONCE_BLOCK_TAG = 1;
 static const int HASH_BLOCK_TAG = 2;
 static const int EOF_TAG = 3;
-
-int n_writer, n_mapper;
+static const int KEY_TAG = 4;
+u32 n_mapper, n_slots;
 
 <<Finish setup>>=
-n_writer = 1 << bits;
-n_mapper = size - n_writer - 1;
+n_mapper = size - 2;
+n_slots = 1 << bits;
 if (rank == 0 && n_mapper <= 0)
-	errx(1, "not enough MPI processes. Need %d, have %d", 2 + n_writer, size);
+	errx(1, "not enough MPI processes. Need 3, have %d", size);
 
-@ Nonces and hashes are processed in batches.
+@ Nonces and hashes are processed in batches. The output buffer size is 
+much smaller, because with $k=10$, each mapper will have 1024 of these.
 
 <<Global variables>>=
-static const int READER_BUFFER_SIZE = 65536;
-<<Global variables>>=
-static const int WRITER_BUFFER_SIZE = 32768;
+static const u32 READER_BUFFER_SIZE = 65536;
+static const u32 WRITER_BUFFER_SIZE = 1024;
+
+@ Thanks to the \MPI programming model, starting everything is easy.
+
+<<Start reader, mappers and writers>>=
+if (rank == 0) {
+	<<Reader>>
+} else if (rank == 1) {
+	<<Writer>>
+} else {
+	<<Mapper>>
+}
+
 
 @
 
@@ -273,8 +209,8 @@ The mapper threads will request preimage blocks from the reader. The reader
 will reply with either a preimage block or an [[EOF]] message.
 
 <<Reader>>=
-printf("Reader started. %d mappers and %d writers.\n", n_mapper, n_writer);
-int preimages_read = 0;
+printf("Reader started. %d mappers.\n", n_mapper);
+u32 preimages_read = 0;
 double start = MPI_Wtime();
 double wait = 0;
 FILE *f = fopen(in_filename, "r");
@@ -286,7 +222,7 @@ while (1) {
 	<<Print status report>>
 }
 fclose(f);
-for (int i = 0; i < n_mapper; i++) {
+for (u32 i = 0; i < n_mapper; i++) {
 	<<Wait for a request and send back [[EOF]]>>
 }
 printf("\nReader finished. %d preimages read, total wait = %.1f s\n", preimages_read, wait);
@@ -334,38 +270,41 @@ double rate = megabytes / (MPI_Wtime() - start);
 printf("\rNonces read: %d (%.1f Mb, %.1f Mb/s)", preimages_read, megabytes, rate);
 fflush(stdout);
 
-@
 
-\section{Hashing and Dispatching the Preimages}
 
-Now come the mapper threads. They split input blocks into [[n_writer]] output
-buffers. When an output buffer is full, it is flushed to the corresponding
-writer.
+@ \section{Hashing and Dispatching the Preimages}
+
+Now come the mapper threads. They split input blocks into $2^[[bits]]$ output
+buffers. When an output buffer is full, it is flushed to the writer.
 
 <<Mapper>>=
-int id = rank - n_writer - 1;
+int id = rank - 2;
 <<Initialize output buffers>>
-int n_processed = 0, n_invalid = 0;
+u32 n_processed = 0, n_invalid = 0;
 while (1) {
 	<<Request [[preimages]] from reader; if [[EOF]], then [[break]]>>
 	for (int i = 0; i < n_preimages; i++) {
 		<<Compute the hash; if invalid then [[continue]]>>
 		<<Push the dictionnary entry to the output buffer [[slot]]>>
 		if (output_size[slot] == WRITER_BUFFER_SIZE) {
-			<<flush [[output[slot]]] to writer \#[[slot]]>>
+			<<flush [[output[slot]]] to the writer>>
 		}
 	}
 }
-<<Flush all buffers and send [[EOF]] message to all writers>>
+<<Flush all buffers and send [[EOF]] message to the writer>>
 printf("\nMapper %d finished. %d dictionnary entries transmitted. %d invalid.\n", id, n_processed, n_invalid);
 
 @ Dealing with the buffer is as simple as in the reader. So is communication with the reader.
 
 <<Initialize output buffers>>=
-struct dict_t output[n_writer][WRITER_BUFFER_SIZE];
-int output_size[n_writer];
-for (int i = 0; i < n_writer; i++)
+struct dict_t * output[n_slots];
+u32 output_size[n_slots];
+for (u32 i = 0; i < n_slots; i++) {
 	output_size[i] = 0;
+	output[i] = malloc(WRITER_BUFFER_SIZE * sizeof(struct dict_t));
+	if (output[i] == NULL)
+		err(1, "cannot alloc mapper output buffer");
+}
 
 
 @ When receiving a block from the reader, we only know an upper bound on its size. We must then query its actual size from \MPI.
@@ -377,50 +316,45 @@ MPI_Send(NULL, 0, MPI_INT, 0, READER_REQUEST_TAG, MPI_COMM_WORLD);
 MPI_Recv(preimages, READER_BUFFER_SIZE, PreimageType, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 if (status.MPI_TAG == EOF_TAG)
 	break;
-int n_preimages;
+i32 n_preimages;
 MPI_Get_count(&status, PreimageType, &n_preimages);
 
 
 @ A priori, the nonces are valid at difficulty 33. This means that the top 33
-bits of the hash must be zero.
+bits of the hash must be zero. This is checked by [[compute_full_hash]].
 
 <<Compute the hash; if invalid then [[continue]]>>=
-uint32_t full_hash[8];
+u32 full_hash[8];
 if (!compute_full_hash(kind, preimages + i, full_hash)) {
-	n_invalid += 1;
+	n_invalid++;
 	continue;
 }
 
-
-@ We must extract 64 bits of the hash from [[hash[5]]] and [[hash[6]]],
-excluding the most-significant bit of [[hash[6]]] which is always zero. We
-replace it with the most-significant bit of [[hash[4]]].
-
 <<Push the dictionnary entry to the output buffer [[slot]]>>=
-uint64_t x = extract_partial_hash(full_hash);
-int slot = bits ? (x >> (64 - bits)) : 0;
+u64 x = extract_partial_hash(full_hash);
+u32 slot = extract_partitioning_key(bits, full_hash);
 output[slot][output_size[slot]].hash = x;
 output[slot][output_size[slot]].preimage.counter = preimages[i].counter;
 output[slot][output_size[slot]].preimage.nonce = preimages[i].nonce;
 output_size[slot] += 1;
 
-@ IO is easy thanks to \MPI. Recall that writer \#[[slot]] is actually \MPI
-process $[[slot]] + 1$.
+@ To push the data to the writer, we first send [[slot]] and then only the actual data.
 		
-<<flush [[output[slot]]] to writer \#[[slot]]>>=
-MPI_Send(output[slot], output_size[slot], DictType, slot + 1, HASH_BLOCK_TAG, MPI_COMM_WORLD);
+<<flush [[output[slot]]] to the writer>>=
+MPI_Send(&slot, 1, MPI_INT, 1, KEY_TAG, MPI_COMM_WORLD);
+MPI_Send(output[slot], output_size[slot], DictType, 1, HASH_BLOCK_TAG, MPI_COMM_WORLD);
 n_processed += output_size[slot];
 output_size[slot] = 0;
 
 
 @ When we receive the [[EOF]] mark from the reader, we must flush incomplete
-output buffers to the writters.
+output buffers to the writer.
 
-<<Flush all buffers and send [[EOF]] message to all writers>>=
-for (int slot = 0; slot < n_writer; slot++) {
-	<<flush [[output[slot]]] to writer \#[[slot]]>>
-	MPI_Send(NULL, 0, MPI_INT, slot + 1, EOF_TAG, MPI_COMM_WORLD);
+<<Flush all buffers and send [[EOF]] message to the writer>>=
+for (u32 slot = 0; slot < n_slots; slot++) {
+	<<flush [[output[slot]]] to the writer>>
 }
+MPI_Send(NULL, 0, MPI_INT, 1, EOF_TAG, MPI_COMM_WORLD);
 
 @
 
@@ -429,73 +363,64 @@ for (int slot = 0; slot < n_writer; slot++) {
 
 
 
-\section{Writing Split Dictionnaries to Disk}
+\section{Writing sub-Dictionnaries to Disk}
 
-It remains to describe the writers, which is almost the simplest. The writer's
-[[id]] is its number amongst writer threads. It is its \MPI rank minus one.
-Each writer writes a single split dictionnary.
+It remains to describe the writer. The writer sequentialize writes, 
+and deals with all the files. Each writer writes a single split dictionnary.
 
 <<Writer>>=
-int id = rank - 1;
-int n_eof = 0;
-<<Open output file [[f]]>>
+u32 n_eof = 0;
+FILE * f[n_slots];
+<<Open all output files>>
+printf("Writer ready\n");
 while (n_eof < n_mapper) {
 	<<Receive [[block]] from a mapper; if [[EOF]] then [[continue]]>>
-	<<Write [[block]] to [[f]]>>
+	<<Write [[block]] to the correct file>>
 }
-<<Close [[f]]>>
-printf("Writer %d done (%s).\n", id, out_filename);
+<<Close all files>>
+printf("Writer done.\n");
 
 @ We derive the output filename from the input filename, the (optional) output
-directory and the writer's [[id]]. The output file is opened in write mode, so
-it is truncated to size zero.
+directory and its [[slot]]. The output files are opened in write mode, so they are 
+truncated to size zero.
 
-<<Open output file [[f]]>>=
-char out_filename[255];
-char *input_base = basename(in_filename);
-if (output_dir)
-	sprintf(out_filename, "%s/%s.dict.%d", output_dir, input_base, id);
-else
-	sprintf(out_filename, "%s.dict.%d", in_filename, id);
-FILE *f = fopen(out_filename, "w");
-if (f == NULL)
-	err(1, "[writer] Cannot open %s for writing", out_filename);
+<<Open all output files>>=
+for (u32 i = 0; i < n_slots; i++) {
+	char out_filename[255];
+	char *input_base = basename(in_filename);
+	sprintf(out_filename, "%s/%03x/%s.unsorted", output_dir, i, input_base);
+	f[i] = fopen(out_filename, "w");
+	if (f[i] == NULL)
+		err(1, "[writer] Cannot open %s for writing", out_filename);
+}
 
 @ When receiving a block from a mapper, we must distinguish between regular
 and EOF messages. We must also observe the size of the hash block.
 
 <<Receive [[block]] from a mapper; if [[EOF]] then [[continue]]>>=
-struct dict_t block[WRITER_BUFFER_SIZE];
 MPI_Status status;
-MPI_Recv(block, WRITER_BUFFER_SIZE, DictType, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+u32 slot;
+struct dict_t block[WRITER_BUFFER_SIZE];
+MPI_Recv(&slot, 1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 if (status.MPI_TAG == EOF_TAG) {
 	n_eof++;
 	continue;
 }
-int n_entries;
+MPI_Recv(block, WRITER_BUFFER_SIZE, DictType, status.MPI_SOURCE, 
+				HASH_BLOCK_TAG, MPI_COMM_WORLD, &status);
+i32 n_entries;
 MPI_Get_count(&status, DictType, &n_entries);
 
-<<Write [[block]] to [[f]]>>=
-size_t tmp = fwrite(block, sizeof(struct dict_t), n_entries, f);
+<<Write [[block]] to the correct file>>=
+size_t tmp = fwrite(block, sizeof(struct dict_t), n_entries, f[slot]);
 if (tmp != (size_t) n_entries)
-	err(1, "fwrite writer %d: %zd vs %d", id, tmp, n_entries);
+	err(1, "fwrite writer (file %03x): %zd vs %d", slot, tmp, n_entries);
 
-<<Close [[f]]>>=
-if (fclose(f))
-	err(1, "fclose writer %d", id);
+<<Close all files>>=
+for (u32 i = 0; i < n_slots; i++)
+	if (fclose(f[i]))
+		err(1, "fclose writer file %03x", i);
 
-@
-
-\section{Putting it all Toghether}
-
-<<Start reader, mappers and writers>>=
-if (rank == 0) {
-	<<Reader>>
-} else if (rank < 1 + n_writer) {
-	<<Writer>>
-} else {
-	<<Mapper>>
-}
 
 @
 

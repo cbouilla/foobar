@@ -1,4 +1,4 @@
-\documentclass{article}
+\documentclass{book}
 
 \usepackage[a4paper,vmargin=1in]{geometry}
 \usepackage{noweb}
@@ -8,13 +8,10 @@
 \usepackage{hyperref}
 
 \begin{document}
+\setcounter{chapter}{1}
+\chapter{Datastructures}
 
-\title{Solving Instances of the \textsf{3XOR} Problem: Datastructures}
-\author{Charles Bouillaguet}
-
-\maketitle
-
-This file describes data structures with the following specification. 
+This chapter describes data structures with the following specification. 
 $\mathcal{D}$ holds a small set of [[uint64_t]]. There will be many 
 \emph{trials} ``does $x \in \mathcal{D}$?''. In $99.99999\%$ of the case, the 
 answer is NO. So, the datastructure is optimized to answer as quickly as 
@@ -34,15 +31,14 @@ Several options are possible :
 \item Cuckoo Filter (some false positives)
 \end{enumerate}
 
-<<datastructures.c>>=
+<<*>>=
 #include <stdlib.h>
 #include <err.h>
 #include "datastructures.h"
 <<Public functions>>
 
 <<datastructures.h>>=
-#include <inttypes.h>
-#include <stdbool.h>
+#include "../types.h"
 <<Type definitions>>
 <<Function declarations>>
 
@@ -58,25 +54,25 @@ integers and its size.
 
 <<Type definitions>>=
 struct hash_table_t {
-	uint64_t mask;
-	uint64_t *H;    // of size mask + 1
+	u64 mask;
+	u64 *H;    // of size mask + 1
 };
 
 <<Function declarations>>=
-int hashtable_size(int n_items);
-struct hash_table_t * hashtable_build(uint64_t * const L, uint64_t lo, uint64_t hi);
+u32 hashtable_size(u32 n_items);
+struct hash_table_t * hashtable_build(u64 * const L, u32 lo, u32 hi);
 void hashtable_free(struct hash_table_t *s);
 
 
 @ Probing the hash table is simple... But will most certainly cause branch 
 mispredictions, as the number of iterations of the [[while]] loop is impredictable. 
-Because this has to be reeeaaaally, it is defined in the [[.h]] file to allow inlining.
+Because this has to be reeeaaaally fast, it is defined in the [[.h]] file to allow inlining.
 
 <<Function declarations>>=
-static inline bool hashtable_lookup(const struct hash_table_t *s, const uint64_t x)
+static inline bool hashtable_lookup(const struct hash_table_t *s, const u64 x)
 {
-	uint64_t h = x & s->mask;
-	uint64_t probe = s->H[h];
+	u64 h = x & s->mask;
+	u64 probe = s->H[h];
 	while (probe) {
 		if (probe == x)
 			return true;
@@ -103,10 +99,10 @@ This gives satisfactory results, and it gets even better when the fill ratio goe
 to $1/8$.
 
 <<Public functions>>=
-int hashtable_size(int n_items)
+u32 hashtable_size(u32 n_items)
 {
-	int tmp = 4 * n_items + 1;
-	int i = 0;
+	u32 tmp = 4 * n_items + 1;
+	u32 i = 0;
 	while (tmp) {
 		tmp >>= 1;
 		i++;
@@ -117,12 +113,12 @@ int hashtable_size(int n_items)
 @ The function takes a sequence $L$ of 64-bits integers and returns a hash table. 
 
 <<Public functions>>=
-struct hash_table_t * hashtable_build(uint64_t * const L, uint64_t lo, uint64_t hi)
+struct hash_table_t * hashtable_build(u64 * const L, u32 lo, u32 hi)
 {
 	struct hash_table_t *s = malloc(sizeof(*s));
-	int size = hashtable_size(hi - lo);
+	u32 size = hashtable_size(hi - lo);
 	<<Initialize empty hash table>>
-	for (uint64_t i = lo; i < hi; i++) {
+	for (u32 i = lo; i < hi; i++) {
 		if (L[i] == 0)
 			errx(1, "cannot insert 0 in hash table");
 		<<insert [[L[i]]] into the hash table>>
@@ -134,18 +130,18 @@ struct hash_table_t * hashtable_build(uint64_t * const L, uint64_t lo, uint64_t 
 
 
 <<Initialize empty hash table>>=
-uint64_t mask = ((uint64_t) size) - 1;
-uint64_t *H = malloc(size * sizeof(uint64_t));
+u64 mask = ((u64) size) - 1;
+u64 *H = malloc(size * sizeof(*H));
 if (H == NULL)
 	err(1, "cannot allocate linear hash table");
-for (int i = 0; i < size; i++)
+for (u32 i = 0; i < size; i++)
 	H[i] = 0;
 
 @ Insertion is similar to probing: we find the first possible empty space, and 
 we put the value there.
 
 <<insert [[L[i]]] into the hash table>>=
-uint64_t h = L[i] & mask;
+u64 h = L[i] & mask;
 while (H[h] != 0)
 	h = (h + 1) & mask;
 H[h] = L[i];

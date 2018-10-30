@@ -1,34 +1,23 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
 
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
 \usepackage{xspace}
 \usepackage{hyperref}
 
-\def\noweb{{\tt noweb\/}}
-\newcommand{\join}{\bowtie}
-
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
-\newcommand{\NN}{\textsf{nanomsg}\xspace}
-\newcommand{\MPI}{\textsf{MPI}\xspace}
-\newcommand{\OMP}{\textsf{OpenMP}\xspace}
-
 \begin{document}
+\setcounter{chapter}{3}
+\chapter{Dictionnary Checker}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Dictionnary Checker}
-\author{Charles Bouillaguet}
-
-\maketitle
-
-This program checks that a \textbf{(split) dictionnary file} is correct (i.e.
+This program checks that a \textbf{sub-dictionnary file} is correct (i.e.
 the preimages are valid and the hash match). It will also detect if it is
 sorted by increasing hashes, with or without duplicates.
 
-This program takes the name of a single dictionnary file on the command-line.
+This program takes the name of a single dictionnary file on the command-line. 
+Its kind and partition key are inferred from its name.
 
 <<*>>=
 <<Header files to include>>
@@ -37,12 +26,12 @@ This program takes the name of a single dictionnary file on the command-line.
 @ We need the usual standard headers.
 
 <<Header files to include>>=
-#define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
-#include <err.h>
 #include <getopt.h>
+#include <err.h>
+
+#include "preprocessing.h"
 #include "hasher.h"
 
 <<The main program>>=
@@ -51,55 +40,58 @@ int main(int argc, char **argv)
 	<<Process the command line>>
 	<<Open input file and allocate [[buffer]]>>
 	struct dict_t prev = {0, {0, 0}};
-	size_t processed = 0, size = 0;
+	u32 processed = 0, size = 0;
 	bool in_order = true;
-	int full_dupes = 0, partial_dupes = 0;
+	u32 duplicates = 0, collisions = 0;
 	while (!feof(f)) {
 		<<Fill [[buffer]] from input file>>
 		<<Verify [[buffer]]>>
 	}
 	processed += size;
-	fclose(f);
-	printf("%zd items processed. In order: %d. Hash collisions: %d. Duplicate preimages: %d\n",
-		processed, in_order, partial_dupes, full_dupes);
-	exit(EXIT_SUCCESS);
+	<<Report and exit>>
 }
+
+
+@ The only possible command-line arguments are the size $k$ of the partioning key and the name of the dictionnary file to check.
 
 <<Process the command line>>=
 struct option longopts[2] = {
-	{"kind", required_argument, NULL, 'k'},
+	{"partitioning-bits", required_argument, NULL, 'b'},
 	{NULL, 0, NULL, 0}
 };
-int kind = -1;
+int bits = -1;
 signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
-	case 'k':
-		kind = atoi(optarg);
+	case 'b':
+		bits = atoi(optarg);
 		break;
 	default:
 		errx(1, "Unknown option\n");
 	}
 }
-if (kind < 0)
-	errx(1, "missing --kind");
-if (optind >= argc)
-	errx(1, "missing input filename");
+if (bits == -1) 
+	errx(1, "missing required option --partitioning-bits");
+if (optind != argc - 1)
+	errx(1, "missing (or extra) filenames");
 char *in_filename = argv[optind];
+enum kind_t kind = file_get_kind(in_filename);
+u32 partition = file_get_partition(in_filename);
+printf("Input has kind %d and partition key %03x.\n", kind, partition);
 
+@ We use a simple buffering scheme to read the input file. 
+[[processed]] counts the number of items in previously processed buffers.
+[[size]] is the size of the current buffer.
 
 <<Open input file and allocate [[buffer]]>>=
 FILE *f = fopen(in_filename, "r");
 if (f == NULL)
 	err(1, "cannot open %s for reading", in_filename);
-static const int BUFFER_SIZE = 131072;
+static const u32 BUFFER_SIZE = 131072;
 struct dict_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
 if (buffer == NULL)
 	err(1, "cannot allocate buffer");
 
-
-@ [[processed]] counts the number of items in previously processed buffers.
-[[size]] is the size of the current buffer.
 
 <<Fill [[buffer]] from input file>>=
 processed += size;
@@ -107,22 +99,35 @@ size = fread(buffer, sizeof(*buffer), BUFFER_SIZE, f);
 if (ferror(f))
 	err(1, "fread failed");
 
+@ [[slot]] is $-1$ until the partitioning key has been identified. It shall not change afterwards. 
+
 <<Verify [[buffer]]>>=
-for (size_t i = 0; i < size; i++) {
-	/* check preimage validity */
-	uint32_t full_hash[8];
+for (u32 i = 0; i < size; i++) {
+	u32 full_hash[8];
 	if (!compute_full_hash(kind, &buffer[i].preimage, full_hash))
-		errx(1, "invalid preimage %zd", processed + i);
+		errx(1, "invalid preimage %d", processed + i);
 	if (buffer[i].hash != extract_partial_hash(full_hash))
-		errx(1, "partial hash mismatch %zd", processed + i);
+		errx(1, "partial hash mismatch %d", processed + i);
+	if (partition != extract_partitioning_key(bits, full_hash))
+		errx(1, "partitioning key changed");
+	if (prev.preimage.counter == buffer[i].preimage.counter 
+		  && prev.preimage.nonce == buffer[i].preimage.nonce)
+		duplicates++;
 	if (prev.hash == buffer[i].hash)
-		partial_dupes++;
+		collisions++;
 	if (prev.hash > buffer[i].hash)
 		in_order = false;
-	if (prev.preimage.counter == buffer[i].preimage.counter && prev.preimage.nonce == buffer[i].preimage.nonce)
-		full_dupes++;
 	prev = buffer[i];
 }
+
+<<Report and exit>>=
+printf("%d items processed.\n", processed);
+printf("In order: %d\n", in_order);
+printf("Hash collisions: %d\n", collisions - duplicates);
+printf("Duplicate preimages: %d\n", duplicates);
+fclose(f);
+exit(EXIT_SUCCESS);
+
 
 @
 

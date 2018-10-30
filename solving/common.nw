@@ -1,4 +1,4 @@
-\documentclass{article}
+\documentclass{book}
 
 \usepackage[a4paper]{geometry}
 \usepackage{noweb}
@@ -12,13 +12,9 @@
 
 
 \begin{document}
-
-\title{Solving Instances of the \textsf{3XOR} Problem}
-\author{Charles Bouillaguet}
-
-\maketitle
-
-\section{Introduction}
+\setcounter{part}{2}
+\part{Solving Instances of the \textsf{3XOR} Problem}
+\chapter{Introduction}
 
 Given tree lists $A, B$ and $C$ (whose size are also denoted by $A, B$ and $C$), 
 we wish to find all the triples $(i,j,k)$ such that $A[i] \oplus B[j] \oplus C[k] = 0$. 
@@ -34,23 +30,25 @@ It is easily seen that for all 3XOR pair $(x, y)$, there exists
 $i, j \in \{0, 1\}^k$ such that $x \in A^{[i]}, y \in B^{[j]}$ and 
 $x \oplus y \in C{[i \oplus j]}$. It follows that
 \[
-  \textsf{3XOR}(A, B, C) = \bigcup_{0 \leq i,j < 2^k} \textsf{3XOR}(A^{[i]}, B^{[j]}, C^{[i \oplus j]})
+  \textsf{3XOR}(A, B, C) = \bigcup_{0 \leq i,j < 2^k} \textsf{3XOR}\left(A^{[i]}, B^{[j]}, C^{[i \oplus j]}\right)
 \]
 
 For a given instance $(A, B, C)$ of the problem, we may split it into a 2D array of size $2^k \times 2^k$, where the 
 sub-instance of coordinates $(i, j)$ is $(A^{[i]}, B^{[j]}, C^{[i \oplus j]})$.
 
 
-The computation is in reality organised along a three-level partition of the original instance.
+The computation is in reality organised along a three-level partition of the original instance. 
+Note that the description given here is mostly adapted to the quadratic algorithm.
 
 \begin{description}
 \item[Tasks] The original instance is split into a 2D array of 
-\textbf{tasks} of size $2^k \times 2^k$. Tasks are distributed amongst machines. 
+\textbf{tasks} of size $2^k \times 2^k$ during preprocessing, according 
+to the partitioning key. Tasks are distributed amongst machines. 
 A task thus only deals with \emph{slices} of the three input lists.
 The value of $k$ is chosen to adjust the granularity of the parallel computation, 
 and to limit to memory consumption on worker machines (the slices have to be 
 loaded in RAM). Tasks should ideally be processed in a moderate amount of time, 
-say, several minutes. 
+say, several minutes.
 
 \item[Blocks] On a single machine, tasks are split into a 2D array of size 
 $2^\ell \times 2^\ell$. A \textbf{block} is a \emph{row} on this grid. 
@@ -64,6 +62,8 @@ is processed by a single hardware thread. All the chunks of a given block
 should be processed at the same time, either sequentially or concurrently, 
 and as they may benefit from the use of shared memory (as opposed to tasks and blocks).
 \end{description}
+
+
 
 \begin{center}
   \begin{tikzpicture}[scale=0.9]
@@ -110,38 +110,29 @@ with the constraint that [[idx[0] ^ idx[1] ^ idx[1] == 0]]). In fact, only the f
 components are mandatory, but it is slighlty easier this way.
 
 <<common.h>>=
-#include <inttypes.h>
 #include <stdio.h>
+#include "../types.h"
 
 <<Type definitions>>
 <<Functions declarations>>
 
 <<Type definitions>>=
 struct task_t {
-	int k;
-	int idx[3];
+	u32 k;
+	u32 idx[3];
 };
 
 struct solution_t {
-	uint64_t x, y;
+	u64 x, y;
 };
 
-@ In addition, these functions must have access to the lists. This is achieved thanks to a ``context'' object.
-
-<<Type definitions>>=
-struct context_t {
-	int l;                         // log2 blocks grid dimension
-	int depth;                     // index depth
-	uint32_t * indexes[3];
-	FILE * files[3];               // handles to read the hashes
-};
 
 @ Results are returned in a dynamic array.
 
 <<Type definitions>>=
 struct task_result_t {
-	int size;
-	int capacity;
+	u32 size;
+	u32 capacity;
 	struct solution_t *solutions;
 };
 
@@ -151,10 +142,10 @@ Some very common function, such as timing, are also here.
 
 <<Functions declarations>>=
 double wtime();
-uint64_t ticks();
+u64 ticks();
 
 
-<<common.c>>=
+<<*>>=
 #include <sys/time.h>
 #include "common.h"
 
@@ -165,9 +156,9 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
-uint64_t ticks()
+u64 ticks()
 {
-	uint64_t low, high;
+	u64 low, high;
 	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
 	return (high << 32) | low;
 }

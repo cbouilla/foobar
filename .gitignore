@@ -105,3 +105,16 @@ opkg
 /solving/task_server.aux
 /solving/task_server.c
 /solving/task_server.out
+/preprocessing/doc.pdf
+/preprocessing/hasher.c
+/preprocessing/hasher.log
+/preprocessing/hasher.out
+/preprocessing/hasher.pdf
+/preprocessing/hasher.tex
+/preprocessing/preprocessing.h
+/preprocessing/preprocessing.log
+/preprocessing/preprocessing.o
+/preprocessing/preprocessing.out
+/preprocessing/preprocessing.pdf
+/preprocessing/preprocessing.tex
+/preprocessing/types.h

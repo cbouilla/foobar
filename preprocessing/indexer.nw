@@ -1,28 +1,19 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
+\noweboptions{webnumbering}
 
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
 \usepackage{xspace}
 \usepackage{hyperref}
 
-\def\noweb{{\tt noweb\/}}
-\newcommand{\join}{\bowtie}
-
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
-\newcommand{\NN}{\textsf{nanomsg}\xspace}
-\newcommand{\MPI}{\textsf{MPI}\xspace}
-\newcommand{\OMP}{\textsf{OpenMP}\xspace}
 
 \begin{document}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Hash File Indexer}
-\author{Charles Bouillaguet}
-
-\maketitle
+\setcounter{chapter}{6}
+\chapter{Hash File Indexer}
 
 This program builds an \textbf{index} from a sorted hash file. 
 
@@ -45,12 +36,11 @@ fit in RAM, the index should.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <sys/time.h>
 #include <getopt.h>
-#include <inttypes.h>
 #include <err.h>
-#include <assert.h>
+
+#include "preprocessing.h"
 
 @ We again use a small function to measure the passage of time accurately.
 
@@ -100,6 +90,7 @@ if (optind != argc - 1)
 char *in_filename = argv[optind];
 printf("bulding index on %d bits\n", k);
 
+
 <<Open input/output files>>=
 FILE *f_in = fopen(in_filename, "r");
 if (f_in == NULL)
@@ -111,12 +102,13 @@ if (f_out == NULL)
 	err(1, "Cannot open %s for writing", out_filename);
 
 
-@ We must allocate space for the index. While it could be possible to use less
-(and write the index ``in flight''), this does not seem necessary.
+@ We must allocate space for the index. While it could be possible 
+to not keep the full index in memory (by writing in ``on the flight''),
+this does not seem necessary.
 
 <<Allocate memory>>=
-uint64_t I_size = (1 << k) + 1;
-uint32_t *I = malloc(I_size * sizeof(*I));
+u32 I_size = (1 << k) + 1;
+u32 *I = malloc(I_size * sizeof(*I));
 if (I == NULL)
 	err(1, "cannot alloc I");
 
@@ -126,11 +118,11 @@ iterate over possible prefixes to ensure that no ``holes'' happen.
 
 <<Build the index>>=
 <<Prepare the read buffer>>
-int hashes_read = 0;
+u32 hashes_read = 0;
 bool EOF_flag = false;
-uint64_t h_prefix = 0;
+u64 h_prefix = 0;
 I[0] = 0;
-for (uint64_t prefix = 0; prefix < (1 << k); prefix++) {
+for (u64 prefix = 0; prefix < (1u << k); prefix++) {
 	while (!EOF_flag && (h_prefix <= prefix)) {
 		<<Get next hash value [[h]]; Set [[EOF_flag]] when no more data can be read>>
 		hashes_read++;
@@ -145,10 +137,10 @@ of the next unread.
 
 
 <<Prepare the read buffer>>=
-size_t size = 0;
-size_t ptr = 0;
-static const int BUFFER_SIZE = 131072;
-uint64_t *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
+u32 size = 0;
+u32 ptr = 0;
+static const u32 BUFFER_SIZE = 131072;
+u64 *buffer = malloc(BUFFER_SIZE * sizeof(*buffer));
 if (buffer == NULL)
 	err(1, "cannot allocate buffer");
 double start = wtime();
@@ -169,15 +161,15 @@ if (ptr >= size) {
 	}
 	ptr = 0;
 }
-uint64_t h = buffer[ptr++];
+u64 h = buffer[ptr++];
 h_prefix = h >> (64 - k); 
 
 
 <<Write the index>>=
 printf("\nWriting...\n");
-size_t check = fwrite(I, sizeof(*I), I_size, f_out);
+u32 check = fwrite(I, sizeof(*I), I_size, f_out);
 if (check != (size_t) I_size)
-	err(1, "fwrite inconsistency : %zd vs %" PRId64, check, I_size);
+	err(1, "fwrite inconsistency : %d vs %d", check, I_size);
 fclose(f_out);
 
 @

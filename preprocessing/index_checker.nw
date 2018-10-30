@@ -1,32 +1,20 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
+\noweboptions{webnumbering}
 
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
 \usepackage{xspace}
 \usepackage{hyperref}
 
-\def\noweb{{\tt noweb\/}}
-\newcommand{\join}{\bowtie}
-
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
-\newcommand{\NN}{\textsf{nanomsg}\xspace}
-\newcommand{\MPI}{\textsf{MPI}\xspace}
-\newcommand{\OMP}{\textsf{OpenMP}\xspace}
-
 \begin{document}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Check Indexes}
-\author{Charles Bouillaguet}
-
-\maketitle
+\setcounter{chapter}{7}
+\chapter{Index Checker}
 
 This program reads an \textbf{index} and a sorted hash file, and verifies that the index is correct. 
-
-@ This program reads a single hash file produces the index. It takes the name of a file on the command-line.
 
 <<*>>=
 <<Header files to include>>
@@ -146,7 +134,7 @@ if (ptr >= size) {
 	ptr = 0;
 }
 uint64_t h = buffer[ptr++];
-printf("Read hash %016" PRIx64 "\n", h);
+// printf("Read hash %016" PRIx64 "\n", h);
 uint64_t h_prefix = h >> (64ull - k); 
 
 @

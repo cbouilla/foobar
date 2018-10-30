@@ -1,11 +1,10 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
 
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
 \usepackage{xspace}
 \usepackage{hyperref}
 
@@ -19,15 +18,11 @@
 
 \begin{document}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Sorter}
-\author{Charles Bouillaguet}
-
-\maketitle
+\setcounter{chapter}{3}
+\chapter{Sorter}
 
 This program sorts split dictionnary files, which are sequences of contiguous [[struct dict_t]] records.
-
-
-@ This program reads a dictionnary file, sorts it by hash, and rewrites it.
+It reads a dictionnary file, sorts it by hash, and rewrites it.
 
 <<*>>=
 <<Header files to include>>
@@ -37,16 +32,15 @@ This program sorts split dictionnary files, which are sequences of contiguous [[
 @ We need the usual standard headers.
 
 <<Header files to include>>=
-#define _XOPEN_SOURCE 500
+#define _XOPEN_SOURCE 500   /* strdup */
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include <string.h>
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include "hasher.h"
+
+#include "preprocessing.h"
 
 <<The main program>>=
 int main(int argc, char **argv)
@@ -54,8 +48,7 @@ int main(int argc, char **argv)
 	<<Process the command line>>
 	<<Load the dictionnary in [[dictionnary]]>>
 	<<Sort [[dictionnary]] by increasing hash>>
-	<<Write [[dictionnary]] in a temporary file>>
-	<<Replace the original with the temporary file>>
+	<<Write [[dictionnary]] to the [[.sorted]] file>>
 	exit(EXIT_SUCCESS);
 }
 
@@ -88,7 +81,7 @@ if (fclose(f_in))
 @ To actually perform the sort, we use the standard [[qsort]] function. It is
 not the fastest possible solution, but it is the simplest. We have to provide
 a comparison function for [[qsort]] and extra care has to be taken, because we
-cannot just substract the [[uint64_t]]. This is an extra source of inefficiency.
+cannot just substract the [[u64]]. This is an extra source of inefficiency.
 
 <<Auxiliary functions>>=
 int cmp(const void *a_, const void *b_)
@@ -104,29 +97,19 @@ qsort(dictionnary, n_entries, sizeof(*dictionnary), cmp);
 
 @ Once the dictionnary has been sorted in memory, it has to be written back
 down to the file system. To avoid erasing the original file, we write it down
-to \emph{another} file. Only when this has succeeded do we erase the original
-file and rename the new file.
+to \emph{another} file.
 
-<<Write [[dictionnary]] in a temporary file>>=
-int k = strlen(in_filename) + 6;
-char tmp_filename[k];
-sprintf(tmp_filename, "%s.sort", in_filename);
-FILE *f_out = fopen(tmp_filename, "w");
+<<Write [[dictionnary]] to the [[.sorted]] file>>=
+char *out_filename = strdup(in_filename);
+memcpy(out_filename + strlen(out_filename) - 8, "sorted", 7);
+FILE *f_out = fopen(out_filename, "w");
 if (f_out == NULL)
-	err(1, "cannot create temporary file %s", tmp_filename);
+	err(1, "cannot create output file %s", out_filename);
 check = fwrite(dictionnary, sizeof(*dictionnary), n_entries, f_out);
 if (check != (size_t) n_entries)
 	err(1, "fwrite inconsistensy %zd vs %d", check, n_entries);
 if (fclose(f_out))
-	err(1, "fclose %s", tmp_filename);
-
-@ Once the result has been safely writen, we replace the (unsorted) input file
-by renaming the temporary file. Fortunately, the standard [[rename]] function
-does exactly that.
-
-<<Replace the original with the temporary file>>=
-if (rename(tmp_filename, in_filename))
-	err(1, "rename failed");
+	err(1, "fclose %s", out_filename);
 
 @
 

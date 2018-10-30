@@ -13,12 +13,12 @@ This script runs all the preprocessing.
 # on how many bits are the preimage files split. This has no influence on the resulting computation.
 # small values yields too big dictionnaries. high values yields too many dictionnaries.
 # With approx 1Gb premage files, 2 is a reasonable choice.
-split_bits = 2
+split_bits = 8
 
 # number of most-significant bits of the hashes used to build the indexes.
 # relevant only for the quadratic algorithm.
 # Most be chosen such that |C| / (1 << index_bits) yields a slice that fits in L1.
-index_bits = 14
+index_bits = 18
 
 # number of CPU cores of this machine.
 cores = 4
@@ -29,8 +29,7 @@ L1_cache_size = 16384
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
 PREIMAGE_DIR = '../data/preimages'
 DICT_DIR = '../data/dict'
-TMP_HASH_DIR = '../data/tmphash'
-FULL_HASH_DIR = '../data/hash'
+HASH_DIR = '../data/hash'
 SPLITTER = './splitter'
 DICT_CHECKER = './dict_checker'
 SORTER = './sorter'
@@ -43,21 +42,25 @@ do_split = False
 check_split = False
 do_sort = False
 check_sort = False
-do_merge = False
+do_merge = True
 check_merge = False
-do_concat = False
-do_index = True
-check_index = True
+do_index = False
+check_index = False
 
 n_preimages = {}
 n_dict = {}
 n_hash = {}
 
+def ensure_dirs():
+    for i in range(1 << split_bits):
+        d = '{}/{:03x}'.format(DICT_DIR, i)
+        if not os.path.exists(d):
+            os.mkdir(d)
 
 def preimage_stats(verbose=True):
     for kind, kind_id in KINDS.items():
         total = 0
-        for file in glob.glob('{}/{}.*.work'.format(PREIMAGE_DIR, kind)):
+        for file in glob.glob('{}/{}.*'.format(PREIMAGE_DIR, kind)):
             total += os.path.getsize(file)
         n_preimages[kind] = total // 12
     if verbose:
@@ -69,9 +72,10 @@ def preimage_stats(verbose=True):
         print()
 
 def dict_stats(verbose=True):
-    for kind, kind_id in KINDS.items():
+    for kind in KINDS:
         total = 0
-        for file in glob.glob('{}/{}.*'.format(DICT_DIR, kind)):
+        for file in glob.glob('{}/*/{}.*.unsorted'.format(DICT_DIR, kind)):
+            print(file)
             total += os.path.getsize(file)
         n_dict[kind] = total // 20
     if verbose:
@@ -87,7 +91,7 @@ def dict_stats(verbose=True):
 def hash_stats(verbose=True):
     for kind, kind_id in KINDS.items():
         total = 0
-        for file in glob.glob('{}/{}.*'.format(TMP_HASH_DIR, kind)):
+        for file in glob.glob('{}/{}.*'.format(HASH_DIR, kind)):
             total += os.path.getsize(file)
         n_hash[kind] = total // 8
     if verbose:
@@ -105,17 +109,16 @@ def splitting():
     split all preimage files using [[split_bits]]
     """
     print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(split_bits))
-    mpi_n_process = 1 + (1 << split_bits) + 2 * cores
+    mpi_n_process = 2 + 2 * cores
     for kind, kind_id in KINDS.items():
-        files = glob.glob('{}/{}.*.work'.format(PREIMAGE_DIR, kind))
+        files = glob.glob('{}/{}*'.format(PREIMAGE_DIR, kind))
         for preimage in files:
-            args = ['mpirun', '-np', mpi_n_process, SPLITTER, '--kind', kind_id, 
-                    '--bits', split_bits, '--output-dir', DICT_DIR, preimage]
+            args = ['mpirun', '-np', mpi_n_process, SPLITTER, 
+                    '--partitioning-bits', split_bits, '--output-dir', DICT_DIR, preimage]
             print("    -> {}".format(" ".join(map(str, args))))
             subprocess.run(map(str, args)).check_returncode()
 
-def _do_sort(job):
-    _, file = job
+def _do_sort(file):
     args = [SORTER, file]
     print("    -> {}".format(" ".join(args)))
     subprocess.run(args).check_returncode()
@@ -126,15 +129,12 @@ def sorting():
     """
     print("2. Sorting (dictionaries -> dictionaries)")
     jobs = []
-    for kind, kind_id in KINDS.items():
-        for file in glob.glob('{}/{}.*'.format(DICT_DIR, kind)):
-            jobs.append((kind_id, file))
-    with multiprocessing.Pool(processes=1) as pool:
-        pool.map(_do_sort, jobs, chunksize=1)
+    for i in range(1 << split_bits):
+        for file in glob.glob('{}/{:03x}/*'.format(DICT_DIR, i)):
+            _do_sort(file)
 
-def _do_check_dict(job):
-    kind, file = job
-    args = [DICT_CHECKER, '--kind', str(kind), file]
+def _do_check_dict(file):
+    args = [DICT_CHECKER, '--partitioning-bits', str(split_bits), file]
     print("    -> {}".format(" ".join(args)))
     subprocess.run(args).check_returncode()
 
@@ -144,21 +144,19 @@ def check_dict():
     """
     print("X. Checking dictionaries")
     jobs = []
-    for kind, kind_id in KINDS.items():
-        for file in glob.glob('{}/{}.*'.format(DICT_DIR, kind)):
-            jobs.append((kind_id, file))
-    with multiprocessing.Pool(processes=1) as pool:
-        pool.map(_do_check_dict, jobs, chunksize=1)
-
+    for i in range(1 << split_bits):
+        for file in glob.glob('{}/{:03x}/*'.format(DICT_DIR, i)):
+            _do_check_dict(file)
+    
 
 
 def merged_hashfile_name(kind, i):
-    return '{}/{}.hash.{}'.format(TMP_HASH_DIR, kind, i)
+    return '{}/{}.{:03x}'.format(HASH_DIR, kind, i)
 
 def _do_merge(job):
-    kind, bucket = job
-    input_files = glob.glob('{}/{}.*.dict.{}'.format(DICT_DIR, kind, bucket))
-    output_file = merged_hashfile_name(kind, bucket)
+    kind, i = job
+    input_files = glob.glob('{}/{:03x}/{}.*.sorted'.format(DICT_DIR, i, kind))
+    output_file = merged_hashfile_name(kind, i)
     args = [MERGER, '--output', output_file] + input_files
     print("    -> {}".format(" ".join(args)))
     subprocess.run(args).check_returncode()            
@@ -194,32 +192,9 @@ def check_hash():
 
 
 
-def _do_concat(accumulator, files):
-    args = 'cat {} > {}'.format(' '.join(files), accumulator)
-    print("    -> {}".format(args))
-    subprocess.run(args, shell=True).check_returncode()
-
-def concat_hash():
-    """
-    Concatenate all hash files (in order).
-    """
-    print("4. Concatenating hashes")
-    jobs = []
-    for kind, kind_id in KINDS.items():
-        accumulator = "{}/{}.fullhash".format(FULL_HASH_DIR, kind)
-        files = [merged_hashfile_name(kind, i) for i in range(1 << split_bits)]
-        _do_concat(accumulator, files)
-
-
-
 def suggest_indexing():
     C = max(n_hash.values())
-    return int(math.floor(math.log(C, 2) - math.log(L1_cache_size, 2)))
-
-def _do_concat(accumulator, files):
-    args = 'cat {} > {}'.format(' '.join(files), accumulator)
-    print("    -> {}".format(args))
-    subprocess.run(args, shell=True).check_returncode()
+    return int(math.floor(math.log(C, 2) - split_bits - math.log(L1_cache_size, 2)))
 
 def indexing():
     """
@@ -245,7 +220,7 @@ def verify_index():
         subprocess.run(map(str, args)).check_returncode()
 
 
-
+ensure_dirs()
 preimage_stats()
 if do_split:
     splitting()
@@ -261,8 +236,6 @@ if do_merge:
 hash_stats()
 if check_merge:
     check_hash()
-if do_concat:
-    concat_hash()
 suggestion = suggest_indexing()
 if index_bits != suggestion:
     print("WARNING : YOU CHOSE A SUBOPTIMAL INDEX WIDTH (you: {}, my suggestion: {})".format(index_bits, suggestion))

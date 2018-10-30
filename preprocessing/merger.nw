@@ -1,37 +1,23 @@
-\documentclass{article}
+\documentclass{book}
 \usepackage{noweb}
 
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{textcomp}
 \usepackage{parskip}
 \usepackage{geometry}
-\usepackage{tikz}
 \usepackage{xspace}
 \usepackage{hyperref}
 
-\def\noweb{{\tt noweb\/}}
-\newcommand{\join}{\bowtie}
-
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
-\newcommand{\NN}{\textsf{nanomsg}\xspace}
-\newcommand{\MPI}{\textsf{MPI}\xspace}
-\newcommand{\OMP}{\textsf{OpenMP}\xspace}
-
 \begin{document}
 
-\title{Tools for the \texttt{FOOBAR}-modified Miner: Merger}
-\author{Charles Bouillaguet}
+\setcounter{chapter}{4}
+\chapter{Merger}
 
-\maketitle
-
-This program takes sorted split dictionnary files and writes down a
-\textbf{hash file} (i.e. a sequence of [[uint64_t]]) in ascending order,
+This program takes (sorted) sub-dictionnary files and writes down a
+\textbf{hash file} (i.e. a sequence of [[u64]]) in ascending order,
 without duplicates. It mostly implements a multi-way merge. This process is
-certainly IO bound, yet we did not make any effort to overlap IO and
+certainly IO bound. We did not make any effort to overlap IO and
 computation.
-
-
-@ This program reads many dictionnary file and merge/deduplicate them.
 
 <<*>>=
 <<Header files to include>>
@@ -52,7 +38,8 @@ computation.
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/time.h>
-#include "hasher.h"
+
+#include "preprocessing.h"
 
 @ We use a small function to measure the passage of time accurately.
 
@@ -97,12 +84,13 @@ if (out_filename == NULL)
 	errx(1, "missing --output FILE");
 if (optind >= argc)
 	errx(1, "missing input filenames");
-int P = argc - optind;
+u32 P = argc - optind;
 char **in_filenames = argv + optind;
+
 
 <<Open all files>>=
 FILE *f_in[P];
-for (int i = 0; i < P; i++) {
+for (u32 i = 0; i < P; i++) {
 	f_in[i] = fopen(in_filenames[i], "r");
 	if (f_in[i] == NULL)
 		err(1, "cannot open %s for reading", in_filenames[i]);
@@ -113,7 +101,7 @@ if (f_out == NULL)
 	err(1, "cannot open %s for writing", out_filename);
 
 <<Close all files>>=
-for (int i = 0; i < P; i++)
+for (u32 i = 0; i < P; i++)
 	if (fclose(f_in[i]))
 		err(1, "fclose on %s", in_filenames[i]);
 if (fclose(f_out))
@@ -139,7 +127,7 @@ the end of each files. At all times, the ``champion'' (smallest hash) is in
 [[Q]] and its file of origin is in [[i]].
 
 <<Merge input dictionnaries>>=
-static const uint64_t SENTINEL = 0xffffffffffffffffull;
+static const u64 SENTINEL = 0xffffffffffffffffull;
 <<Allocate buffers>>
 <<Initialize the tournament tree>>
 while (Q.hash < SENTINEL) {
@@ -156,22 +144,22 @@ and one output buffer. We must be careful that these buffer may not be full,
 and will be partially consumed.
 
 <<Allocate buffers>>=
-static const int OUT_BUFFER_SIZE = 131072;
-static const int IN_BUFFER_SIZE = 52428;
+static const u32 OUT_BUFFER_SIZE = 131072;
+static const u32 IN_BUFFER_SIZE = 52428;
 struct dict_t *buffer_in[P];
-int size_in[P], ptr_in[P];
-for (int i = 0; i < P; i++) {
+u32 size_in[P], ptr_in[P];
+for (u32 i = 0; i < P; i++) {
 	buffer_in[i] = malloc(IN_BUFFER_SIZE * sizeof(struct dict_t));
 	if (buffer_in[i] == NULL)
 		err(1, "malloc failed (input buffer)");
 	size_in[i] = 0;
 	ptr_in[i] = 0;
 }
-uint64_t *buffer_out = malloc(OUT_BUFFER_SIZE * sizeof(uint64_t));
+u64 *buffer_out = malloc(OUT_BUFFER_SIZE * sizeof(*buffer_out));
 if (buffer_out == NULL)
 	err(1, "malloc failed (output buffer)");
-int ptr_out = 0;
-int64_t flushed = 0;
+u32 ptr_out = 0;
+u32 flushed = 0;
 double start = wtime();
 
 @ Duplicates are detected on output. We simply keep the previous value
@@ -181,7 +169,6 @@ inputs we used to build the tree! Writing the sorted elements to the output
 file is easy. We take the opportunity to implement some verbosity.
 
 <<Append [[Q]] to the output buffer if not duplicate>>=
-// printf("taking %016" PRIx64 " from file %d\n", Q, i);
 if (ptr_out == OUT_BUFFER_SIZE) {
 	<<Flush the output buffer to disk>>
 }
@@ -189,10 +176,11 @@ if (Q.hash != Q_prev.hash) {
 	buffer_out[ptr_out++] = Q.hash;
 } else {
 	/* diagnose duplicate */
-	if ((Q.preimage.counter == Q_prev.preimage.counter) && (Q.preimage.nonce == Q_prev.preimage.nonce))
-		full_dupes++;
+	if ((Q.preimage.counter == Q_prev.preimage.counter) 
+				&& (Q.preimage.nonce == Q_prev.preimage.nonce))
+		duplicates++;
 	else
-		partial_dupes++;
+		collisions++;
 }
 Q_prev = Q;
 
@@ -205,29 +193,31 @@ if (check_out != (size_t) ptr_out)
 ptr_out = 0;
 double mhash = flushed * 1e-6;
 double rate = mhash / (wtime() - start);
-printf("\rItem processed: %.1fM (%.1fM/s)  hash collisions=%d,   duplicate preimages=%d,   IN=%.1f Mb/s   OUT =%.1f Mb/s", 
-	mhash, rate, partial_dupes, full_dupes, 20*rate, 8*rate);
+printf("\rItem processed: %.1fM (%.1fM/s) ", mhash, rate);
+printf("hash collisions=%d, duplicate=%d, ", collisions, duplicates - P);
+printf("IN=%.1f Mb/s   OUT =%.1f Mb/s", 20*rate, 8*rate);
 fflush(stdout);
-
-
 
 @ To bootstrap the tree construction, we use a trick: we create $P$ fake
 records whose hash is set to zero, each supposedly originating from a
-different input file. We will \emph{not} write these special zero hashes to
-the output. But ``extracting" them from the tree will cause a fresh, actual
-value to be fetched from each input file.
+different input file. Because the initial value of [[prev]] is also zero, 
+the deduplication mecanism ensures that these special zero hashes will not 
+be pushed to the output. But ``extracting" them from the tree will cause a fresh, 
+actual value to be fetched from each input file.
+
+This scheme will cause $P$ artifical duplicates, that we eliminate when reporting.
 
 <<Initialize the tournament tree>>=
 struct dict_t loser[P];
-int origin[P];
-for (int j = 0; j < P; j++) {
+u32 origin[P];
+for (u32 j = 0; j < P; j++) {
 	loser[j].hash = 0;
 	loser[j].preimage.counter = 0;
 	loser[j].preimage.nonce = 0;
 	origin[j] = j;
 }
 struct dict_t Q = {0, {0, 0}}, Q_prev = {0, {0, 0}};
-int i = 0, partial_dupes = -P, full_dupes = -P;
+u32 i = 0, collisions = 0, duplicates = 0;
 
 @ Now that the top of the tree has been dealt with, we must replace it with a
 new value from input buffer $i$. First, we take care of the fact that this
@@ -235,7 +225,6 @@ buffer may be empty.
 
 <<If the [[i]]-th input buffer is empty, try to refill it>>=
 if (ptr_in[i] == size_in[i]) {
-	// printf("reading from %s\n", in_filenames[i]);
 	size_in[i] = fread(buffer_in[i], sizeof(struct dict_t), IN_BUFFER_SIZE, f_in[i]);
 	if (ferror(f_in[i]))
 		err(1, "fread on %s", in_filenames[i]);
@@ -255,11 +244,8 @@ tournament tree. At this stage [[Q]] is no longer the champion.
 
 <<Update tournament tree ; update [[Q]] and [[i]]>>=
 int T = (P + i) / 2;
-//printf("New value read from file %d: %016" PRIx64 ", injected in node %d\n", i, Q, T);
 while (T >= 1) {
-	//printf("update : comparing Q=%016" PRIx64 " with LOSER[%d]=%016" PRIx64" (origin=%d)\n", Q, T, loser[T], origin[T]);
 	if (loser[T].hash < Q.hash) {
-		//printf("\tSWAP\n");
 		struct dict_t foo = loser[T];
 		int bar = origin[T];
 		loser[T] = Q;
@@ -269,11 +255,5 @@ while (T >= 1) {
 	}
 	T = T / 2;
 }
-//printf("State: Q = %016" PRIx64", i = %d\n", Q, i);
-//for (int j = 0; j < P; j++)
-//	printf("LOSER[%d] = %016" PRIx64 " / ORIGIN[%d] = %d\n", j, loser[j], j, origin[j]);
-//printf("=====================\n");
 
-@
-
-\end{document}
+@ \end{document}
