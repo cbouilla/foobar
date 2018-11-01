@@ -366,7 +366,10 @@ MPI_Send(NULL, 0, MPI_INT, 1, EOF_TAG, MPI_COMM_WORLD);
 \section{Writing sub-Dictionnaries to Disk}
 
 It remains to describe the writer. The writer sequentialize writes, 
-and deals with all the files. Each writer writes a single split dictionnary.
+and deals with all the files. We just open the $2^k$ files simultaneously. 
+For somewhat largish value of $k$, this may hit the OS restrictions. 
+On my linux laptop, the default limit is 1024. Using [[ulimit -n 2048]] 
+fixes the problem.
 
 <<Writer>>=
 u32 n_eof = 0;

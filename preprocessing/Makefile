@@ -2,9 +2,9 @@ CFLAGS = -std=c99 -g -Wall -Wextra -Werror -O3 -I.
 
 all: programs doc.pdf
 
-programs: splitter dict_checker sorter merger hash_checker indexer index_checker #forger
+programs: splitter dict_checker sorter merger hash_checker forger # indexer index_checker
 
-doc.pdf: preprocessing.pdf hasher.pdf splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf index_checker.pdf #forger.pdf
+doc.pdf: preprocessing.pdf hasher.pdf splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf forger.pdf #indexer.pdf index_checker.pdf 
 	pdftk $^ cat output $@
 
 hasher.o: hasher.c hasher.h preprocessing.h ../types.h

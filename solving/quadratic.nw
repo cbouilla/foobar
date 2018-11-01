@@ -61,35 +61,6 @@ struct task_result_t * quadratic_task(const char *hash_dir, struct task_t *task)
 }
 
 
-<<Display timing results>>=
-double wall = wtime() - start;
-u64 cycles = ticks() - clock;
-double n_pairs = (1.0 * size[1]) * (1.0 * size[2]);
-double rate = n_pairs / wall;
-double inv_throughput = cycles / n_pairs;
-printf("Wall time: %.1fs, %" PRId64 " CPU ticks.\n", wall, cycles);
-printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
-
-
-<<Display some info>>=
-	/* task-level */
-double mbytes = 8. * (size[0] + size[1] + size[2]) / 1048576.0;
-double mpairs = ((double) size[1]) * ((double) size[2]) / 1048576.0; 
-printf("\n");
-printf("Task volume : %.1fMbyte of hashes, %.1fMpair\n", mbytes, mpairs);
-printf("Exp. time : %.0fs\n", mpairs / 100);
-	/* block-level */
-double shared_slice = size[0] / grid_size;
-int hash_size = hashtable_size(grid_size);
-printf("Using l = %d\n", l);
-printf("Average block slice volume : %.0f bytes (%.0f hashes). |hash| = %d entries (%d bytes)\n", 
-	8 * shared_slice, shared_slice, hash_size, 8 * hash_size);
-	/* chunk-level */
-double kbytes = 8 * (size[0] + size[1] + size[2]) / grid_size / 1024.;
-mpairs = (size[1] / grid_size) * (size[2] / grid_size) / 1048576.; 
-printf("Average chunk volume : %.1fKbyte of hashes, %.3fMpair\n", kbytes, mpairs);
-printf("\n");
-
 @ The number of solutions of a task is not known in advance, but it should be 
 fairly small. We use a dynamic array to store them. Resizing is unlikely.
 	
@@ -168,7 +139,7 @@ we use a heuristic: we make sure that the subslice of $A$ has less
 than 512 hashes (this corresponds to a hash table fill of $0.25$).
 
 <<Determine the block size ($\ell$)>>=
-u32 l = floor(log2(size[0] / 512));
+u32 l = floor(log2(size[0] / 512)) - 1;
 u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
@@ -191,6 +162,31 @@ for (u32 kind = 0; kind < 3; kind++) {
 	index[kind][grid_size] = size[kind];
 }
 
+@ If requested, we are capable of displaying some information.
+
+<<Display some info>>=
+	/* task-level */
+printf("Task: |A|=%d,  |B|=%d,  |C|=%d\n", size[0], size[1], size[2]);
+double mbytes = 8. * (size[0] + size[1] + size[2]) / 1048576.0;
+double mpairs = ((double) size[1]) * ((double) size[2]) / 1048576.0; 
+printf("Task volume : %.1fMbyte of hashes, %.1fMpair\n", mbytes, mpairs);
+printf("Est. time : %.0fs\n", mpairs / 100);
+double logsols = log2(size[0]) + log2(size[1]) + log2(size[2]);
+printf("Est. #solutions : %g\n", pow(2, logsols - 64));
+	/* block-level */
+double shared_slice = size[0] / grid_size;
+int hash_size = hashtable_size(shared_slice);
+printf("Using l = %d\n", l);
+printf("Average block slice volume : %.0f bytes (%.0f hashes). |hash| = %d entries (%d bytes)\n", 
+	8 * shared_slice, shared_slice, hash_size, 8 * hash_size);
+	/* chunk-level */
+double kbytes = 8 * (size[0] + size[1] + size[2]) / grid_size / 1024.;
+mpairs = (size[1] / grid_size) * (size[2] / grid_size) / 1048576.; 
+printf("Average chunk volume : %.1fKbyte of hashes, %.3fMpair\n", kbytes, mpairs);
+printf("\n");
+
+
+
 @ \subsection{Processing Blocks and Chunks}
 
 In a CPU core, blocks are processed sequentially (on a GPU, many blocks would be 
@@ -201,15 +197,26 @@ test. Then, all chunks exploit this datastructure.
 <<Process all the blocks>>=
 for (u32 u = 0; u < grid_size; u++) {
 	if (verbose)
-		printf("\rBlock %d/%d\n", u, grid_size);
+		printf("Doing block %d/%d...", u, grid_size - 1);
 	<<Process block $u$>>
+	if (verbose) {
+		double wall = wtime() - start;
+		u64 cycles = ticks() - clock;
+		double n_pairs = (u + 1) * (1.0 * size[1] / grid_size) * (1.0 * size[2]);
+		double rate = n_pairs / wall;
+		double inv_throughput = cycles / n_pairs;
+		printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
+	}
+
 }
 
 <<Process block $u$>>=
-struct hash_table_t *D;
-const u32 A_lo = index[1][u];
-const u32 A_hi = index[1][u + 1];
-D = hashtable_build(slice[0], A_lo, A_hi);
+const u32 A_lo = index[0][u];
+const u32 A_hi = index[0][u + 1];
+struct hash_table_t *D = hashtable_build(slice[0], A_lo, A_hi);
+u32 *H = cuckoo_build(slice[0], A_lo, A_hi);
+if (verbose && H == NULL)
+	printf("Cuckoo failure: degraded mode !");
 for (u32 v = 0; v < grid_size; v++) {
 	<<Process chunk $(u, v)$>>
 }
@@ -225,19 +232,46 @@ const u32 B_lo = index[1][v];
 const u32 B_hi = index[1][v + 1];
 const u32 C_lo = index[2][u ^ v];
 const u32 C_hi = index[2][(u ^ v) + 1];
-//if (verbose)
-//	printf("Chunk (%d, %d) : [%d:%d] * [%d:%d]\n", u, v, B_lo, B_hi, C_lo, C_hi);
+if (H == NULL) {
+	<<Degraded probing>>
+} else {
+	<<two-staged probing>>
+}
+
+
+<<Degraded probing>>=
 for (u32 r = B_lo; r < B_hi; r++) {
 	const u64 x = slice[1][r];
 	for (u32 s = C_lo; s < C_hi; s++) {
 		const u64 y = slice[2][s];
-		<<Check pair $(x, y)$>>
+		if (hashtable_lookup(D, x ^ y)) {
+			<<Report $x, y$ as a solution>>
+		}
 	}
 }
 
-<<Check pair $(x, y)$>>=
-if (hashtable_lookup(D, x ^ y)) {
-	<<Report $x, y$ as a solution>>
+
+<<two-staged probing>>=
+for (u32 r = B_lo; r < B_hi; r++) {
+	const u64 x = slice[1][r];
+	for (u32 s = C_lo; s < C_hi; s++) {
+		const u64 y = slice[2][s];
+		const u64 z = x ^ y;
+		if (cuckoo_lookup(H, z) && hashtable_lookup(D, z)) {
+			<<Report $x, y$ as a solution>>
+		}
+	}
 }
+
+
+<<Display timing results>>=
+double wall = wtime() - start;
+u64 cycles = ticks() - clock;
+double n_pairs = (1.0 * size[1]) * (1.0 * size[2]);
+double rate = n_pairs / wall;
+double inv_throughput = cycles / n_pairs;
+printf("Wall time: %.1fs, %" PRId64 " CPU ticks.\n", wall, cycles);
+printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
+
 
 @ \end{document}
