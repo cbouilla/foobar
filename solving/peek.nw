@@ -1,47 +1,34 @@
-\documentclass{article}
+\documentclass{book}
 
+\usepackage{geometry}
 \usepackage{noweb}
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{parskip}
-%\usepackage[pdftex]{hyperref}
-\def\cweb{{\tt noweb\/}}
-\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}}
+\usepackage{xspace}
+\usepackage{hyperref}
 
 \begin{document}
 
-\title{An Application-Agnostic Task Server \\ (Peeking through solutions) }
-\author{Charles Bouillaguet}
+\setcounter{chapter}{5}
+\chapter{Peeking Through Solutions}
 
-\maketitle
-
-@ \section{Introduction}
 
 This program demonstrates the ability to read the journal file during the
 course of a long-running computation. This program does not do much; it just
 computes the total size of all the tasks' results. The program has the usual
 structure:
 
-<<peek.c>>=
+<<*>>=
 #define _XOPEN_SOURCE 500
-<<Header files to include>>
-<<Global variables>>
-<<The main program>>
-
-<<Header...>>=
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <getopt.h>
 #include <err.h>
+
+#include "common.h"
 #include "server.h"
 
-
-<<Global...>>=
-int total_result_size = 0;
-double total_time = 0.0;
-int n_tasks = 0;
-
-<<The main...>>=
 int main(int argc, char **argv)
 {
         <<Process the command line>>
@@ -49,7 +36,7 @@ int main(int argc, char **argv)
         <<Report>>
 }
 
-@ Each task result is read from the journal, and the following statistics are.
+@ Each task result is read from the journal, and the following statistics are accumulated.
 
 <<Accumulate statistics>>=
 total_time += task.completion_time - task.start_time;
@@ -58,39 +45,27 @@ n_tasks++;
 
 @ The only command-line argument is the name of the journal file.
 
-<<Process the command...>>=
-struct option longopts[2] = {
-	{"journal", required_argument, NULL, 'j'},
-	{NULL, 0, NULL, 0}
-};
-char *journal_filename = NULL;
-char ch;
-while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
-    	switch (ch) {
-	case 'j':
-		journal_filename = optarg;
-		break;
-	default:
-		errx(1, "Unknown option\n");
-	}
-}
-if (journal_filename == NULL)
-	errx(1, "missing required option --journal=...");
-
+<<Process the command line>>=
+if (argc != 2)
+	errx(1, "missing journal filename");
+char *journal_filename = argv[1];
 
 @ Now the ``meat'', so to say, of the program. We open the journal and read
 it. This is not very DRY with respect to the code of the server. Here, we
 ignore the actual content of task's payloads.
 
-<<Parse the journal...>>=
+<<Parse the journal file>>=
+u64 total_result_size = 0;
+double total_time = 0.0;
+u32 n_tasks = 0;
 FILE *f = fopen(journal_filename, "r");
 if (!f)
 	err(1, "opening %s", journal_filename);
 while (1) {
-	<<Read a [[task_msg_t]]...>>
+	<<Read a [[task_msg_t]]; if [[EOF]] then exit the loop>>
 	<<Read the [[hostname]]>>
 	<<Read a [[result_t]] and skip the payload>>
-	<<Accumulate...>>
+	<<Accumulate statistics>>
 }
 fclose(f);
 
@@ -100,7 +75,7 @@ struct task_msg_t task;
 if (fread(&task, sizeof(task), 1, f) != 1) {
 	if (feof(f))
 		break;
-	else 
+	else
 		err(1, "reading journal file");
 }
 
@@ -119,13 +94,11 @@ if (fread(&result, sizeof(result), 1, f) != 1)
 if (fseek(f, result.size, SEEK_CUR))
 	err(1, "fseek, skipping over payload");
 
-<<dump>>=
-printf("%d;%s;%.1f;%.1f\n", record.id, hostname, record.start_time, record.duration);
 
 <<Report>>=
 fprintf(stderr, "Read %d tasks.\n", n_tasks);
 fprintf(stderr, "%.1fs s in computation.\n", total_time);
-fprintf(stderr, "%d bytes of results.\n", total_result_size);
+fprintf(stderr, "%" PRId64 " bytes of results.\n", total_result_size);
 return(EXIT_SUCCESS);
 
 @

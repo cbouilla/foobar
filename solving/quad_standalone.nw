@@ -28,7 +28,7 @@ This file describes a standalone program that solves whole instances using the q
 #include "datastructures.h"
 
 /* in quadratic.c */
-struct task_result_t * quadratic_task(const char *hash_dir, struct task_t *task);
+struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task);
 
 <<The main function>>
 
@@ -44,7 +44,7 @@ int main(int argc, char **argv)
 
 
 <<Process the command line>>=
-struct option longopts[4] = {
+struct option longopts[3] = {
 	{"partitioning-bits", required_argument, NULL, 'k'},
 	{"hash-dir", required_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0}
@@ -74,7 +74,7 @@ if (hash_dir == NULL)
 u32 problem_size = 1 << k;
 for (u32 i = 0; i < problem_size; i++)
 	for (u32 j = 0; j < problem_size; j++) {
-		struct task_t task;
+		struct task_id_t task;
 		task.k = k;
 		task.idx[0] = i;
 		task.idx[1] = j;

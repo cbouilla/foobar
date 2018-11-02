@@ -178,7 +178,10 @@ static inline bool cuckoo_lookup(const u32 *H, const u64 x)
 	return (probe1 == x_low) || (probe2 == x_low);
 }
 
-@ The array os disposed of using [[free]], and built as follows.
+@ The array os disposed of using [[free]], and built as follows. This is not the
+standard algorithm, because we cannot affort to change hash functions. We 
+therefore randomize the insertion process: if both slots are occupied, we pick
+at random the slot that will be expelled.
 
 <<Public functions>>=
 u32 * cuckoo_build(u64 * const L, u32 lo, u32 hi)
@@ -303,7 +306,5 @@ static inline bool eight_parallel_cuckoo_lookup(const u32 *H, const __m256i *x)
 	     | four_parallel_cuckoo_lookup(H, x[4], x[5], x[6], x[7]);
 }
 
-//const __m256i x0, const __m256i x1, const __m256i x2, const __m256i x3,
-	//const __m256i x4, const __m256i x5, const __m256i x6, const __m256i x7)
 
 @ \end{document}

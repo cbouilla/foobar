@@ -19,8 +19,8 @@
 Given tree lists $A, B$ and $C$ (whose size are also denoted by $A, B$ and $C$), 
 we wish to find all the triples $(i,j,k)$ such that $A[i] \oplus B[j] \oplus C[k] = 0$. 
 It is assumed that the lists are sorted. The elements of the lists are bitstrings. 
-More precisely, the \emph{actual} problem solved by our codes finds pairs $(x, y)$
-such that $x \in A, y \in B$ and $x \oplus y \in C$.
+More precisely, the \emph{actual} problem solved by our codes finds triplets $(x, y, z)$
+such that $x \in A, y \in B$ and $z \in C$ (in principle, $z = x \oplus y$).
 
 Given an integer $k$, we denote by $L^{[i]}$ the subset of $L$ formed by all
 the elements of $L$ whose $k$-bit prefix is $i$. Because $L$ is sorted, it is in
@@ -104,7 +104,7 @@ The workers may use any algorithm.
 
 \section{Processing Tasks}
 
-A task-processing function takes a task description and find all the solution pairs. A 
+A task-processing function takes a task description and find all the solution triplets. A 
 [[struct task_t]] contains the prefix length $k$ and a three-dimensional index,
 with the constraint that [[idx[0] ^ idx[1] ^ idx[1] == 0]]). In fact, only the first two 
 components are mandatory, but it is slighlty easier this way.
@@ -117,13 +117,13 @@ components are mandatory, but it is slighlty easier this way.
 <<Functions declarations>>
 
 <<Type definitions>>=
-struct task_t {
+struct task_id_t {
 	u32 k;
 	u32 idx[3];
 };
 
 struct solution_t {
-	u64 x, y;
+	u64 x, y, z;
 };
 
 

@@ -1,6 +1,6 @@
-\documentclass{article}
+\documentclass{book}
 
-\usepackage[a4paper]{geometry}
+\usepackage[a4paper,vmargin=1in]{geometry}
 \usepackage{noweb}
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{parskip}
@@ -11,21 +11,18 @@
 
 \begin{document}
 
-\title{An Application-Agnostic Task Server \\ Demonstration Client }
-\author{Charles Bouillaguet}
-
-\maketitle
+\setcounter{chapter}{4}
+\chapter{A client for the Quadratic Algorithm}
 
 \section{Introduction}
 
-This sample client does nothing but interaction with the
-server. Familiarity with the server and the communication protocol is assumed.
+This client feeds tasks to the quadratic algorithm. 
+Familiarity with the server and the communication protocol is assumed.
 
 The client has the usual structure :
 
 <<*>>=
 <<Header files to include>>
-<<Actual work function>>
 <<The main program>>
 
 <<Header files to include>>=
@@ -39,22 +36,15 @@ The client has the usual structure :
 #include <err.h>
 #include <nanomsg/nn.h>
 #include <nanomsg/reqrep.h>
+
+#include "common.h"
 #include "server.h"
 
-@ The ``actual work function'' takes a task [[id]] and returns a result, which
-is just a sequence of bytes. This demonstration doesnt perform any actual
-work, and just computes $[[r]] \gets 4 [[id]] + 3$. It allocates space to
-store the result and returns its size.
+/* in quadratic.c */
+struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task);
 
-<<Actual work function>>=
-void work(int task_id, int *size, void **result)
-{
-	*size = sizeof(int);
-	int *r = malloc(*size);
-	*r = 4 * task_id + 3;
-	*result = (void *) r;
-}
 
+@
 
 <<The main program>>=
 int main(int argc, char **argv)
@@ -68,16 +58,26 @@ int main(int argc, char **argv)
 @ The only command-line argument is the address of the server.
 
 <<Process the command line>>=
-struct option longopts[2] = {
+struct option longopts[4] = {
 	{"server-address", required_argument, NULL, 'a'},
+	{"partitioning-bits", required_argument, NULL, 'k'},
+	{"hash-dir", required_argument, NULL, 'h'},
 	{NULL, 0, NULL, 0}
 };
 char *server_address = NULL;
+char *hash_dir = NULL;
+i32 k = -1;
 char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
 	case 'a':
 		server_address = optarg;
+		break;
+	case 'k':
+		k = atoi(optarg);
+		break;
+	case 'h':
+		hash_dir = optarg;
 		break;
 	default:
 		errx(1, "Unknown option\n");
@@ -85,6 +85,10 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 }
 if (server_address == NULL)
 	errx(1, "missing required option --server-address");
+if (k < 0)
+	errx(1, "missing required option --partitioning bits");
+if (hash_dir == NULL)
+	errx(1, "missing required option --hash-dir");
 
 
 @ Because we are in the non-static part of the infrastructure, we do not
@@ -101,7 +105,7 @@ if (nn_connect(socket, server_address) < 0)
 
 
 @ We are now ready for the client loop: ask for work, do it, send
-result. Simulate timeout in 50\% of the cases.
+result.
 
 <<Main client loop>>=
 <<Send ``Hello'' message>>
@@ -110,10 +114,6 @@ while (1) {
 	if (task_msg->id < 0)
 		break;
 	printf("got id=%d\n", task_msg->id);
-	if (rand() & 0x01) {
-		printf("oops, timeout\n");
-		sleep(2);
-	}
 	<<Run the task>>
 	<<Send back result message>>
 	<<Release [[result]] and both messages>>
@@ -123,9 +123,18 @@ while (1) {
 for giving us back the result. The [[result]] will be [[free]]d later.
 
 <<Run the task>>=
-void *result;
-int result_size;
-work(task_msg->id, &result_size, &result);
+u32 problem_size = 1 << k;
+u32 id = task_msg->id;
+u32 i = id / problem_size;
+u32 j = id % problem_size;
+struct task_id_t task;
+task.k = k;
+task.idx[0] = i;
+task.idx[1] = j;
+task.idx[2] = i ^ j;
+printf("quadratic task (%d, %d)\n", i, j);
+struct task_result_t *result = quadratic_task(hash_dir, &task);
+
 
 @ The ``Hello" message is the first that a client should send. It contains the
 hostname.
@@ -148,7 +157,9 @@ int task_msg_size = nn_recv(socket, &task_msg, NN_MSG, 0);
 if (task_msg_size < 0)
 	errx(1, "nn_recv : %s\n", nn_strerror(nn_errno()));
 
+
 <<Release [[result]] and both messages>>=
+free(result->solutions);
 free(result);
 free(response_msg);
 nn_freemsg(task_msg);
@@ -157,11 +168,12 @@ nn_freemsg(task_msg);
 @ To return the result to the server, the client must prepare a message encapsulating the result.
 
 <<Send back result message>>=
-int response_size = task_msg_size + sizeof(int) + result_size;
+u32 result_size = 3 * sizeof(u64) * result->size;
+u32 response_size = task_msg_size + sizeof(int) + result_size;
 char *response_msg = malloc(response_size);
 memcpy(response_msg, task_msg, task_msg_size);
-memcpy(response_msg + task_msg_size, &result_size, sizeof(int));
-memcpy(response_msg + task_msg_size + sizeof(int), result, result_size);
+memcpy(response_msg + task_msg_size, &result_size, sizeof(u32));
+memcpy(response_msg + task_msg_size + sizeof(u32), result->solutions, result_size);
 if (nn_send(socket, response_msg, response_size, 0) < 0)
 	errx(1, "nn_send : %s\n", nn_strerror(nn_errno()));
 

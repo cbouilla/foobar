@@ -79,6 +79,8 @@ other programs.
 #include <sys/time.h>
 #include <string.h>
 #include <assert.h>
+
+#include "common.h"
 #include "server.h"
 
 @ Also inevitable, and rather boring, is the processing of command-line
@@ -324,16 +326,18 @@ If the server has no more tasks to dispatch, it sends a task id of $-1$,
 upon which clients exit.
 
 <<server.h>>=
+#include "../types.h"
+
 struct task_msg_t {
-	int id;
+	i32 id;
 	double start_time;
 	double completion_time;
-	int hostname_length;
+	u32 hostname_length;
 	char hostname[];
 };
 
 struct result_t {
-	int size;
+	u32 size;
 	char payload[];
 };
 
