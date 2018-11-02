@@ -1,4 +1,4 @@
-CFLAGS = -std=c99 -g -Wall -Wextra -O3 -I/usr/local/include -Werror
+CFLAGS = -std=c11 -g -Wall -mavx2 -Wextra -O3 -I/usr/local/include -Werror
 LDLIBS = -lm
 all: programs doc.pdf
 

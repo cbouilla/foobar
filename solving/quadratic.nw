@@ -1,11 +1,25 @@
 \documentclass{book}
 
-\usepackage[a4paper,vmargin=1in]{geometry}
+\usepackage{geometry}
 \usepackage{noweb}
 \usepackage{amsmath,amsfonts,amssymb}
 \usepackage{parskip}
 \usepackage{xspace}
 \usepackage{hyperref}
+
+% knuth-style algos
+\newcommand{\slug}{\hbox{\kern1.5pt\vrule width2.5pt height6pt depth1.5pt\kern1.5pt}}
+\def\xskip{\hskip 7pt plus 3pt minus 4pt}
+\newdimen\algindent
+\newif\ifitempar \itempartrue % normally true unless briefly set false
+\def\algindentset#1{\setbox0\hbox{{\bf #1.\kern.25em}}\algindent=\wd0\relax}
+\def\algbegin #1 #2{\algindentset{#21}\alg #1 #2} % when steps all have 1 digit
+\def\alg#1(#2). {\medbreak % Usage: \algbegin Algorithm A (algname). This...
+  \noindent{\bf#1}({\it#2\/}).\xskip\ignorespaces}
+\def\algstep#1.{\ifitempar\smallskip\noindent\else\itempartrue
+  \hskip-\parindent\fi
+  \hbox to\algindent{\bf\hfil #1.\kern.25em}%
+  \hangindent=\algindent\hangafter=1\ignorespaces}
 
 
 \begin{document}
@@ -23,6 +37,7 @@ solved, the original instance has been solved.
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -30,6 +45,9 @@ solved, the original instance has been solved.
 #include "common.h"
 #include "datastructures.h"
 
+<<Type definitions>>
+<<Forward declarations>>
+<<Auxiliary functions>>
 <<The main function>>
 
 @ \section{Processing Tasks}
@@ -41,9 +59,6 @@ that $x \in A^{[i]}, y \in B^{[j]}$ and $x \oplus y \in C^{[i \oplus j]}$.
 struct task_result_t * quadratic_task(const char *hash_dir, struct task_t *task)
 {
 	static const bool verbose = true;
-	double start = wtime();
-	u64 clock = ticks();
-	struct task_result_t *result;
 	<<Prepare [[result]]>>
 	<<Allocate memory and load data from disk>>
 	<<Determine the block size ($\ell$)>>
@@ -51,12 +66,10 @@ struct task_result_t * quadratic_task(const char *hash_dir, struct task_t *task)
 	if (verbose) {
 		<<Display some info>>
 	}
-
-	<<Process all the blocks>>
+	<<Prepare context>>
+	for (u32 u = 0; u < grid_size; u++)
+		process_block(&self, u, verbose);
 	<<Release memory>>
-	if (verbose) {
-		<<Display timing results>>
-	}
 	return result;
 }
 
@@ -66,7 +79,7 @@ fairly small. We use a dynamic array to store them. Resizing is unlikely.
 	
 
 <<Prepare [[result]]>>=
-result = malloc(sizeof(*result));
+struct task_result_t *result = malloc(sizeof(*result));
 if (result == NULL)
 	err(1, "cannot allocate task result object");
 result->size = 0;
@@ -75,18 +88,20 @@ result->solutions = malloc(result->capacity * sizeof(struct solution_t));
 
 @ When a new solution is found, it is appended to [[result]].
 
-<<Report $x, y$ as a solution>>=
-if (verbose)
+<<Auxiliary functions>>=
+void report_solution(struct task_result_t *result, u64 x, u64 y)
+{
 	printf("solution %016" PRIx64 " ^ %016" PRIx64 " in A\n", x, y);
-if (result->size == result->capacity) {
-	result->solutions = realloc(result->solutions, 2 * result->capacity);
-	if (result->solutions == NULL)
-		err(1, "failed to re-alloc solutions array");
-	result->capacity *= 2;
+	if (result->size == result->capacity) {
+		result->solutions = realloc(result->solutions, 2 * result->capacity);
+		if (result->solutions == NULL)
+			err(1, "failed to re-alloc solutions array");
+		result->capacity *= 2;
+	}
+	result->solutions[result->size].x = x;
+	result->solutions[result->size].y = y;
+	result->size++;
 }
-result->solutions[result->size].x = x;
-result->solutions[result->size].y = y;
-result->size++;
 
 @ \subsection{Preparations}
 
@@ -103,16 +118,24 @@ for (int kind = 0;  kind < 3; kind++) {
 	<<Open file and load hashes>>
 }
 
+
 <<Determine [[filename]]>>=
 char filename[255];
 char *kind_name[3] = {"foo", "bar", "foobar"};
 sprintf(filename, "%s/%s.%03x", hash_dir, kind_name[kind], task->idx[kind]);
 
+
+@ When allocating the memory, we enforce alignement 
+on a 64-byte boundary (the size of a cache line on x86 CPUs). 
+This allows aligned access for all possible sizes, including 256-bit registers.
+For this, we use [[aligned_alloc]], available in \textsf{C11}.
+
 <<Get file size and allocate memory>>=
 struct stat infos;
 if (stat(filename, &infos))
 	err(1, "fstat on %s", filename);
-slice[kind] = malloc(infos.st_size);
+u64 aligned_size = 64 * (1 + infos.st_size / 64);
+slice[kind] = aligned_alloc(64, aligned_size);
 if (slice[kind] == NULL)
 	err(1, "failed to allocate memory");
 size[kind] = infos.st_size / sizeof(u64);
@@ -144,23 +167,43 @@ u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
 delimits blocks. On $B$ and $C$, this delimits chunks. To perform this partition, 
-we must compute $\ell$-bit prefix boundaries.
+we must compute $\ell$-bit prefix boundaries. I have screwed this up so many times
+that I had to write down the precise algorithm.
+
+\algbegin Algorithm P (prefix index). Given a sorted array $A$ of size $n$, produce an
+index array $I$ such that entries of $A$ whose $k$-bit prefix is $x$ are located at 
+indices [[I[x]:I[x + 1]]].
+
+\algstep P1. [Iinitialization.] Set $x \gets 0, i \gets 0$ and $I[0] \gets 0$.
+
+\algstep P2. [Skip $x$.] While $i < N$ and $prefix(A[i]) = x$, increment $i$. 
+            (At the end of this step, we know that the slice of $A$ with prefix $x$
+            is at $I[x]:i$).
+
+\algstep P3. [End of $x$.] Set $I[x + 1] \gets i$. If $x = 2^k$, stop the algorithm.
+                           Otherwise, increment $x$ and return to step P2.
+
+\medskip
+
+Now let's translate this into code.
 
 <<Split the task into blocks and chunks>>=
 u32 index[3][grid_size + 1];
 for (u32 kind = 0; kind < 3; kind++) {
-	u32 h_prefix = 0;
 	index[kind][0] = 0;
 	u32 i = 0;
-	for (u32 prefix = 0; prefix < grid_size; prefix++) {
-		while ((i < size[kind]) && (h_prefix <= prefix)) {
-			h_prefix = slice[kind][i] >> (64ull - l);
+	for (u32 prefix = 0; prefix < grid_size; prefix++) {	
+		while ((i < size[kind]) && ((slice[kind][i] >> (64ull - l)) == prefix))
 			i++;
-		}
-		index[kind][prefix + 1] = i - 1;
+		index[kind][prefix + 1] = i;
 	}
-	index[kind][grid_size] = size[kind];
+	
+	/* verification */
+	for (u32 prefix = 0; prefix < grid_size; prefix++)
+		for (u32 it = index[kind][prefix]; it < index[kind][prefix + 1]; it++)
+			assert((slice[kind][it] >> (64ull - l)) == prefix);
 }
+
 
 @ If requested, we are capable of displaying some information.
 
@@ -170,7 +213,7 @@ printf("Task: |A|=%d,  |B|=%d,  |C|=%d\n", size[0], size[1], size[2]);
 double mbytes = 8. * (size[0] + size[1] + size[2]) / 1048576.0;
 double mpairs = ((double) size[1]) * ((double) size[2]) / 1048576.0; 
 printf("Task volume : %.1fMbyte of hashes, %.1fMpair\n", mbytes, mpairs);
-printf("Est. time : %.0fs\n", mpairs / 100);
+printf("Est. time : %.0fs\n", mpairs / 1000);
 double logsols = log2(size[0]) + log2(size[1]) + log2(size[2]);
 printf("Est. #solutions : %g\n", pow(2, logsols - 64));
 	/* block-level */
@@ -189,89 +232,183 @@ printf("\n");
 
 @ \subsection{Processing Blocks and Chunks}
 
-In a CPU core, blocks are processed sequentially (on a GPU, many blocks would be 
-processed simultaneously on all available multiprocessors). In a block, a small
-slice of $A$ is loaded into a datastructure $\mathcal{D}$ with fast membership 
-test. Then, all chunks exploit this datastructure.
+Most functions defined below need to access the slices, the indexes and the solutions. 
+Therefore, we encapsulate all this into a ``context'' object.
 
-<<Process all the blocks>>=
-for (u32 u = 0; u < grid_size; u++) {
+<<Type definitions>>=
+struct context_t {
+	struct task_result_t *result;
+	u32 grid_size;
+	u64 *slice[3];
+	u32 *index[3];
+	u32 *C_low;
+};
+
+<<Prepare context>>=
+struct context_t self;
+self.result = result;
+self.grid_size = grid_size;
+for (u32 i = 0; i < 3; i++) {
+	self.slice[i] = slice[i];
+	self.index[i] = index[i];
+}
+self.C_low = C_low;
+
+@ In a CPU core, blocks are processed sequentially (on a GPU, many blocks would be 
+processed simultaneously on all available multiprocessors). In a block, a small
+slice of $A$ is loaded into a datastructure with fast membership test. Then, all 
+chunks exploit this datastructure.
+
+The ``failsafe'' hash table is always built. It is used as a fallback when the
+cuckoo table cannot be built, or when the cuckoo table reports a solution
+(which may be a false positive).
+
+<<Forward declarations>>=
+void process_block(struct context_t *self, u32 u, bool verbose);
+static inline void hard_chunk(struct context_t *self, const struct hash_table_t *D, 
+       u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi);
+static inline void easy_chunk(struct context_t *self, const u32 *H,
+	const struct hash_table_t *D, u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi);
+<<Auxiliary functions>>=
+void process_block(struct context_t *self, u32 u, bool verbose)
+{
+	double start = wtime();
+	u64 clock = ticks();
+	u32 grid_size = self->grid_size;
 	if (verbose)
 		printf("Doing block %d/%d...", u, grid_size - 1);
-	<<Process block $u$>>
+	u64 *A = self->slice[0];
+	u32 *A_idx = self->index[0];
+	u32 *idx_B = self->index[1];
+	u32 *idx_C = self->index[2];
+	struct hash_table_t *D = hashtable_build(A, A_idx[u], A_idx[u + 1]);
+	u32 *H = cuckoo_build(A, A_idx[u], A_idx[u + 1]);
+	u64 n_pairs = 1;
+	for (u32 v = 0; v < grid_size; v++) {	
+		u32 B_lo = idx_B[v];
+		u32 B_hi = idx_B[v + 1];
+		u32 C_lo = idx_C[u ^ v];
+		u32 C_hi = idx_C[(u ^ v) + 1];
+		n_pairs += (B_hi - B_lo) * (C_hi - C_lo);
+		if (H == NULL)
+			hard_chunk(self, D, B_lo, B_hi, C_lo, C_hi);
+		else
+			easy_chunk(self, H, D, B_lo, B_hi, C_lo, C_hi);
+	}
 	if (verbose) {
 		double wall = wtime() - start;
 		u64 cycles = ticks() - clock;
-		double n_pairs = (u + 1) * (1.0 * size[1] / grid_size) * (1.0 * size[2]);
-		double rate = n_pairs / wall;
-		double inv_throughput = cycles / n_pairs;
+		double rate = (1.0 * n_pairs) / wall;
+		double inv_throughput = (1.0 * cycles) / n_pairs;
 		printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
 	}
-
+	hashtable_free(D);
+	free(H);
 }
-
-<<Process block $u$>>=
-const u32 A_lo = index[0][u];
-const u32 A_hi = index[0][u + 1];
-struct hash_table_t *D = hashtable_build(slice[0], A_lo, A_hi);
-u32 *H = cuckoo_build(slice[0], A_lo, A_hi);
-if (verbose && H == NULL)
-	printf("Cuckoo failure: degraded mode !");
-for (u32 v = 0; v < grid_size; v++) {
-	<<Process chunk $(u, v)$>>
-}
-hashtable_free(D);
 
 
 @ Let's get down to the nitty-gritty of processing a chunk. It comes down to
 probing the datastructure holding a small slice of $A$ will all pairs in the
 matching slices of $B$ and $C$.
 
-<<Process chunk $(u, v)$>>=
-const u32 B_lo = index[1][v];
-const u32 B_hi = index[1][v + 1];
-const u32 C_lo = index[2][u ^ v];
-const u32 C_hi = index[2][(u ^ v) + 1];
-if (H == NULL) {
-	<<Degraded probing>>
-} else {
-	<<two-staged probing>>
+The hard case is the easiest... to write-down.
+
+<<Auxiliary functions>>=
+static inline void hard_chunk(struct context_t *self, const struct hash_table_t *D, 
+       u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi)
+{
+	u64 *B = self->slice[1];
+	u64 *C = self->slice[2];
+	for (u32 r = B_lo; r < B_hi; r++)
+		for (u32 s = C_lo; s < C_hi; s++)
+			if (hashtable_lookup(D, B[r] ^ C[s]))
+				report_solution(self->result, B[r], C[s]);
 }
 
 
-<<Degraded probing>>=
-for (u32 r = B_lo; r < B_hi; r++) {
-	const u64 x = slice[1][r];
-	for (u32 s = C_lo; s < C_hi; s++) {
-		const u64 y = slice[2][s];
-		if (hashtable_lookup(D, x ^ y)) {
-			<<Report $x, y$ as a solution>>
+@ When the cuckoo table is available, then things... can be quite similar. 
+However, Because we would like to vectorize everything, we first define a 
+``rolled'' version, which will enable us to do some unrolling.
+
+<<Auxiliary functions>>=
+static inline void rolled_chunk(struct context_t *self, const u32 *H,
+		const struct hash_table_t *D, u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi)
+{
+	u64 *B = self->slice[1];
+	u64 *C = self->slice[2];
+	for (u32 r = B_lo; r < B_hi; r++)
+		for (u32 s = C_lo; s < C_hi; s++)
+			if (cuckoo_lookup(H, B[r] ^ C[s]))
+				if (hashtable_lookup(D, B[r] ^ C[s]))
+					report_solution(self->result, B[r], C[s]);
+}
+
+<<Auxiliary functions>>=
+static inline void easy_chunk(struct context_t *self, const u32 *H,
+		const struct hash_table_t *D, u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi)
+{
+	u32 C_lo_align = C_lo + (-C_lo & (8 * UNROLL - 1));
+	u32 C_hi_align = C_hi & (0xffffffff - (8 * UNROLL - 1));
+	rolled_chunk(self, H, D, B_lo, B_hi, C_lo, C_lo_align);
+	aligned_chunk(self, H, D, B_lo, B_hi, C_lo_align, C_hi_align);
+	rolled_chunk(self, H, D, B_lo, B_hi, C_hi_align, C_hi);
+}
+
+
+@ The most favorable situation for unrolling is when the [[C_lo]] index is a
+multiple of 8. This way, the next 8 [[u64]] are in the same cache line. And
+thanks to \textsf{AVX}'s 256-bit registers, we can load eight [[u32]] into a 
+single register and probe the cuckoo table 8 times in parallel.
+
+
+<<Forward declarations>>=
+#define UNROLL 8  /* must be a power of two */
+static inline void aligned_chunk(struct context_t *self, const u32 *H,
+		const struct hash_table_t *D, u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi);
+
+<<Auxiliary functions>>=
+static inline void aligned_chunk(struct context_t *self, const u32 *H,
+		const struct hash_table_t *D, u32 B_lo, u32 B_hi, u32 C_lo, u32 C_hi)
+{
+	u64 *B = self->slice[1];
+	u64 *C = self->slice[2];
+	for (u32 r = B_lo; r < B_hi; r++) {
+		__m256i x = _mm256_set1_epi32(B[r]);
+		for (u32 s = C_lo; s < C_hi; s += 8 * UNROLL) {
+			__m256i y[UNROLL], z[UNROLL];
+			for (u32 i = 0; i < UNROLL; i++)
+				y[i] = _mm256_load_si256((__m256i *) (self->C_low + s) + i);
+			for (u32 i = 0; i < UNROLL; i++)
+				z[i] = _mm256_xor_si256(x, y[i]);
+			#if (UNROLL == 8)
+				if (!eight_parallel_cuckoo_lookup(H, z))
+					continue;
+			#else
+				assert(false);
+			#endif
+			for (u32 i = 0; i < 8 * UNROLL; i++)
+				if (hashtable_lookup(D, B[r] ^ C[s + i]))
+					report_solution(self->result, B[r], C[s + i]);	
 		}
 	}
 }
 
+@ The actual non-trivial task is to juggle the data around, \textit{i.e.} 
+extract the low 32 bits of each [[u64]]. Because the slices are quite small, we
+do this the lazy way. After the slices have been loaded, we form a ``low'' list
+for $C$.
 
-<<two-staged probing>>=
-for (u32 r = B_lo; r < B_hi; r++) {
-	const u64 x = slice[1][r];
-	for (u32 s = C_lo; s < C_hi; s++) {
-		const u64 y = slice[2][s];
-		const u64 z = x ^ y;
-		if (cuckoo_lookup(H, z) && hashtable_lookup(D, z)) {
-			<<Report $x, y$ as a solution>>
-		}
-	}
-}
+<<Allocate memory and load data from disk>>=
+u32 *C_low;
+u64 aligned_size = 64 * (1 + sizeof(*C_low) * size[2] / 64);
+C_low = aligned_alloc(64, aligned_size);
+if (C_low == NULL)
+	err(1, "failed to allocate memory for C_low");
+for (u32 i = 0; i < size[2]; i++)
+	C_low[i] = slice[2][i];
 
-
-<<Display timing results>>=
-double wall = wtime() - start;
-u64 cycles = ticks() - clock;
-double n_pairs = (1.0 * size[1]) * (1.0 * size[2]);
-double rate = n_pairs / wall;
-double inv_throughput = cycles / n_pairs;
-printf("Wall time: %.1fs, %" PRId64 " CPU ticks.\n", wall, cycles);
-printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
+<<Release memory>>=
+free(C_low);
 
 
 @ \end{document}
