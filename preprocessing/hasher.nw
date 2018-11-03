@@ -27,8 +27,12 @@ $8 \times [[u32]]$.
 The public interface is thus:
 
 <<hasher.h>>=
+#include <string.h>
 #include <preprocessing.h>
 
+static inline void build_plaintext_block(int kind, struct preimage_t *preimage, char *buffer) {
+	<<Assemble plaintext block>>
+}
 extern bool compute_full_hash(int kind, struct preimage_t *preimage, u32 *hash);
 static inline u64 extract_partial_hash(u32 *hash) {
 	<<Return partial hash>>
@@ -41,14 +45,13 @@ static inline u64 extract_partitioning_key(int k, u32 *hash) {
 @ The smallest functions are [[static inline]] for speed. Now we come to the implementation.
 
 <<*>>=
-#include <string.h>
 #include "sha256.h"
 #include "hasher.h"
 
 bool compute_full_hash(int kind, struct preimage_t *preimage, u32 *hash)
 {
-	char buffer[80];
-	<<Assemble plaintext block>>
+	u32 *block[20];
+	build_plaintext_block(kind, preimage, (char *) block);
 	<<Compute full hash of plaintext block>>
 	<<Return [[true]] if hash is valid>>
 }

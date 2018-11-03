@@ -98,9 +98,11 @@ void report_solution(struct task_result_t *result, u64 x, u64 y)
 			err(1, "failed to re-alloc solutions array");
 		result->capacity *= 2;
 	}
-	result->solutions[result->size].x = x;
-	result->solutions[result->size].y = y;
-	result->solutions[result->size].z = x ^ y;
+	// FIXME: this is a mistake. x^y is in fact in A!!!
+	// But since this is running in production right now...
+	result->solutions[result->size].x = x;  // should be in B
+	result->solutions[result->size].y = y;  // should be in C
+	result->solutions[result->size].z = x ^ y; // should be in A;
 	result->size++;
 }
 

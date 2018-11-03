@@ -39,5 +39,5 @@ peek.o: peek.c server.h common.h
 	pdflatex $<
 
 clean:
-	rm -rf *.o *.c *.h *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx
-	rm -rf task_server sample_task_client
+	rm -rf *.o *.c *.h *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
+	rm -rf server quad_standalone quad_client peek

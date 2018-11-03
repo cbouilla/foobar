@@ -1,0 +1,7 @@
+
+#oarsub -q testing -t besteffort -t idempotent -l nodes=1,walltime=24:00 ./run.sh
+
+
+--> the good one
+
+oarsub --name 3XORv2 -p "cluster='ecotype'" -t idempotent -l nodes=1,walltime=24:00 ./run.sh
