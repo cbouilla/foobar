@@ -1,0 +1,317 @@
+\documentclass{book}
+
+\usepackage{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\newcommand{\join}{\bowtie}
+
+\begin{document}
+
+\setcounter{chapter}{2}
+\chapter{The Iterated Joux Algorithm}
+
+
+This file describes an implementation of the iterated Joux algorithm.  
+The main function described in this file ``solves'' a (fine) task. 
+
+<<*>>=
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#include "common.h"
+#include "linalg.h"
+#include "../quadratic/datastructures.h"
+
+<<Type definitions>>
+<<Forward declarations>>
+<<Auxiliary functions>>
+<<The main function>>
+
+@ \section{Processing Tasks}
+
+<<The main function>>=
+struct task_result_t * iterated_joux_task(const char *hash_dir, struct jtask_id_t *task)
+{
+	static const bool verbose = false;
+	struct task_result_t *result = result_init();
+	<<Load data from disk>>
+	<<Prepare context>>
+	if (verbose) {
+		<<Display some info>>
+	}
+	for (u32 u = 0; u < n_blocks; u++)
+		process_block(&self, u, verbose);
+	<<Release memory>>
+	return result;
+}
+
+
+@ \section{Preparations}
+
+Preparations include loading the data from disk. We expected a fair amount of 
+data (say, 1Gb). Therefore this may take some time. In the future, we would
+use this time to do something useful (try to precompute some matrices ?).
+
+<<Load data from disk>>=
+u64 *slice[3];
+u64 *scratch[3];
+u32 size[3];
+for (u32 kind = 0;  kind < 3; kind++) {	
+	<<Determine [[filename]] and Query file size>>
+	<<Allocate memory>>
+	<<Open file and load hashes>>
+	<<Allocate scratch space>>
+}
+
+@ The following code is NOT DRY wrt quadratic. If we are dealing with $C$, we
+ajust the offset and size (as given by the task descriptor).
+
+<<Determine [[filename]] and Query file size>>=
+char filename[255];
+char *kind_name[3] = {"foo", "bar", "foobar"};
+sprintf(filename, "%s/%s.%03x", hash_dir, kind_name[kind], task->idx[kind]);
+struct stat infos;
+if (stat(filename, &infos))
+	err(1, "fstat failed on %s", filename);
+assert((infos.st_size % 8) == 0);
+u64 m = infos.st_size / sizeof(u64) / task->k2;
+u64 lo = 0;
+u64 hi = infos.st_size;
+if (kind == 2) {
+	lo = 8 * (task->r * m);
+	hi = MIN(hi, 8 * ((task->r  + 1) * m));
+}
+assert (lo != hi);
+
+@ When allocating the memory, we enforce alignement on a 64-byte boundary 
+(the size of a cache line on most CPUs). In addition, this allows aligned 
+access for all possible sizes, including 256-bit registers.
+For this, we use [[aligned_alloc]], available in \textsf{C11}.
+
+<<Allocate memory>>=
+u64 aligned_size = 64 * ceil((hi - lo) / 64.);
+slice[kind] = aligned_alloc(64, aligned_size);
+if (slice[kind] == NULL)
+	err(1, "failed to allocate memory");
+size[kind] = (hi - lo) / sizeof(u64);
+
+<<Open file and load hashes>>=
+FILE *f = fopen(filename, "r");
+if (f == NULL)
+	err(1, "fopen failed (%s)", filename);
+fseek(f, lo, SEEK_SET);
+u64 check = fread(slice[kind], 1, hi - lo, f);
+if ((check != hi - lo) || ferror(f))
+	err(1, "fread : read %" PRId64 ", expected %zd", check, hi - lo);
+if (fclose(f))
+	err(1, "fclose %s", filename);
+
+<<Allocate scratch space>>=
+scratch[kind] = aligned_alloc(64, aligned_size);
+if (scratch[kind] == NULL)
+	err(1, "failed to allocate memory");
+
+<<Release memory>>=
+for (u32 kind = 0;  kind < 3; kind++) {
+	free(slice[kind]);
+	free(scratch[kind]);
+}
+
+
+@ The task is split into blocks by splitting the $C$ list into very small 
+slices of size $64 - \ell$. The optimal value of $\ell$ is $\max (\log_2 A, 
+\log_2 B)$.
+
+<<Type definitions>>=
+struct context_t {
+	struct task_result_t *result;
+	u64 *slice[3];
+	u64 *scratch[3];
+	u32 size[3];
+	u32 l;
+};
+
+<<Prepare context>>=
+struct context_t self;
+self.result = result;
+for (u32 i = 0; i < 3; i++) {
+	self.size[i] = size[i];
+	self.slice[i] = slice[i];
+	self.scratch[i] = scratch[i];
+}
+self.l = ceil(MAX(log2(size[0]), log2(size[1])));
+u32 n_blocks = ceil(size[2] / (64. - self.l));
+
+
+
+@ If requested, we are capable of displaying some information.
+
+<<Display some info>>=
+	/* task-level */
+printf("Task: |A|=%d,  |B|=%d,  |C|=%d\n", size[0], size[1], size[2]);
+double mbytes = 8. * (size[0] + size[1] + size[2]) / 1048576.0;
+printf("Task volume : %.1fMbyte of hashes\n", mbytes);
+double logsols = log2(size[0]) + log2(size[1]) + log2(size[2]);
+printf("Est. #solutions : %g\n", pow(2, logsols - 64));
+	/* block-level */
+printf("Using l = %d\n", self.l);
+printf("#blocks = %d\n", n_blocks);
+
+
+@ \section{Processing Blocks}
+
+We define a simple auxiliary function to perform a matrix product.
+
+<<Auxiliary functions>>=
+void gemm(const u64 *IN, u64 *OUT, u32 n, const struct matmul_table_t *M)
+{
+	for (u32 i = 0; i < n; i++)
+		OUT[i] = gemv(IN[i], M);
+}
+
+@ And we are ready for the big function. We compute the matrix $M$, then
+for each pair $(x, y) \in AM \join BM$, we check whether $x ^ y \in CM$. Here,
+$CM$ is very small. For now we get away with using a simple hash table with
+linear probing.
+
+<<Forward declarations>>=
+void process_block(struct context_t *self, u32 u, bool verbose);
+
+<<Auxiliary functions>>=
+void process_block(struct context_t *self, u32 u, bool verbose)
+{
+	double start = wtime();
+	struct task_result_t * local_result = result_init();
+	<<Identify slice of $C$>>
+	if (verbose) {
+		<<Display stuff>>
+	}
+	<<Compute change of basis matrix>>
+	<<Matrix multiplication>>
+	<<Sort $AM$ and $BM$>>
+	<<Prepare hash table>>
+	<<Join $AM$ and $BM$ on $\ell$ bits>>
+	<<Backport solutions>>
+	<<Cleanup>>
+	if (verbose) {
+		<<Display timing info>>
+	}
+}
+
+<<Identify slice of $C$>>=
+u32 size[3];
+for (u32 i = 0; i < 3; i++)
+	size[i] = self->size[i];
+u32 l = self->l;
+u32 slice_height = 64 - l;
+u32 lo = u * slice_height;
+u32 hi = MIN((u + 1) * slice_height, size[2]);
+const u64 *C = self->slice[2] + lo;
+u32 m = hi - lo;
+
+<<Display stuff>>=
+printf("Block %d: C[%d:%d]\n", u, lo, hi);
+
+
+<<Compute change of basis matrix>>=
+struct matmul_table_t M, M_inv;
+#pragma omp critical(M4RI_is_not_bloody_thread_safe)
+basis_change_matrix(C, 0, m, &M, &M_inv);
+
+@ What is described next is a naive, direct implementation. I hope it works,
+then I will refine it.
+
+
+<<Matrix multiplication>>=
+u64 *AM = self->scratch[0];
+u64 *BM = self->scratch[1];
+u64 *CM = self->scratch[2];
+gemm(self->slice[0], AM, size[0], &M);
+gemm(self->slice[1], BM, size[1], &M);
+gemm(C, CM, m, &M);
+
+
+@ For now, we use the stupidest possible sort.
+
+<<Forward declarations>>=
+int cmp(const void *a_, const void *b_);
+
+<<Auxiliary functions>>=
+int cmp(const void *a_, const void *b_)
+{
+	u64 *a = (u64 *) a_;
+	u64 *b = (u64 *) b_;
+	return (*a > *b) - (*a < *b);
+}
+
+
+<<Sort $AM$ and $BM$>>=
+qsort(AM, size[0], sizeof(u64), cmp);
+qsort(BM, size[1], sizeof(u64), cmp);
+
+<<Prepare hash table>>=
+struct hash_table_t *D = hashtable_build(CM, 0, m);
+
+<<Cleanup>>=
+hashtable_free(D);
+
+<<Join $AM$ and $BM$ on $\ell$ bits>>=
+u64 a = 0;
+u64 b = 0;
+u64 mask = LEFT_MASK(l);
+while (a < size[0] && b < size[1]) {		
+	u64 prefix_a = AM[a] & mask;
+	u64 prefix_b = BM[b] & mask;
+	if (prefix_a < prefix_b) {
+		a += 1;
+		continue;
+	}
+	if (prefix_a > prefix_b) {
+		b += 1;
+		continue;
+	}
+	/* Here, prefix_a == prefix_b */
+	u64 b_0 = b;
+	while (1) {
+		u64 z = AM[a] ^ BM[b];
+		if (hashtable_lookup(D, z))
+			report_solution(local_result, AM[a], BM[b], z);
+		b += 1;
+		if (b < size[1] && (BM[b] & mask) == prefix_b)
+			continue;
+		a += 1;
+		if (a < size[0] && (AM[a] & mask) == prefix_a) {
+			b = b_0;
+			continue;
+		}
+		break;
+	}
+}
+
+@ In [[local_result]], we have triplets $(xM, yM, zM)$, so we multiply them by
+$M^{-1}$ to get the actual solutions.
+
+<<Backport solutions>>=
+struct solution_t *loc = local_result->solutions;
+u32 n_sols = local_result->size;
+for (u32 i = 0; i < n_sols; i++) {
+	u64 x = gemv(loc[i].x, &M_inv);
+	u64 y = gemv(loc[i].y, &M_inv);
+	u64 z = gemv(loc[i].z, &M_inv);
+	report_solution(self->result, x, y, z);
+}
+
+
+<<Display timing info>>=
+printf("Block %d, total time: %.1fs\n", u, wtime() - start);
+
+@ \end{document}

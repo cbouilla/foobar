@@ -98,6 +98,13 @@ for (u32 kind = 0; kind < 3; kind++) {
 	printf("%s\\x%02x\\x%02x\\x%02x\\x%02x\n", block, a, b, c, d);
 }
 
+for (u32 kind = 0; kind < 3; kind++) {
+	u32 hash[8];
+	compute_full_hash(kind, O + kind, hash);
+	for (u32 p = 0; p < 8; p++) 
+		printf("%08x ", hash[7 - p]);
+	printf("\n");
+}
 
 <<Read a [[task_msg_t]]; if [[EOF]] then exit the loop>>=
 struct task_msg_t task;

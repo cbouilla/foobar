@@ -34,9 +34,9 @@ HASH_CHECKER = './hash_checker'
 
 do_split = False
 check_split = False
-do_sort = True
+do_sort = False
 check_sort = False
-do_merge = True
+do_merge = False
 check_merge = False
 
 n_preimages = {}

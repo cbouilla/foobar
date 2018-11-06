@@ -1,0 +1,109 @@
+\documentclass{book}
+
+\usepackage{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\begin{document}
+
+\chapter{Dumping Completed Tasks}
+
+This program reads the ``journal file'', extracts and displays tasks start and end times.
+
+<<*>>=
+#define _XOPEN_SOURCE 500
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <err.h>
+
+#include "../solving/server.h"
+
+int main(int argc, char **argv)
+{
+        <<Process the command line>>
+        <<Parse the journal file>>
+	exit(EXIT_SUCCESS);
+}
+
+@ Besides the name of the journal file, we need the directory where the dictionaries are located.
+
+<<Process the command line>>=
+if (argc != 2)
+	errx(1, "missing journal filename");
+char *journal_filename = argv[1];
+
+@ We open the journal and read it. Here, we ignore most metadata and focus on task's payloads.
+
+<<Parse the journal file>>=
+FILE *f = fopen(journal_filename, "r");
+if (!f)
+	err(1, "opening %s", journal_filename);
+while (1) {
+	<<Read a [[task_msg_t]]; if [[EOF]] then exit the loop>>
+	<<Read the [[hostname]]>>
+	<<Read a [[result_t]]; skip solutions>>
+	<<Display task data>>
+}
+fclose(f);
+
+@ Because of the mistakes made earlier, reading is more complex.
+REVERT TO THE SIMPLE VERSION ON THE NEXT RUN.
+
+<<Read a [[task_msg_t]]; if [[EOF]] then exit the loop, simple version>>=
+struct task_msg_t task;
+
+if (fread(&task, sizeof(task), 1, f) != 1) {
+	if (feof(f))
+		break;
+	else
+		err(1, "reading journal file");
+}
+
+
+<<Read a [[task_msg_t]]; if [[EOF]] then exit the loop>>=
+struct task_msg_t task;
+
+if (fread(&task.id, sizeof(i64), 1, f) != 1) {
+	if (feof(f))
+		break;
+	else
+		err(1, "reading journal file");
+}
+if (fread(&task.start_time, sizeof(double), 2, f) != 2)
+	err(1, "reading journal file (timestamps)");
+if (fread(&task.hostname_length, sizeof(u32), 1, f) != 1)
+	err(1, "reading journal file (result size)");
+
+<<Read the [[hostname]]>>=
+char hostname[HOST_NAME_MAX];
+if (task.hostname_length > HOST_NAME_MAX)
+	errx(1, "hostname too long");
+if (fread(hostname, 1, task.hostname_length, f) != task.hostname_length)
+	err(1, "reading journal file (hostname)");
+if (hostname[task.hostname_length - 1] != 0)
+	errx(1, "hostname doesn't end with \\x00");
+//if (fseek(f, task.hostname_length, SEEK_CUR))
+//	err(1, "fseek, skipping over payload");
+
+
+<<Read a [[result_t]]; skip solutions>>=
+struct result_t result;
+if (fseek(f, 4, SEEK_CUR))
+	err(1, "fseek, skipping over payload");
+if (fread(&result.size, sizeof(u32), 1, f) != 1)
+	err(1, "reading journal file (result size)");
+if (fseek(f, result.size, SEEK_CUR))
+	err(1, "fseek, skipping over payload");
+
+
+<<Display task data>>=
+double length = task.completion_time - task.start_time;
+printf("%d; %.0f; %.1f; %d; %s; %d\n", task.id, task.start_time, length, task.hostname_length, hostname, result.size);
+
+@
+\end{document}
+

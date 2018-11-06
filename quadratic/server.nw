@@ -320,7 +320,9 @@ should only read [[id]] in it in the [[task_msg_t]]). The client should not
 attempt to access [[start_time]] or [[completion_time]].
 
 This has the drawback that two [[double]]s and the hostname are transmitted
-several times for nothing, but it keeps the whole system quite simple.
+several times for nothing, but it keeps the whole system quite simple. In particular,
+the server does not have to store information about submitted tasks. If it restarts, 
+then clients send back all the required information.
 
 If the server has no more tasks to dispatch, it sends a task id of $-1$, 
 upon which clients exit.
@@ -334,12 +336,12 @@ struct task_msg_t {
 	double completion_time;
 	u32 hostname_length;
 	char hostname[];
-};
+} __attribute__((packed));;
 
 struct result_t {
 	u32 size;
 	char payload[];
-};
+} __attribute__((packed));
 
 @ To communicate using \nanomsg, we need to setup a [[socket]], which is then 
 bound or connected to a network address. The user may choose which IP adress 
