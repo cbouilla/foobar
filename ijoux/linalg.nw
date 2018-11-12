@@ -114,6 +114,10 @@ Only the first $r$ rows of $U$ are non-zero, where $r$ denotes the rank of
 $C$. It follows that $M = P \left(L^{\mathrm{T}}\right)^{-1}$ is a
 suitable choice.
 
+We must be aware that with this choice of $M$, the product $CM$ is structured: 
+it is lower-trapezoidal, and it has exactly [[rank]] non-zero columns. If we wanted
+to make it more random, we could right-multiply by a well-chosen invertible random matrix.
+
 We will use \MaRI's functions to do all this. We keep in mind that, by default (at least
 when built in Debian), \emph{\MaRI is not bloody thread-safe!}. We first build a \MaRI matrix
 from a slice of our lists. \MaRI provides us a function to access the array of [[u64]] describing
@@ -131,13 +135,13 @@ mzd_t * list_slice(const u64 *L, u32 lo, u32 hi)
 }
 
 @ And we are now ready for the main dish. We compute ``multiplication tables'' 
-for both $M$ and $M^{-1}$.
+for both $M$ and $M^{-1}$. 
 
 <<Public function declarations>>=
-void basis_change_matrix(const u64 *A, u32 lo, u32 hi, struct matmul_table_t *T,
+u32 basis_change_matrix(const u64 *A, u32 lo, u32 hi, struct matmul_table_t *T,
                                            struct matmul_table_t *T_inv);
 <<Functions>>=
-void basis_change_matrix(const u64 *A, u32 lo, u32 hi, struct matmul_table_t *T,
+u32 basis_change_matrix(const u64 *A, u32 lo, u32 hi, struct matmul_table_t *T,
                                            struct matmul_table_t *T_inv)
 {
 	mzd_t *C = list_slice(A, lo, hi);
@@ -147,7 +151,7 @@ void basis_change_matrix(const u64 *A, u32 lo, u32 hi, struct matmul_table_t *T,
 	<<Compute multiplication tables for $L^{T}$>>
 	<<Compute multiplication tables for $(L^{T})^{-1}$>>
 	<<Cleanup>>
-	(void) rank;
+	return rank;
 }
 
 @ Let's go step-by-step. \MaRI computes the PLUQ factorization \emph{in-place}, 
@@ -201,6 +205,10 @@ mzp_free(Q);
 @ \section{Miscellaneous and Utility Functions}
 
 We finally include debugging functions to print a vector and a list.
+
+<<Public function declarations>>=
+void print_list(const u64 *L, u32 N, int n);
+void print_vector(u64 v, u32 n);
 
 <<Functions>>=
 void print_vector(u64 v, u32 n)

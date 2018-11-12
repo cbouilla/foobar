@@ -27,7 +27,7 @@ This file describes a standalone program that solves whole instances using the i
 #include "common.h"
 
 /* in joux.c */
-struct task_result_t * iterated_joux_task(const char *hash_dir, struct jtask_id_t *task);
+struct task_result_t * iterated_joux_task(const char *hash_dir, struct jtask_id_t *task, u32 p);
 
 <<The main function>>
 
@@ -43,14 +43,16 @@ int main(int argc, char **argv)
 
 
 <<Process the command line>>=
-struct option longopts[4] = {
+struct option longopts[5] = {
 	{"partitioning-bits", required_argument, NULL, 'k'},
 	{"fine-task-size", required_argument, NULL, 'f'},
 	{"hash-dir", required_argument, NULL, 'h'},
+	{"stage1-bits", required_argument, NULL, 's'},
 	{NULL, 0, NULL, 0}
 };
 u32 k = 0xffffffff;
 u32 k2 = 0;
+u32 p = 0;
 char *hash_dir = NULL;
 char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
@@ -64,6 +66,9 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	case 'h':
 		hash_dir = optarg;
 		break;
+	case 's':
+		p = atoi(optarg);
+		break;
 	default:
 		errx(1, "Unknown option\n");
 	}
@@ -74,6 +79,8 @@ if (k2 == 0)
 	errx(1, "missing option --fine-task-size");
 if (hash_dir == NULL)
 	errx(1, "missing option --hash-dir");
+if (p == 0)
+	errx(1, "missing option --stage1-bits");
 
 
 <<Process all the tasks>>=
@@ -90,15 +97,14 @@ for (u32 i = 0; i < problem_size; i++)
 			task.r = r;
 			printf("task (%d, %d, %d) : ", i, j, r);
 			fflush(stdout);
-			struct task_result_t *solutions = iterated_joux_task(hash_dir, &task);
+			struct task_result_t *solutions = iterated_joux_task(hash_dir, &task, p);
 			printf("%d solutions\n", solutions->size);
 			for (u32 u = 0; u < solutions->size; u++)
 				printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
 								solutions->solutions[u].x, 
 								solutions->solutions[u].y, 
 								solutions->solutions[u].z);
-			free(solutions->solutions);
-			free(solutions);
+			result_free(solutions);
 		}
 
 

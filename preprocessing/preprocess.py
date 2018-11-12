@@ -13,8 +13,8 @@ This script runs all the preprocessing.
 # on how many bits are the preimage files split. This has no influence on the resulting computation.
 # small values yields too big dictionnaries. high values yields too many dictionnaries.
 # With approx 1Gb premage files, 2 is a reasonable choice.
-split_bits = 10
-dry_run = False
+split_bits = 3
+dry_run = True
 
 # number of CPU cores of this machine.
 cores = 4
@@ -32,11 +32,11 @@ SORTER = './sorter'
 MERGER = './merger'
 HASH_CHECKER = './hash_checker'
 
-do_split = False
+do_split = True
 check_split = False
-do_sort = False
+do_sort = True
 check_sort = False
-do_merge = False
+do_merge = True
 check_merge = False
 
 n_preimages = {}
@@ -106,7 +106,7 @@ def splitting():
     print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(split_bits))
     mpi_n_process = 2 + 2 * cores
     for kind, kind_id in KINDS.items():
-        files = glob.glob('{}/{}*'.format(PREIMAGE_DIR, kind))
+        files = glob.glob('{}/{}.*'.format(PREIMAGE_DIR, kind))
         for preimage in files:
             args = ['mpirun', '-np', mpi_n_process, SPLITTER, 
                     '--partitioning-bits', split_bits, '--output-dir', DICT_DIR, preimage]

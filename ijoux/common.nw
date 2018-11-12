@@ -164,6 +164,7 @@ struct task_result_t {
 <<Function declarations>>=
 struct task_result_t * result_init();
 void report_solution(struct task_result_t *result, u64 x, u64 y, u64 z);
+void result_free(struct task_result_t *result);
 
 
 <<Functions>>=
@@ -176,6 +177,12 @@ struct task_result_t * result_init()
 	result->capacity = 128;
 	result->solutions = malloc(result->capacity * sizeof(struct solution_t));
 	return result;
+}
+
+void result_free(struct task_result_t *result)
+{
+	free(result->solutions);
+	free(result);
 }
 
 @ Reporting solutions always works the same.

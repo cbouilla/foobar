@@ -241,6 +241,7 @@ Therefore, we encapsulate all this into a ``context'' object.
 <<Type definitions>>=
 struct context_t {
 	struct task_result_t *result;
+	u32 k;
 	u32 grid_size;
 	u64 *slice[3];
 	u32 *index[3];
@@ -249,6 +250,7 @@ struct context_t {
 
 <<Prepare context>>=
 struct context_t self;
+self.k = task->k;
 self.result = result;
 self.grid_size = grid_size;
 for (u32 i = 0; i < 3; i++) {
@@ -304,6 +306,9 @@ void process_block(struct context_t *self, u32 u, bool verbose)
 		double rate = (1.0 * n_pairs) / wall;
 		double inv_throughput = (1.0 * cycles) / n_pairs;
 		printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
+		u32 n_tasks = 1 << (2 * self->k);
+		double total = (1.0 * n_tasks) * n_pairs / rate * (self->grid_size);
+		printf("Est. total computation time: %.2e h\n", total / 3600);
 	}
 	hashtable_free(D);
 	free(H);

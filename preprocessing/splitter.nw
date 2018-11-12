@@ -217,7 +217,7 @@ FILE *f = fopen(in_filename, "r");
 if (f == NULL)
 	err(1, "fopen on %s", in_filename);
 while (1) {
-	<<Read a nonce block from [[f]] in [[buffer]]>>
+	<<Read a preimage block from [[f]] in [[buffer]]>>
 	<<Wait for a request and send back [[buffer]]>>
 	<<Print status report>>
 }
@@ -228,9 +228,9 @@ for (u32 i = 0; i < n_mapper; i++) {
 printf("\nReader finished. %d preimages read, total wait = %.1f s\n", preimages_read, wait);
 
 
-@ Reading the file is straightforward. We use a buffer of [[struct nonce_msg_t]].
+@ Reading the file is straightforward. We use a buffer of [[struct preimage_t]].
 
-<<Read a nonce block from [[f]] in [[buffer]]>>=
+<<Read a preimage block from [[f]] in [[buffer]]>>=
 struct preimage_t buffer[READER_BUFFER_SIZE];
 size_t n_items = fread(buffer, sizeof(struct preimage_t), READER_BUFFER_SIZE, f);
 if (ferror(f))
@@ -267,7 +267,7 @@ MPI_Send(NULL, 0, MPI_INT, status.MPI_SOURCE, EOF_TAG, MPI_COMM_WORLD);
 <<Print status report>>=
 double megabytes = preimages_read * 1.1444091796875e-05;
 double rate = megabytes / (MPI_Wtime() - start);
-printf("\rNonces read: %d (%.1f Mb, %.1f Mb/s)", preimages_read, megabytes, rate);
+printf("\rPreimages read: %d (%.1f Mb, %.1f Mb/s)", preimages_read, megabytes, rate);
 fflush(stdout);
 
 
@@ -292,7 +292,7 @@ while (1) {
 	}
 }
 <<Flush all buffers and send [[EOF]] message to the writer>>
-printf("\nMapper %d finished. %d dictionnary entries transmitted. %d invalid.\n", id, n_processed, n_invalid);
+printf("Mapper %d finished. %d dictionnary entries transmitted. %d invalid.\n", id, n_processed, n_invalid);
 
 @ Dealing with the buffer is as simple as in the reader. So is communication with the reader.
 

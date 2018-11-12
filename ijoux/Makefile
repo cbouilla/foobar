@@ -1,17 +1,21 @@
-CFLAGS = -std=c11 -g -Wall -mavx2 -Wextra -O0 -Werror -fopenmp -I$(HOME)/prison/m4ri/install/include
-LDFLAGS = -fopenmp -L$(HOME)/prison/m4ri/install/lib -static
+CFLAGS = -std=c11 -g -Wall -mavx2 -Wextra -O3 -Werror -fopenmp -I$(HOME)/prison/m4ri/install/include
+LDFLAGS = -fopenmp -L$(HOME)/prison/m4ri/install/lib
 LDLIBS = -lm4ri -lm 
 all: programs doc.pdf
 
 common.o: common.h
 linalg.o: linalg.h
-joux.o: linalg.h common.h
+joux_v0.o: linalg.h common.h
+joux_v1.o: linalg.h common.h
 
 programs: joux_standalone
-doc.pdf: common.pdf linalg.pdf joux.pdf joux_standalone.pdf
+doc.pdf: common.pdf linalg.pdf joux_v0.pdf joux_standalone.pdf
 	pdftk $^ cat output $@
 
-joux_standalone: common.o ../quadratic/datastructures.o linalg.o joux.o
+joux_standalone: common.o ../quadratic/datastructures.o linalg.o joux_v1.o
+
+test:
+
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw

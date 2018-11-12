@@ -84,8 +84,10 @@ for (u32 i = 0; i < problem_size; i++)
 		struct task_result_t *solutions = quadratic_task(hash_dir, &task);
 		printf("%d solutions\n", solutions->size);
 		for (u32 u = 0; u < solutions->size; u++)
-			printf("... ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-				solutions->solutions[u].x, solutions->solutions[u].y);
+			printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
+							solutions->solutions[u].x, 
+							solutions->solutions[u].y,
+							solutions->solutions[u].z);
 		free(solutions->solutions);
 		free(solutions);
 	}
