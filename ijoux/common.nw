@@ -118,9 +118,13 @@ u64 ticks();
 
 static inline u64 LEFT_MASK(u32 n)
 {
-	return ~((1ull << (64ull - n)) - 1);
+	return ~((1ull << (64 - n)) - 1);
 }
 
+static inline u64 RIGHT_MASK(u32 n)
+{
+	return (1ull << n) - 1;
+}
 
 <<*>>=
 #include <sys/time.h>

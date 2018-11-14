@@ -9,10 +9,10 @@ joux_v0.o: linalg.h common.h
 joux_v1.o: linalg.h common.h
 
 programs: joux_standalone
-doc.pdf: common.pdf linalg.pdf joux_v0.pdf joux_standalone.pdf
+doc.pdf: common.pdf linalg.pdf joux_v2.pdf joux_standalone.pdf
 	pdftk $^ cat output $@
 
-joux_standalone: common.o ../quadratic/datastructures.o linalg.o joux_v1.o
+joux_standalone: common.o ../quadratic/datastructures.o linalg.o joux_v2.o
 
 test:
 

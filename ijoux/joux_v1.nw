@@ -17,9 +17,11 @@
 \setcounter{chapter}{2}
 \chapter{The Iterated Joux Algorithm}
 
-
 This file describes an implementation of the iterated Joux algorithm.  
 The main function described in this file ``solves'' a (fine) task. 
+
+FIXME : c'est débile que [[partition]] soit préalloué une fois pour toute.
+Il vaut mieux le prendre sur la pile des subjoins.
 
 <<*>>=
 #define _XOPEN_SOURCE   /* rand48(...) */
@@ -211,9 +213,10 @@ thus highly non-random. In order to be able to rely on the randomness of the
 inputs, we re-randomize them by randomly permuting $A$ and $B$.
 
 <<Randomly permute $A$ and $B$>>=
+#pragma omp parallel for schedule(static)
 for (u32 k = 0; k < 2; k++)
 	for (u32 i = 0; i < n[k] - 1; i++) {
-		u32 j = i + (lrand48() % (n[k] - i));
+		u32 j = i + (L[k][i] % (n[k] - i));
 		u64 x = L[k][i];
 		L[k][i] = L[k][j];
 		L[k][j] = x;
