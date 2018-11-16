@@ -1,0 +1,430 @@
+\documentclass{book}
+
+\usepackage{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{patterns}
+
+\newcommand{\join}{\bowtie}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+%\setcounter{chapter}{2}
+\chapter{Partitioning Benchmark}
+
+Let's start will all the useless stuff.
+
+
+<<*>>=
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <omp.h>
+#include <getopt.h>
+#include <immintrin.h>
+
+#include "common.h"
+
+<<Type definitions>>
+<<Function prototypes>>
+<<Auxiliary functions>>
+<<The main function>>
+
+
+<<The main function>>=
+int main(int argc, char **argv)
+{
+	bool check = false;
+	if (check)
+		warnx("CHECK IS ON");
+	<<Process the command line>>
+	<<Prepare input data>>
+	<<Run everything>>
+}
+
+
+<<Process the command line>>=
+struct option longopts[4] = {
+	{"p", required_argument, NULL, 'k'},
+	{"n", required_argument, NULL, 'n'},
+	{"it", required_argument, NULL, 'i'},
+	{NULL, 0, NULL, 0}
+};
+u32 maxp = 0;
+u64 n = 134217728;  /* in octabytes */
+u32 iterations = 10;
+char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+    	switch (ch) {
+	case 'k':
+		maxp = atoi(optarg);
+		break;
+	case 'n':
+		n = atoll(optarg);
+		break;
+	case 'i':
+		iterations = atoi(optarg);
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+}
+if (maxp == 0)
+	errx(1, "missing option --p");
+
+
+<<Auxiliary functions>>=
+static const u32 CACHE_LINE_SIZE = 64;
+static const u32 L1_CACHE_PER_THREAD = 16384;
+
+u64 ROUND(u64 s)
+{
+	return CACHE_LINE_SIZE * ceil(((double) s) / CACHE_LINE_SIZE);
+}
+
+u64 chernoff_bound(u64 N, u32 n_buckets)
+{
+	double mu = ((double) N) / n_buckets;
+	double delta = sqrt(210 / mu);
+	return ROUND(N * (1 + delta) / n_buckets);
+}
+
+
+
+<<Prepare input data>>=
+u64 *IN = aligned_alloc(64, sizeof(*IN) * ROUND(n));
+if (IN == NULL)
+	err(1, "cannot allocate memory");
+FILE *f = fopen("/dev/urandom", "r");
+printf("Loading random junk\n");
+u64 read = fread(IN, sizeof(*IN), n, f);
+if (read != n)
+	err(1, "cannot read random junk");
+fclose(f);
+
+
+<<Prepare scratch space>>=
+u8 shift = 64 - p;
+u32 fan_out = 1 << p;
+u32 tsize = chernoff_bound(n, T * fan_out);
+u32 psize = tsize * T;
+u32 scratch_size = psize * fan_out;
+u64 *OUT = aligned_alloc(64, sizeof(*OUT) * scratch_size);
+u32 *COUNT = aligned_alloc(64, ROUND(sizeof(*COUNT) * fan_out * T));
+if (OUT == NULL || COUNT == NULL)
+	err(1, "cannot allocate memory");
+
+<<Release scratch space>>=
+free(OUT);
+free(COUNT);
+
+<<Display preliminary info>>=
+double expansion = (100.0 * (scratch_size - n)) / n;
+printf("|scratch| = %d items (expansion = %.1f %%), tisze=%d, psize=%d\n", 
+	scratch_size, expansion, tsize, psize);
+double st1_part = (9.5367431640625e-07 * n) / fan_out;
+printf("Expected stage-1 partition = %.1f Mb\n", st1_part);
+
+
+<<Check partitioning output>>=
+for (u32 i = 0; i < fan_out; i++)
+	for (u32 t = 0; t < T; t++) {
+		u32 start = psize * i + tsize * t;
+		u64 *L = OUT + start;
+		u32 n = COUNT[t * fan_out + i] - start;
+		for (u32 j = 0; j < n; j++)
+			assert((L[j] >> shift) == i);
+	}
+
+<<Run everything>>=
+const char *algo[2] = {"direct", "write-combining"};
+u32 maxT = omp_get_max_threads();
+for (u32 a = 0; a < 2; a++) {
+	printf("# Benchmarking %s, %d iterations\n", algo[a], iterations);
+	for (u32 T = 1; T <= maxT; T++) {
+		printf("# using T = %d\n threads", T);
+		omp_set_num_threads(T);
+		for (u32 p = 1; p < maxp; p++) {
+			<<Prepare scratch space>>
+			/* <<Display preliminary info>> */
+			<<Run actual code and measurements>>
+			<<Release scratch space>>
+		}
+	}
+}
+
+
+
+<<Run actual code and measurements>>=
+// printf("START p=%d, T=%d\n", p, T);
+double start = 0;
+u64 clock = 0;
+for (u32 it = 0; it < iterations; it++) {
+	if (it == 1) {
+		start = wtime();
+		clock = ticks();
+	}
+	#pragma omp parallel
+	{
+		assert(T == (u32) omp_get_num_threads());
+		u32 t = omp_get_thread_num();
+		if (a == 0) {
+			<<Direct partitioning>>
+		} else {
+			<<Partitioning with write-combining buffer>>
+		}
+	}
+	if (check) {
+		<<Check partitioning output>>
+	}
+	// printf("*");
+	// fflush(stdout);
+}
+double duration = (wtime() - start) / (iterations - 1);
+u64 cycles = (ticks() - clock) / (iterations - 1);
+double rate = n / duration * 9.5367431640625e-07;
+double cpi = (1.0 * cycles) / n;
+double bw = 16 * n / duration * 9.313225746154785e-10;
+printf("\n");
+printf("%s: %.1fs | %.1fMitem/s | %.1f cycles/item | memory BW = %.2fGb/s | %.1f Mitem/s/bit\n", 
+					algo[a], duration, rate, cpi, bw, p * rate);
+
+
+
+
+@ \section{Actual Partitioning Code}
+
+
+<<Direct partitioning>>=
+u32 *count = COUNT + t * fan_out;
+for (u32 i = 0; i < fan_out; i++)
+	count[i] = psize * i + tsize * t;
+#pragma omp for schedule(static)
+for (u32 i = 0; i < n; i++) {
+	u64 x = IN[i];
+	u32 h = x >> shift;
+	u32 idx = count[h]++;
+	OUT[idx] = x;
+}
+
+
+@ This direct approach has two problems:
+\begin{enumerate}
+\item There is a severe performance degradation when the fan-out is greater than 64 (which corresponds to the size
+of the level-1 TLB). 
+\item Performance scales \emph{very badly} when several cores are available.
+\end{enumerate}
+
+We benchmarked this code on a single 18-cores Xeon E5-2695 v4 @ 2.1Ghz CPU (we
+used \texttt{numactl} to confine the code inside one NUMA node). The
+``partitioning efficiency'' is the product of $\ell$ (the number of radix
+bits) by the throughput of the procedure. The experiment was done on random
+input lists of size $2^{27}$, which are relevant to us.
+
+% \begin{figure}
+% \begin{center}
+% \includegraphics[width=0.75\textwidth]{partitioning_efficiency}
+% \end{center}
+% \caption{\label{fig:p_efficiency} Partitioning efficiency.}
+% \end{figure}
+
+% \begin{figure}
+% \begin{center}
+% \includegraphics[width=0.75\textwidth]{partitioning_scalability}
+% \end{center}
+% \caption{\label{fig:p_scalability} Scalability of partitioning.}
+% \end{figure}
+
+As can be seen on fig~\ref{fig:p_efficiency}, the fan-out has a large influence
+on the speed of dispatching. If the fan-out exceeds the number of cache lines,
+then writing to the output is likely to cause a cache miss. In addition, if the
+fan-out if higher than the number of TLB entries, then each write may cause a
+page walk. On most currently available CPUs, the L1 cache has 512 cache lines
+(shared between two hardware contexts), the level-1 TLB has 64 entries and the
+level-2 TLB has 512 entries. The direct partitioning efficiency drops when the
+fan-out exceeds 64.
+
+The TLB effect and scalability issue can be partially alleviated by a neat
+implementation trick: the \emph{software write-combining buffer}. Each thread
+allocates a buffer containing one cache line per bucket. Dispatched entries
+are written to this buffer, instead of the [[OUT]] array. Because the buffer
+is compact, it may fit in cache, and accessing it will not cause page walks.
+
+When an entry of the buffer is full, it is flushed to the [[OUT]] array. This
+may cause a TLB page walk, but several elements are then transfered at once,
+so the penalty is amortized. This induce extra work, but the overall effect is
+beneficial on large CPUs with many cores (we get the highest partitioning
+efficiency with $\ell=10$, compared to $\ell=5$ with the direct approach). On
+smaller CPUs, such as a laptop's Core i7-6600U, the effect of the write-
+combining buffer \emph{cannot be observed}, and direct partitioning is always
+much faster.
+
+We use the write-combining buffer through these functions:
+
+<<Function prototypes>>=
+struct cacheline_t * wc_alloc(u32 fan_out);
+void wc_prime(struct cacheline_t * buffer, u32 fan_out);
+static inline void wc_push(struct cacheline_t * buffer, u32 fan_out, u64 *OUT, u64 x, u32 h);
+void wc_flush(struct cacheline_t * buffer, u32 fan_out, u64 *OUT);
+void wc_get_count(struct cacheline_t * buffer, u32 fan_out, u32 *COUNT);
+
+@ Here is the full partitioning code:
+
+<<Partitioning with write-combining buffer>>=
+assert(sizeof(struct cacheline_t) == CACHE_LINE_SIZE);
+struct cacheline_t * buffer = wc_alloc(fan_out);
+for (u32 i = 0; i < fan_out; i++)
+	buffer[i].start = psize * i + t * tsize;
+wc_prime(buffer, fan_out);
+#pragma omp for schedule(static)
+for (u32 i = 0; i < n; i++) {
+	u64 x = IN[i];
+	u32 h = x >> shift;
+	wc_push(buffer, fan_out, OUT, x, h);
+}
+wc_flush(buffer, fan_out, OUT);
+wc_get_count(buffer, fan_out, COUNT + t * fan_out);
+free(buffer);
+
+@ We now look at the inner workings of the buffer. It is an array of $2^p$
+[[cacheline_t]] objects, whose size should match that of a cache line on the
+CPU.
+
+<<Type definitions>>=
+struct cacheline_t {
+        u64 values[7];
+        u32 start;
+        u32 index;
+};
+
+@ The [[cacheline_t]] objects temporarily hold items that are destined to land
+at a specified position in the [[OUT]] array. The [[start]] field is the
+offset in [[OUT]] where the first incoming item entering the [[cacheline_t]]
+should be written, while [[index]] contains the index in the [[value]] array
+of this [[cacheline_t]] where the next item should be written. 
+
+We enforce that if a value enters a [[cacheline_t]] are is supposed to land in
+[[OUT[x]]], then it is stored in [[values[x & 7]]]. It follows that a
+[[cacheline_t]] contains meaningful entries in [[values[(start & 7):index]]].
+When a [[cacheline_t]] gets full, \textit{i.e.} when [[index]] would reach 8,
+it is flushed to the [[OUT]] array.
+
+When the dispatching procedure starts, all the [[cacheline_t]] are primed:
+their [[start]] field  is pointed to the corresponding thread-bucket inside
+[[OUT]] (no pun intended), using the values in [[COUNT]].
+
+To use the write-combining buffer, one has to:
+\begin{enumerate}
+\item Allocate space for the buffer itself, at a cache-line boundary.
+\item Set the offset of the $i$-th bucket in [[buffer[i].start]].
+\item Derive [[index]] from [[start]] (the ``Finalization'').
+\end{enumerate}
+
+<<Auxiliary functions>>=
+struct cacheline_t * wc_alloc(u32 fan_out)
+{
+	struct cacheline_t *buffer = aligned_alloc(CACHE_LINE_SIZE, sizeof(*buffer) * fan_out);
+	if (buffer == NULL)
+		err(1, "aligned allocation of write-combining buffer");
+	return buffer;
+}
+
+<<Auxiliary functions>>=
+void wc_prime(struct cacheline_t * buffer, u32 fan_out)
+{
+	for (u32 i = 0; i < fan_out; i++ )
+		buffer[i].index = buffer[i].start & 7;
+}
+
+@ All items enter the buffer through the [[wc_push]] function, with [[h]]
+indicating in which bucket they should land. Writing in [[value[7]]] would
+overwrite [[start]] and [[index]], so we take care to preserve them.
+
+<<Auxiliary functions>>=
+static inline void wc_push(struct cacheline_t * buffer, u32 fan_out, u64 *OUT, u64 x, u32 h)
+{
+	(void) fan_out;
+	u32 index = buffer[h].index;
+	u32 start = buffer[h].start;
+	buffer[h].values[index] = x;
+	if (index == 7) {
+		<<Flush [[buffer[h]]] to [[OUT]] and re-prime it>>
+	} else {
+		buffer[h].index = index + 1;
+	}
+}
+
+@ Flushing is the tricky part. If [[start]] is aligned on a cache-line
+boundary, then the whole cache-line is flushed using a \emph{non-temporal
+store} (that does not leave the data in L2 cache, since we won't use it
+anytime soon). If the cacheline is only partially full, then its elements are
+flushed one-by-one. This \emph{requires} however that [[OUT]] is aligned on a
+cache-line boundary.
+
+<<Function prototypes>>=
+void store_nontemp_64B(void * dst, void * src);
+
+<<Auxiliary functions>>=
+void store_nontemp_64B(void * dst, void * src)
+{
+    register __m256i * d1 = (__m256i*) dst;
+    register __m256i s1 = *((__m256i*) src);
+    register __m256i * d2 = d1+1;
+    register __m256i s2 = *(((__m256i*) src)+1);
+    _mm256_stream_si256(d1, s1);
+    _mm256_stream_si256(d2, s2);
+}
+
+
+<<Flush [[buffer[h]]] to [[OUT]] and re-prime it>>=
+if ((start & 7) == 0) {
+	store_nontemp_64B(&OUT[start], &buffer[h]);
+	start += 8;
+} else {
+	while ((start & 7) != 0) {
+		OUT[start] = buffer[h].values[start & 7];
+		start += 1;
+	}
+}
+buffer[h].start = start;
+buffer[h].index = 0;
+	
+@  TODO : check if a [[u64 meta]] is faster.
+ 
+@ Once all the input has been processed, some values remain in the buffer, and
+they also need to be flushed to [[OUT]] one-by-one.
+
+<<Auxiliary functions>>=
+void wc_flush(struct cacheline_t * buffer, u32 fan_out, u64 *OUT)
+{
+	for (u32 i = 0; i < fan_out; i++) {
+		u32 start = buffer[i].start;
+		u32 index = buffer[i].index;
+		while ((start & 7) < index) {
+			OUT[start] = buffer[i].values[start & 7];
+			start += 1;
+		}
+		buffer[i].start = start;
+	}
+}
+
+@ Once the buffer has been flushed, it may safely be deallocated. However, we 
+need to read the size of individual buckets from it.
+
+<<Auxiliary functions>>=
+void wc_get_count(struct cacheline_t * buffer, u32 fan_out, u32 *COUNT)
+{
+	for (u32 i = 0; i < fan_out; i++)
+		COUNT[i] = buffer[i].start;
+}
+
+@ \end{document}

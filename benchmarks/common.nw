@@ -1,0 +1,75 @@
+\documentclass{book}
+
+\usepackage[a4paper]{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\usepackage{tikz}
+\usetikzlibrary{decorations.pathreplacing}
+
+
+\begin{document}
+
+<<common.h>>=
+#include <inttypes.h>
+#include <stdbool.h>
+
+<<Type definitions>>
+<<Function declarations>>
+
+<<Type definitions>>=
+typedef int8_t   i8;
+typedef int16_t  i16;
+typedef int32_t  i32;
+typedef int64_t  i64;
+typedef uint8_t  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+
+
+<<Function declarations>>=
+double wtime();
+u64 ticks();
+
+#define MAX(x, y) (((x) < (y)) ? (y) : (x))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
+static inline u64 LEFT_MASK(u32 n)
+{
+	return ~((1ull << (64 - n)) - 1);
+}
+
+static inline u64 RIGHT_MASK(u32 n)
+{
+	return (1ull << n) - 1;
+}
+
+<<*>>=
+#include <sys/time.h>
+#include <stdlib.h>
+#include <err.h>
+#include "common.h"
+<<Functions>>
+
+<<Functions>>=
+double wtime()
+{
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+	return (double)ts.tv_sec + ts.tv_usec / 1E6;
+}
+
+u64 ticks()
+{
+	u64 low, high;
+	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
+	return (high << 32) | low;
+}
+
+
+
+@ \end{document}
