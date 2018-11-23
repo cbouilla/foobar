@@ -267,3 +267,5 @@ opkg
 /benchmarks/partitioning.out
 /benchmarks/partitioning.pdf
 /benchmarks/partitioning.tex
+/quadratic/common.c
+/quadratic/datastructures.c

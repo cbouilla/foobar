@@ -1,26 +1,22 @@
+import sys
 import glob
 import subprocess
-import multiprocessing
-import itertools
+import os
 import os.path
 import math
 
-"""
-This script runs all the preprocessing.
-"""
+import argparse
+parser = argparse.ArgumentParser(description="This script runs all the preprocessing")
 
-
-# on how many bits are the preimage files split. This has no influence on the resulting computation.
-# small values yields too big dictionnaries. high values yields too many dictionnaries.
-# With approx 1Gb premage files, 2 is a reasonable choice.
-split_bits = 3
-dry_run = True
-
-# number of CPU cores of this machine.
-cores = 4
+parser.add_argument("k", help="number of bits to split", type=int)
+parser.add_argument("--dry-run", help="print commands but don't run them", action="store_true")
+parser.add_argument("--stats", help="display stats", action="store_true")
+parser.add_argument("--verbose", help="display more information", action="store_true")
+parser.add_argument("--cores", help="number of cores of this machine", type=int, default=1)
+parser.add_argument("--check", help="run check programs", action="store_true")
+args = parser.parse_args()
 
 L1_cache_size = 16384
-
 
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
 PREIMAGE_DIR = '../data/preimages'
@@ -44,7 +40,10 @@ n_dict = {}
 n_hash = {}
 
 def ensure_dirs():
-    for i in range(1 << split_bits):
+    """
+    Make sure that the directories for incomming dicts exist.
+    """
+    for i in range(1 << args.k):
         d = '{}/{:03x}'.format(DICT_DIR, i)
         if not os.path.exists(d):
             os.mkdir(d)
@@ -96,120 +95,126 @@ def hash_stats(verbose=True):
         n_entries = 1
         for kind in KINDS:
         	n_entries *= n_hash[kind]
-        print("Est # (64+k)-bit solutions = {:.1f}".format(n_entries / 2**(64 + split_bits)))
+        sizes = [n_hash[kind] * 8 / (1 << args.k)/ 1024**2 for kind in KINDS]
+        print("task size = {:.1f}Mbyte x {:.1f}Mbyte x {:.1f}Mbyte".format(*sizes))
+        print("Est # (64+k)-bit solutions = {:.1f}".format(n_entries / 2**(64 + args.k)))
         print()
+
 
 def splitting():
     """
     split all preimage files using [[split_bits]]
     """
-    print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(split_bits))
-    mpi_n_process = 2 + 2 * cores
+    mpi_n_process = 2 + 2 * args.cores
     for kind, kind_id in KINDS.items():
-        files = glob.glob('{}/{}.*'.format(PREIMAGE_DIR, kind))
+        files = sorted(glob.glob('{}/{}.*'.format(PREIMAGE_DIR, kind)))
         for preimage in files:
-            args = ['mpirun', '-np', mpi_n_process, SPLITTER, 
-                    '--partitioning-bits', split_bits, '--output-dir', DICT_DIR, preimage]
-            print("    -> {}".format(" ".join(map(str, args))))
-            if not dry_run:
-            	subprocess.run(map(str, args)).check_returncode()
+            split = '{}/{:03x}/{}.unsorted'.format(DICT_DIR, (1 << args.k) - 1, os.path.basename(preimage))
+            if os.path.exists(split):
+                if args.verbose:
+                    print("# Skiping {} [already split]".format(preimage))
+                continue
+            mpi_n_process = 2 + 2 * args.cores
+            cmd = ['mpirun', '-np', mpi_n_process, SPLITTER, 
+                   '--partitioning-bits', args.k, '--output-dir', DICT_DIR, preimage]
+            cmdline = list(map(str, cmd))
+            if args.verbose:
+                print(" ".join(cmdline))
+            if not args.dry_run:
+                subprocess.run(cmdline).check_returncode()
 
-def _do_sort(file):
-    args = [SORTER, file]
-    print("    -> {}".format(" ".join(args)))
-    sorted_filename = file[:-8] + 'sorted'
-    if os.path.exists(sorted_filename) and os.path.getsize(file) == os.path.getsize(sorted_filename):
-        print("        [SKIP]")
-        return
-    if not dry_run:
-        subprocess.run(args).check_returncode()
 
 def sorting():
     """
     Sort all dictionnaries.
     """
-    print("2. Sorting (dictionaries -> dictionaries)")
     jobs = []
-    for i in range(1 << split_bits):
-        for file in glob.glob('{}/{:03x}/*.unsorted'.format(DICT_DIR, i)):
-            _do_sort(file)
-
-def _do_check_dict(file):
-    args = [DICT_CHECKER, '--partitioning-bits', str(split_bits), file]
-    print("    -> {}".format(" ".join(args)))
-    if not dry_run:
-        subprocess.run(args).check_returncode()
+    for i in range(1 << args.k):
+        for file in sorted(glob.glob('{}/{:03x}/*.unsorted'.format(DICT_DIR, i))):
+            file_sorted = file[:-9] + '.sorted'
+            if os.path.exists(file_sorted) and os.path.getsize(file) == os.path.getsize(file_sorted):
+                if args.verbose:
+                    print("# Skiping {} [already sorted]".format(file))
+                continue
+            cmds = [SORTER, file]
+            if args.verbose:
+                print(" ".join(cmds))
+            if not args.dry_run:
+                subprocess.run(cmds).check_returncode()
 
 def check_dict():
     """
     Verify all dictionnaries.
     """
-    print("X. Checking dictionaries")
     jobs = []
-    for i in range(1 << split_bits):
-        for file in glob.glob('{}/{:03x}/*'.format(DICT_DIR, i)):
-            _do_check_dict(file)
+    for i in range(1 << args.k):
+        for file in sorted(glob.glob('{}/{:03x}/*'.format(DICT_DIR, i))):
+            cmds = [DICT_CHECKER, '--partitioning-bits', str(args.k), file]
+            if args.verbose:
+                print(" ".join(cmds))
+            if not args.dry_run:
+                subprocess.run(cmds).check_returncode()
     
 
-
-def merged_hashfile_name(kind, i):
-    return '{}/{}.{:03x}'.format(HASH_DIR, kind, i)
-
-def _do_merge(job):
-    kind, i = job
-    input_files = glob.glob('{}/{:03x}/{}.*.sorted'.format(DICT_DIR, i, kind))
-    output_file = merged_hashfile_name(kind, i)
-    args = [MERGER, '--output', output_file] + input_files
-    print("    -> {}".format(" ".join(args)))
-    if not dry_run:
-        subprocess.run(args).check_returncode()            
 
 def merging():
     """
     merge all (sorted) dictionnaries.
     """
-    print("3. Merging (dictionaries -> hash files)")
-    jobs = itertools.product(KINDS, range(1 << split_bits))
-    with multiprocessing.Pool(processes=1) as pool:
-        pool.map(_do_merge, jobs, chunksize=1)
-
-
-
-def _do_check_hash(job):
-    _, file = job
-    args = [HASH_CHECKER, file]
-    print("    -> {}".format(" ".join(args)))
-    if not dry_run:
-        subprocess.run(args).check_returncode()
+    for kind in KINDS:
+        for i in range(1 << args.k):
+            input_files = sorted(glob.glob('{}/{:03x}/{}.*.sorted'.format(DICT_DIR, i, kind)))
+            output_file = '{}/{}.{:03x}'.format(HASH_DIR, kind, i)
+            if os.path.exists(output_file):
+                output_mtime = os.stat(output_file).st_mtime
+                input_mtime = 0
+                for f in input_files:
+                    input_mtime = max(input_mtime, os.stat(f).st_mtime)
+                if input_mtime < output_mtime:
+                    if args.verbose:
+                        print('# skipping {} [already merged]'.format(output_file))
+                    continue
+            cmds = [MERGER, '--output', output_file] + input_files
+            if args.verbose:
+                print(" ".join(cmds))
+            if not args.dry_run:
+                subprocess.run(cmds, stdout=subprocess.DEVNULL).check_returncode()            
+        
 
 def check_hash():
     """
     Verify all dictionnaries.
     """
-    print("Y. Checking hashes")
-    jobs = []
     for kind, kind_id in KINDS.items():
-        for file in glob.glob('{}/{}.*'.format(HASH_DIR, kind)):
-            jobs.append((kind_id, file))
-    with multiprocessing.Pool(processes=cores) as pool:
-        pool.map(_do_check_hash, jobs, chunksize=1)
+        for file in sorted(glob.glob('{}/{}.*'.format(HASH_DIR, kind))):
+            cmds = [HASH_CHECKER, file]
+            if args.verbose:
+                print(" ".join(cmds))
+            if not dry_run:
+                subprocess.run(cmds).check_returncode()
 
+if args.stats:
+    preimage_stats()
+    dict_stats()    
+    hash_stats()
+    sys.exit()
 
 ensure_dirs()
-preimage_stats()
-if do_split:
-    splitting()
-if check_split:
+    
+print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(args.k))
+splitting()
+if args.check:
+    print("X. Checking (unsorted) dictionaries")
     check_dict()
-dict_stats()
-if do_sort:
-    sorting()
-if check_sort:
-    check_dict()
-if do_merge:
-    merging()
-hash_stats()
-if check_merge:
-    check_hash()
 
-print("DONE")
+print("2. Sorting (dictionaries -> dictionaries)")
+sorting()
+if args.check:
+    print("Y. Checking (sorted) dictionaries")
+    check_dict()
+
+print("3. Merging (dictionaries -> hash files)")
+merging()
+if args.check:
+    print("Z. Checking hashes")
+    check_hash()
