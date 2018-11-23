@@ -165,7 +165,7 @@ we use a heuristic: we make sure that the subslice of $A$ has less
 than 512 hashes (this corresponds to a hash table fill of $0.25$).
 
 <<Determine the block size ($\ell$)>>=
-u32 l = floor(log2(size[0] / 512)) - 1;
+u32 l = floor(log2(size[0] / 512));
 u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
