@@ -200,7 +200,6 @@ struct task_result_t * iterated_joux_task(const char *hash_dir,
 		<<Display task info>>
 	}
 	for (u32 u = 0; u < n_blocks; u++)
-	//for (u32 u = 0; u < 1; u++)
 		process_block_v2(&self, u, true);
 	<<Release memory>>
 	if (verbose) {
@@ -466,6 +465,7 @@ void process_block_v2(struct context_t *self, u32 u, bool verbose)
 	if (verbose) {
 		<<Display stuff>>
 	}
+	verbose = false;
 	u32 fan_out = 1 << self->p;
 	u64 probes = 0;
 	#pragma omp parallel reduction(+:probes)
@@ -605,7 +605,8 @@ for (u32 k = 0;  k < 2; k++) {
 @ \section{Stage-1 Partitioning}
 
 The partitionning function is meant to be executed by all threads. Upon return, 
-the [[count]] parameter reveals the extent of each thread-bucket.
+the [[count]] parameter reveals the extent of each thread-bucket. It is guaranteed 
+that an \OMP barrier happens before this function returns (the [[for]] directive does this).
 
 <<Forward declarations>>=
 void stage1_partition(struct side_t *self, const struct block_t *block);

@@ -5,12 +5,14 @@ all: programs doc.pdf
 
 common.o: common.h
 partitioning.o: common.h
+partitioning_size.o: common.h
 
-programs: partitioning
-doc.pdf: common.pdf partitioning.pdf
+programs: partitioning partitioning_size
+doc.pdf: common.pdf partitioning.pdf partitioning_size.pdf
 	pdftk $^ cat output $@
 
 partitioning: common.o partitioning.o
+partitioning_size: common.o partitioning_size.o
 
 
 ## NOWEB IMPLICIT RULES
