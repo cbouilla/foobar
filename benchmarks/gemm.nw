@@ -1,0 +1,239 @@
+\documentclass{book}
+
+\usepackage{geometry}
+\usepackage{noweb}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{parskip}
+\usepackage{xspace}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{patterns}
+
+\newcommand{\join}{\bowtie}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\chapter{GEMM Benchmark}
+
+PowerPC A2 SMT4 : 100% utilization (29 instr / GEMV) vs <= 50% on a single thread. 
+More than one thread is necessary to achieve 100% CPU utilization.
+
+GEMM is CPU-bound on the PowerPC A2 and does not saturate memory BW (6Gb/s max), even on 16 cores with SMT4.
+
+So, a possible strategy is : 
+\begin{itemize}
+\item Perform the GEMM to some scratch space (maximize L1 cache hits)
+\item Do the dispatch to some other scratch space
+\item Do the hash joins.
+\end{itemize}
+
+It seems likely that partitioning is also going to be compute-bound...
+
+<<*>>=
+#define _XOPEN_SOURCE
+#include <math.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <omp.h>
+#include <getopt.h>
+
+#include <papi.h>
+
+#include "common.h"
+
+
+<<Type definitions>>
+<<Auxiliary functions>>
+<<The main function>>
+
+
+<<Auxiliary functions>>=
+unsigned long int papi_wrapper()
+{
+	return omp_get_thread_num();
+}
+
+<<The main function>>=
+int main(int argc, char **argv)
+{
+	if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT)
+  		errx(1, "PAPI_library_init");
+	if (PAPI_thread_init(papi_wrapper) != PAPI_OK)
+		errx(1, "PAPI thread init");
+	<<Process the command line>>
+	<<Prepare input data>>
+	<<Run everything>>
+}
+
+
+<<Process the command line>>=
+struct option longopts[4] = {
+	{"n", required_argument, NULL, 'n'},
+	{"it", required_argument, NULL, 'i'},
+	{NULL, 0, NULL, 0}
+};
+u64 n = 512 * 1024 * 1024; //134217728;  /* in octabytes */
+u32 iterations = 10;
+signed char ch;
+while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+    	switch (ch) {
+	case 'n':
+		n = atoll(optarg);
+		break;
+	case 'i':
+		iterations = atoi(optarg);
+		break;
+	default:
+		errx(1, "Unknown option\n");
+	}
+}
+
+<<Prepare input data>>=
+printf("# N = %" PRId64 "\n", n);
+printf("# Loading random junk\n");
+u64 size = sizeof(u64) * n;
+u64 *IN = aligned_alloc(64, size);
+if (IN == NULL)
+	err(1, "cannot allocate memory");
+u8 state[256];
+RC4_keysetup(state, 0);
+RC4_stream(state, (u8 *) IN, size);
+
+
+<<Prepare scratch space>>=
+u64 *OUT = aligned_alloc(64, size);
+if (OUT == NULL)
+	err(1, "cannot allocate memory");
+
+@ Now, the GEMM part...
+
+<<Type definitions>>=
+struct matmul_table_t {
+	u64 tables[8][256] __attribute__((aligned(64)));
+};
+
+
+<<Prepare random matrix>>=
+struct matmul_table_t M;
+for (u32 i = 0; i < 8; i++)
+	for (u32 j = 0; j < 256; j++)
+	M.tables[i][j] = mrand48() ^ (((u64) mrand48()) << 32);
+
+<<Auxiliary functions>>=
+static inline u64 gemv(u64 x, const struct matmul_table_t * M)
+{
+	u8 a = x;
+	u8 b = x >> 8;
+	u8 c = x >> 16;
+	u8 d = x >> 24;
+	u8 e = x >> 32;
+	u8 f = x >> 40;
+	u8 g = x >> 48;
+	u8 h = x >> 56;
+	
+	u64 r = M->tables[0][a];
+	r ^= M->tables[1][b];
+	r ^= M->tables[2][c];
+	r ^= M->tables[3][d];
+	r ^= M->tables[4][e];
+	r ^= M->tables[5][f];
+	r ^= M->tables[6][g];
+	r ^= M->tables[7][h];
+
+	/*u64 r = 0;
+	r ^= M->tables[0][x & 0x00ff];
+	r ^= M->tables[1][(x >> 8) & 0x00ff];
+	r ^= M->tables[2][(x >> 16) & 0x00ff];
+	r ^= M->tables[3][(x >> 24) & 0x00ff];
+	r ^= M->tables[4][(x >> 32) & 0x00ff];
+	r ^= M->tables[5][(x >> 40) & 0x00ff];
+	r ^= M->tables[6][(x >> 48) & 0x00ff];
+	r ^= M->tables[7][(x >> 56) & 0x00ff]; */
+
+	return r;
+}
+
+<<Release scratch space>>=
+free(OUT);
+
+<<Run everything>>=
+printf("# using T = %d threads\n", omp_get_max_threads());
+<<Prepare scratch space>>
+<<Prepare random matrix>>
+<<Run actual code and measurements>>
+<<Release scratch space>>
+	
+
+<<Run actual code and measurements>>=
+for (u32 it = 0; it < iterations; it++) {
+        printf("=================== Iteration %d\n", it);
+        double start = wtime(); 
+        #pragma omp parallel
+        {
+		<<Start counters>>
+                #pragma omp for schedule(static)
+                //for (u64 i = 0; i < n; i++)
+                //	OUT[i] = gemv(IN[i], &M);
+
+                for (u64 i = 0; i < n; i += 16) {
+                        OUT[i] = gemv(IN[i], &M);
+                        OUT[i + 1] = gemv(IN[i + 1], &M);
+                        OUT[i + 2] = gemv(IN[i + 2], &M);
+                        OUT[i + 3] = gemv(IN[i + 3], &M);
+                        OUT[i + 4] = gemv(IN[i + 4], &M);
+                        OUT[i + 5] = gemv(IN[i + 5], &M);
+                        OUT[i + 6] = gemv(IN[i + 6], &M);
+                        OUT[i + 7] = gemv(IN[i + 7], &M);
+                        OUT[i +  8] = gemv(IN[i +  8], &M);
+                        OUT[i +  9] = gemv(IN[i +  9], &M);
+                        OUT[i + 10] = gemv(IN[i + 10], &M);
+                        OUT[i + 11] = gemv(IN[i + 11], &M);
+                        OUT[i + 12] = gemv(IN[i + 12], &M);
+                        OUT[i + 13] = gemv(IN[i + 13], &M);
+                        OUT[i + 14] = gemv(IN[i + 14], &M);
+                        OUT[i + 15] = gemv(IN[i + 15], &M);
+                }
+                <<Stop counters and report>>
+        }
+        double duration = wtime() - start;
+        double rate = 9.5367431640625e-07 * n / duration;
+        printf("Rate          : %.2f M gemv/s\n", rate);
+}
+printf("\n");
+
+
+<<Start counters>>=
+int events[4] = {
+        PAPI_L1_LDM, // 0x80000017 Yes No Level 1 load misses
+        PAPI_LD_INS, //  0x80000035  Yes   No   Load instructions
+        PAPI_TOT_INS, // 0x80000032 Yes No Instructions completed
+        PAPI_TOT_CYC, // 0x8000003b Yes No Total cycles
+};
+#pragma omp master
+{
+	int rc = PAPI_start_counters(events, 4);
+	if (rc < PAPI_OK)
+        	errx(1, "PAPI_start_counters : %d", rc);
+}
+
+<<Stop counters and report>>=
+#pragma omp master
+{
+	long long counters[5];
+	int rc = PAPI_stop_counters(counters, 4);
+	if (rc < PAPI_OK)
+        	errx(1, "PAPI_stop_counters : %d", rc);
+        printf("Instr / GEMV   : %.1f\n", (1.0 * counters[2]) / n);
+        printf("IPC            : %.2f\n", (1.0 * counters[2]) / counters[3]);
+        printf("L1 Cache Miss  : %.1f %%\n", (100.0 * counters[0]) / counters[1]);
+        printf("Load / GEMV    : %.1f\n", (1.0 * counters[1]) / n);
+        printf("L1 miss / GEMV : %.1f\n", (1.0 * counters[0]) / n);
+}
+
+
+@ \end{document}

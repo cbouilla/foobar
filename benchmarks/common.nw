@@ -32,8 +32,11 @@ typedef uint64_t u64;
 
 
 <<Function declarations>>=
+void *aligned_alloc(size_t alignment, size_t size);
 double wtime();
+#ifdef __i386__
 u64 ticks();
+#endif
 
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -49,13 +52,27 @@ static inline u64 RIGHT_MASK(u32 n)
 }
 
 <<*>>=
+#define _POSIX_C_SOURCE 200112L
+#include <stdio.h>
 #include <sys/time.h>
 #include <stdlib.h>
 #include <err.h>
 #include "common.h"
-<<Functions>>
 
-<<Functions>>=
+
+void *aligned_alloc(size_t alignment, size_t size)
+{
+        void *p;
+        // fprintf(stderr, "Allocating %zd\n", size);
+        int rc = posix_memalign(&p, alignment, size);
+        if (rc != 0) {
+                warnx("posix_memaligned (code %d)", rc);
+                return NULL;
+        }
+        return p;
+}
+
+
 double wtime()
 {
 	struct timeval ts;
@@ -63,13 +80,49 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
+#ifdef __i386__
 u64 ticks()
 {
 	u64 low, high;
 	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
 	return (high << 32) | low;
 }
+#endif
 
+@ We need a good PRNG...
+
+<<Function declarations>>=
+void RC4_keysetup(u8 *S, u64 key);
+void RC4_stream(u8 *S, u8 *out, u64 n);
+
+<<*>>=
+void RC4_keysetup(u8 *S, u64 key)
+{
+        for (int i = 0; i < 256; i++)
+                S[i] = i;
+        // u8 k = key;
+        u8 j = 0;
+        for (int i = 0; i < 256; i++) {
+                j = j + S[i] + key;
+                // k = (k * key + 11) % 257;
+                u8 x = S[i];
+                S[i] = S[j];
+                S[j] = x;
+        }
+}
+
+void RC4_stream(u8 *S, u8 *out, u64 n)
+{
+        u8 i = 0, j = 0;
+        for (u64 k = 0; k < n; k++) {
+                i += 1;
+                j += S[i];
+                u8 x = S[i];
+                S[i] = S[j];
+                S[j] = x;
+                out[k] = S[(S[i] + S[j]) & 0x00ff];
+        }
+}
 
 
 @ \end{document}

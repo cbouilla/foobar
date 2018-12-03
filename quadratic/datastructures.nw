@@ -30,15 +30,22 @@ This is akin to a bloom filter, but bloom filters are too slow for our purposes.
 #include <err.h>
 #include <stdio.h>
 #include "datastructures.h"
+
 <<Public functions>>
 
 <<datastructures.h>>=
-#include "../types.h"
+#include "types.h"
 #include <assert.h>
-#include <immintrin.h>
+
 <<Type definitions>>
 <<Constants>>
 <<Function declarations>>
+
+#if __AVX2__
+#include <immintrin.h>
+<<Vectorized constants>>
+<<Vectorized functions declarations>>
+#endif
 
 @ \section{Linear Hashing}
 
@@ -238,6 +245,42 @@ u32 y = H[h];
 H[h] = x;
 x = y;
 
+@ \section{Multiple Cuckoo Probing}
+
+This tries to avoid sequence of dependent instructions that are problematic 
+for in-order CPUs (yes, we mean you, PowerPC A2).
+
+<<Function declarations>>=
+static inline bool cuckoo_lookup_4way(const u32 *H, 
+		     const u64 x0, const u64 x1, const u64 x2, const u64 x3)
+{
+	u32 x0_low = x0;
+	u32 x1_low = x1;
+	u32 x2_low = x2;
+	u32 x3_low = x3;
+	u32 u0 = x0 & CUCKOO_MASK;
+	u32 u1 = x1 & CUCKOO_MASK;
+	u32 u2 = x2 & CUCKOO_MASK;
+	u32 u3 = x3 & CUCKOO_MASK;
+	u32 v0 = (x0 >> 16) & CUCKOO_MASK;
+	u32 v1 = (x1 >> 16) & CUCKOO_MASK;
+	u32 v2 = (x2 >> 16) & CUCKOO_MASK;
+	u32 v3 = (x3 >> 16) & CUCKOO_MASK;
+	u32 p0 = H[u0];
+	u32 p1 = H[u1];
+	u32 p2 = H[u2];
+	u32 p3 = H[u3];
+	u32 q0 = H[v0];
+	u32 q1 = H[v1];
+	u32 q2 = H[v2];
+	u32 q3 = H[v3];
+	bool r0 = (p0 == x0_low) || (q0 == x0_low);
+	bool r1 = (p1 == x1_low) || (q1 == x1_low);
+	bool r2 = (p2 == x2_low) || (q2 == x2_low);
+	bool r3 = (p3 == x3_low) || (q3 == x3_low);
+	return r0 || r1 || r2 || r3;
+}
+
 @ \section{Vectorized Cuckoo Probing}
 
 We investigate how we could probe the cuckoo hash table 8 times in parallel 
@@ -245,7 +288,7 @@ using \textsf{AVX2} instructions. Given a vector of $8 \times [[u32]]$ $(x_i)$,
 the following function returns [[true]] if at least one of them belongs to the
 cuckoo table.
 
-<<Function declarations>>=
+<<Vectorized functions declarations>>=
 static inline bool parallel_cuckoo_lookup(const u32 *H, const __m256i x)
 {
 	<<Shift and mask to get the hash indexes>>
@@ -257,7 +300,7 @@ static inline bool parallel_cuckoo_lookup(const u32 *H, const __m256i x)
 masking and shifting. For speed, we use a precomputed constant vector with 8 
 copies of the 32-bit mask.
 
-<<Constants>>=
+<<Vectorized constants>>=
 static const __v8su CUCKOO_AVX_MASK = {
 	CUCKOO_MASK, CUCKOO_MASK, CUCKOO_MASK, CUCKOO_MASK, 
 	CUCKOO_MASK, CUCKOO_MASK, CUCKOO_MASK, CUCKOO_MASK};
@@ -288,7 +331,7 @@ return _mm256_movemask_epi8(m);
 we suspect that gather has high latency. We try to amortize it using unrolling.
 Preliminary experiments suggest that GCC does a \emph{better} job than me...
 
-<<Function declarations>>=
+<<Vectorized functions declarations>>=
 static inline bool two_parallel_cuckoo_lookup(const u32 *H, const __m256i x0, const __m256i x1)
 {
 	return parallel_cuckoo_lookup(H, x0) | parallel_cuckoo_lookup(H, x1);

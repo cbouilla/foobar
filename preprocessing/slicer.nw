@@ -1,0 +1,178 @@
+\documentclass{book}
+\usepackage{noweb}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{textcomp}
+\usepackage{parskip}
+\usepackage{geometry}
+\usepackage{xspace}
+\usepackage{hyperref}
+
+\def\noweb{{\tt noweb\/}}
+\newcommand{\join}{\bowtie}
+
+\newcommand{\ZMQ}{\textsf{$\varnothing$MQ}\xspace}
+\newcommand{\NN}{\textsf{nanomsg}\xspace}
+\newcommand{\MPI}{\textsf{MPI}\xspace}
+\newcommand{\OMP}{\textsf{OpenMP}\xspace}
+
+\begin{document}
+
+\setcounter{chapter}{7}
+\chapter{Slicer}
+
+This program reads the $C$ hash file, computes the changes of bases and writes down a matrix file.
+
+<<*>>=
+#define _XOPEN_SOURCE 500   /* strdup */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <err.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#include <m4ri/m4ri.h>
+#include "preprocessing.h"
+
+<<The main program>>
+
+@ We need the usual standard headers.
+
+<<The main program>>=
+int main(int argc, char **argv)
+{
+	<<Process the command line>>
+	<<Load the hash file; set up [[L]] and [[n]]>>
+	<<Open output file>>
+	<<Process all slices>>
+	exit(EXIT_SUCCESS);
+}
+
+@ The only accepted command-line argument is the name of file to sort.
+
+<<Process the command line>>=
+if (argc < 2)
+	errx(1, "missing argument: FILENAME");
+char *in_filename = argv[1];
+
+@ To read the dictionnaty file in memory, we first query its size, then
+allocate memory accordingly, then finally read it in the allocated space.
+
+<<Load the hash file; set up [[L]] and [[n]]>>=
+struct stat infos;
+if (stat(in_filename, &infos))
+	err(1, "fstat");
+u64 *L = malloc(infos.st_size);
+if (L == NULL)
+	err(1, "failed to allocate memory");
+FILE *f_in = fopen(in_filename, "r");
+if (f_in == NULL)
+	err(1, "fopen failed");
+size_t check = fread(L, 1, infos.st_size, f_in);
+if ((check != (size_t) infos.st_size) || ferror(f_in))
+	err(1, "fread : read %zd, expected %zd", check, infos.st_size);
+if (fclose(f_in))
+	err(1, "fclose %s", in_filename);
+u32 n = infos.st_size / sizeof(*L);
+
+
+<<Process all slices>>=
+assert(m4ri_radix == 64);
+u32 l = ceil(log2(n));
+u32 n_slices = ceil(n / (64. - l));
+u32 height = 64 - l;
+struct C_record_t *out = malloc(sizeof(*out) + 1000 * sizeof(u64));
+for (u32 u = 0; u < n_slices; u++) {
+	printf("\rslice %d/%d", u, n_slices);
+	fflush(stdout);
+	u32 lo = u * height;
+	u32 hi = MIN((u + 1) * height, n);
+	u32 height = hi - lo;
+	<<Load slice into [[A]]>>
+	<<Compute the PLUQ factorization of $A^{T}$>>
+	<<Extract $L$ from the factorization>>
+	<<Do $L \gets P\times L$>>
+	<<Compute $L^{T}, (L^{T})^{-1}$ and $CM$>>
+	<<Set output>>
+	<<Check $CM$>>
+	<<Write output>>
+	<<Free memory>>
+}
+printf("\n");
+
+<<Load slice into [[A]]>>=
+mzd_t *A = mzd_init(height, 64);
+for (u32 i = 0; i < height; i++)
+	mzd_row(A, i)[0] = L[lo + i];
+
+@ Let's go step-by-step. \MaRI computes the PLUQ factorization \emph{in-place}, 
+with both $L$ and $U$ stacked into the matrix on output. The two permutation 
+matrices $P$ and $Q$ are represented in [[mzp_t]] objects (in a bizarre way that
+we don't want to ever have to understand).
+
+<<Compute the PLUQ factorization of $A^{T}$>>=
+mzd_t *At = mzd_transpose(NULL, A);
+mzp_t* P = mzp_init(At->nrows);
+mzp_t* Q = mzp_init(At->ncols);
+u32 rank = mzd_pluq(At, P, Q, 0);
+
+@ Once the factorization completes, both $L$ and $U$ are in $A^{T}$. 
+$L$ is what is strictly below the diagonal, and $U$ is what is above the diagonal (included).
+To extract $L$, we use bitmasks to extract the first $i$ columns on the $i$-th row, and
+we restore the implicit 1 on the diagonal.
+
+<<Extract $L$ from the factorization>>=
+mzd_t *L = mzd_init(64, 64);
+for (u32 i = 0; i < (u32) At->nrows; i++)
+	mzd_row(L, i)[0] = (mzd_row(At, i)[0] & ((1ll << i) - 1)) | (1ll << i);
+for (u32 i = At->nrows; i < 64; i++)
+	mzd_row(L, i)[0] = 1ll << i;
+
+@ Fortunately, \MaRI provides a function to left-multiply by a [[mzp_t]] permutation matrix.
+
+<<Do $L \gets P\times L$>>=
+mzd_apply_p_left_trans(L, P);
+
+<<Compute $L^{T}, (L^{T})^{-1}$ and $CM$>>=
+mzd_t *Lt = mzd_transpose(NULL, L);           /* Minv */
+mzd_t *Ltinv = mzd_inv_m4ri(NULL, Lt, 0);  /* M */
+mzd_t *CM = mzd_mul_naive(NULL, A, Ltinv);
+
+<<Set output>>=
+out->n = height;
+out->l = 64 - rank;
+for (u32 i = 0; i < 64; i++)
+	out->M[i] = mzd_row(Ltinv, i)[0];
+for (u32 i = 0; i < 64; i++)
+	out->Minv[i] = mzd_row(Lt, i)[0];
+for (u32 i = 0; i < height; i++)
+	out->CM[i] = mzd_row(CM, i)[0];
+
+<<Check $CM$>>=
+for (u32 i = 0; i < height; i++)
+	assert((out->CM[i] & LEFT_MASK(out->l)) == 0);
+
+<<Open output file>>=
+char out_filename[256];
+sprintf(out_filename, "%s.matrix", in_filename);
+FILE *f_out = fopen(out_filename, "w");
+if (f_out == NULL)
+	err(1, "cannot create output file %s", out_filename);
+
+<<Write output>>=
+u32 size = sizeof(*out) + height * sizeof(u64);
+check = fwrite(out, 1, size, f_out);
+if (check != size)
+	err(1, "fwrite inconsistensy %zd vs %d", check, size);
+
+<<Free memory>>=
+mzd_free(A);
+mzd_free(At);
+mzd_free(Lt);
+mzd_free(Ltinv);
+mzd_free(CM);
+
+@
+
+\end{document}

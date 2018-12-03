@@ -34,8 +34,6 @@ Here are the knobs we can turn:
 %\setcounter{chapter}{2}
 \chapter{Partitioning Benchmark}
 
-
-
 Let's start will all the useless stuff.
 
 <<*>>=
@@ -47,9 +45,15 @@ Let's start will all the useless stuff.
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <omp.h>
 #include <getopt.h>
+
+#include <omp.h>
+#include <mpi.h>
+// #include <papi.h>
+
+#if __AVX__
 #include <immintrin.h>
+#endif
 
 #include "common.h"
 
@@ -63,24 +67,33 @@ Let's start will all the useless stuff.
 <<Settings>>=
 #define check false
 #define update false
-#define product true
-
+#define product false
+#define separate_product true
 
 
 <<The main function>>=
 int main(int argc, char **argv)
 {
-	if (check)
-		warnx("CHECK IS ON");
-	if (update)
-		warnx("UPDATE IS ON");
-	if (product)
-		warnx("PRODUCT IS ON");
+	<<Setup MPI>>
+	if (rank == 0) {
+		if (check)
+			warnx("CHECK IS ON");
+		if (update)
+			warnx("UPDATE IS ON");
+		if (product)
+			warnx("PRODUCT IS ON");
+	}
 	<<Process the command line>>
 	<<Prepare input data>>
 	<<Run everything>>
+	MPI_Finalize();
 }
 
+
+<<Setup MPI>>=
+int rank;
+MPI_Init(&argc, &argv);
+MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
 <<Process the command line>>=
 struct option longopts[4] = {
@@ -89,10 +102,10 @@ struct option longopts[4] = {
 	{"it", required_argument, NULL, 'i'},
 	{NULL, 0, NULL, 0}
 };
-u32 maxp = 0;
-u64 n = 134217728;  /* in octabytes */
+u32 maxp = 15;
+u64 n = 128 * 1024 * 1024;  /* in octabytes */
 u32 iterations = 10;
-char ch;
+signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
     	switch (ch) {
 	case 'k':
@@ -130,15 +143,15 @@ u64 chernoff_bound(u64 N, u32 n_buckets)
 
 
 <<Prepare input data>>=
-printf("# Loading random junk\n");
-u64 *IN = aligned_alloc(64, sizeof(*IN) * ROUND(n));
+if (rank == 0)
+	printf("# Loading random junk\n");
+u32 size = sizeof(u64) * ROUND(n);
+u64 *IN = aligned_alloc(64, size);
 if (IN == NULL)
-	err(1, "cannot allocate memory");
-FILE *f = fopen("/dev/urandom", "r");
-u64 read = fread(IN, sizeof(*IN), n, f);
-if (read != n)
-	err(1, "cannot read random junk");
-fclose(f);
+	err(1, "cannot allocate memory for IN");
+u8 state[256];
+RC4_keysetup(state, 0);
+RC4_stream(state, (u8 *) IN, size);
 
 
 <<Prepare scratch space>>=
@@ -150,7 +163,7 @@ u32 scratch_size = psize * fan_out;
 u64 *OUT = aligned_alloc(64, sizeof(*OUT) * scratch_size);
 u32 *COUNT = aligned_alloc(64, ROUND(sizeof(*COUNT) * fan_out * T));
 if (OUT == NULL || COUNT == NULL)
-	err(1, "cannot allocate memory");
+	err(1, "cannot allocate memory for OUT or COUNT");
 
 
 <<Prepare random matrix>>=
@@ -168,15 +181,23 @@ struct matmul_table_t {
 <<Auxiliary functions>>=
 static inline u64 gemv(u64 x, const struct matmul_table_t * M)
 {
-	u64 r = 0;
-	r ^= M->tables[0][x & 0x00ff];
-	r ^= M->tables[1][(x >> 8) & 0x00ff];
-	r ^= M->tables[2][(x >> 16) & 0x00ff];
-	r ^= M->tables[3][(x >> 24) & 0x00ff];
-	r ^= M->tables[4][(x >> 32) & 0x00ff];
-	r ^= M->tables[5][(x >> 40) & 0x00ff];
-	r ^= M->tables[6][(x >> 48) & 0x00ff];
-	r ^= M->tables[7][(x >> 56) & 0x00ff];
+	u8 a = x;
+	u8 b = x >> 8;
+	u8 c = x >> 16;
+	u8 d = x >> 24;
+	u8 e = x >> 32;
+	u8 f = x >> 40;
+	u8 g = x >> 48;
+	u8 h = x >> 56;
+	
+	u64 r = M->tables[0][a];
+	r ^= M->tables[1][b];
+	r ^= M->tables[2][c];
+	r ^= M->tables[3][d];
+	r ^= M->tables[4][e];
+	r ^= M->tables[5][f];
+	r ^= M->tables[6][g];
+	r ^= M->tables[7][h];
 	return r;
 }
 
@@ -185,11 +206,11 @@ free(OUT);
 free(COUNT);
 
 <<Display preliminary info>>=
-double expansion = (100.0 * (scratch_size - n)) / n;
-printf("|scratch| = %d items (expansion = %.1f %%), tisze=%d, psize=%d\n", 
+double expansion = (100.0 * (scratch_size - size)) / size;
+printf("# |scratch| = %d items (expansion = %.1f %%), tisze=%d, psize=%d\n", 
 	scratch_size, expansion, tsize, psize);
-double st1_part = (9.5367431640625e-07 * n) / fan_out;
-printf("Expected stage-1 partition = %.1f Mb\n", st1_part);
+//double st1_part = (9.5367431640625e-07 * n) / fan_out;
+//printf("# Expected stage-1 partition = %.1f Mb\n", st1_part);
 
 
 <<Check partitioning output>>=
@@ -206,15 +227,18 @@ for (u32 i = 0; i < fan_out; i++)
 const char *algo[2] = {"direct", "write-combining"};
 u32 maxT = omp_get_max_threads();
 for (u32 a = 0; a < 2; a++) {
-	printf("# Benchmarking %s, %d iterations\n", algo[a], iterations);
-	for (u32 T = 1; T <= maxT; T++) {
-		printf("# using T = %d threads\n", T);
+	if (rank == 0)
+		printf("# Benchmarking %s, %d iterations\n", algo[a], iterations);
+	for (u32 T = 4; T <= maxT; T += 4) {
+		if (rank == 0)
+			printf("# using T = %d threads\n", T);
 		omp_set_num_threads(T);
 		for (u32 p = 1; p < maxp; p++) {
 			<<Prepare scratch space>>
-			#if product
+			if (rank == 0) {
+				<<Display preliminary info>>
+			}
 			<<Prepare random matrix>>
-			#endif
 			<<Run actual code and measurements>>
 			<<Release scratch space>>
 		}
@@ -224,11 +248,17 @@ for (u32 a = 0; a < 2; a++) {
 
 
 <<Run actual code and measurements>>=
-printf("%s; %d; %d; ", algo[a], p, T);
+if (rank == 0)
+	printf("%s; %d; %d; ", algo[a], p, T);
 for (u32 it = 0; it < iterations; it++) {
 	double start = wtime();	
 	#pragma omp parallel
 	{
+		if (separate_product) {
+			#pragma omp for schedule(static)
+			for (u64 i = 0; i < n; i++)
+                		IN[i] = gemv(IN[i], &M);
+		}
 		assert(T == (u32) omp_get_num_threads());
 		u32 t = omp_get_thread_num();
 		if (a == 0) {
@@ -237,10 +267,12 @@ for (u32 it = 0; it < iterations; it++) {
 			<<Partitioning with write-combining buffer>>
 		}
 	}
-	double duration = wtime() - start;
-	double rate = 9.313225746154785e-10 * p * n / duration;
-	printf("%.2f; ", rate);         /* displays N * p / duration in G item.bit / s */
-	fflush(stdout);
+	if (rank == 0) {
+		double duration = wtime() - start;
+		double rate = 9.5367431640625e-07 * n / duration;
+		printf("%.2f; ", rate);         /* displays N / duration in M item / s */
+		fflush(stdout);
+	}
 	if (check) {
 		<<Check partitioning output>>
 	}
@@ -248,15 +280,8 @@ for (u32 it = 0; it < iterations; it++) {
 		<<Modify input>>
 	}
 }
-printf("\n");
-// double duration = (wtime() - start) / (iterations - 1);
-// u64 cycles = (ticks() - clock) / (iterations - 1);
-// double rate = n / duration * 9.313225746154785e-10;
-// double cpi = (1.0 * cycles) / n;
-// double bw = 16 * n / duration * 9.313225746154785e-10;
-// printf("\n");
-// printf("p=%d, T=%d, %s: %.1fs | %.1fMitem/s | %.1f cycles/item | memory BW = %.2fGb/s | %.1f Mitem/s/bit\n", 
-//					p, T, algo[a], duration, rate, cpi, bw, p * rate);
+if (rank == 0)
+	printf("\n");
 
 
 <<Modify input>>=
@@ -295,27 +320,7 @@ of the level-1 TLB).
 \item Performance scales \emph{very badly} when several cores are available.
 \end{enumerate}
 
-We benchmarked this code on a single 18-cores Xeon E5-2695 v4 @ 2.1Ghz CPU (we
-used \texttt{numactl} to confine the code inside one NUMA node). The
-``partitioning efficiency'' is the product of $\ell$ (the number of radix
-bits) by the throughput of the procedure. The experiment was done on random
-input lists of size $2^{27}$, which are relevant to us.
-
-% \begin{figure}
-% \begin{center}
-% \includegraphics[width=0.75\textwidth]{partitioning_efficiency}
-% \end{center}
-% \caption{\label{fig:p_efficiency} Partitioning efficiency.}
-% \end{figure}
-
-% \begin{figure}
-% \begin{center}
-% \includegraphics[width=0.75\textwidth]{partitioning_scalability}
-% \end{center}
-% \caption{\label{fig:p_scalability} Scalability of partitioning.}
-% \end{figure}
-
-As can be seen on fig~\ref{fig:p_efficiency}, the fan-out has a large influence
+The fan-out has a large influence
 on the speed of dispatching. If the fan-out exceeds the number of cache lines,
 then writing to the output is likely to cause a cache miss. In addition, if the
 fan-out if higher than the number of TLB entries, then each write may cause a
@@ -344,29 +349,31 @@ We use the write-combining buffer through these functions:
 <<Function prototypes>>=
 struct cacheline_t * wc_alloc(u32 fan_out);
 void wc_prime(struct cacheline_t * buffer, u32 fan_out);
-static inline void wc_push(struct cacheline_t * buffer, u32 fan_out, u64 *OUT, u64 x, u32 h);
+static inline void wc_push(struct cacheline_t * buffer, u64 *OUT, u64 x, u32 h);
 void wc_flush(struct cacheline_t * buffer, u32 fan_out, u64 *OUT);
 void wc_get_count(struct cacheline_t * buffer, u32 fan_out, u32 *COUNT);
 
 @ Here is the full partitioning code:
 
 <<Auxiliary functions>>=
-static inline void wc_step(u64 x, const struct matmul_table_t *M, u32 shift, struct cacheline_t *buffer, u32 fan_out, u64 *OUT)
+static inline void wc_step(u64 x, const struct matmul_table_t *M, u32 shift, struct cacheline_t *buffer, u64 *OUT)
 {
 	u64 y = product ? gemv(x, M) : x;
 	u32 h = y >> shift;
-	wc_push(buffer, fan_out, OUT, y, h);
+	wc_push(buffer, OUT, y, h);
 }
 
 <<Partitioning with write-combining buffer>>=
 assert(sizeof(struct cacheline_t) == CACHE_LINE_SIZE);
 struct cacheline_t * buffer = wc_alloc(fan_out);
 for (u32 i = 0; i < fan_out; i++)
-	buffer[i].start = psize * i + t * tsize;
+	buffer[i].values[7] = psize * i + t * tsize;
 wc_prime(buffer, fan_out);
+
 #pragma omp for schedule(static)
 for (u32 i = 0; i < n; i++)
-	wc_step(IN[i], &M, shift, buffer, fan_out, OUT);
+	wc_step(IN[i], &M, shift, buffer, OUT);
+
 wc_flush(buffer, fan_out, OUT);
 wc_get_count(buffer, fan_out, COUNT + t * fan_out);
 free(buffer);
@@ -377,10 +384,17 @@ CPU.
 
 <<Type definitions>>=
 struct cacheline_t {
-        u64 values[7];
-        u32 start;
-        u32 index;
+	u64 values[8];
 };
+/*union cacheline_t {
+        u64 values[8];
+        struct {
+        	u64 values[7];
+        	u32 start;        // the distinction between these two is useless
+        	u32 index;        // when the output buckets are cacheline-aligned
+        } data;
+};*/
+
 
 @ The [[cacheline_t]] objects temporarily hold items that are destined to land
 at a specified position in the [[OUT]] array. The [[start]] field is the
@@ -408,6 +422,7 @@ To use the write-combining buffer, one has to:
 <<Auxiliary functions>>=
 struct cacheline_t * wc_alloc(u32 fan_out)
 {
+	assert(sizeof(struct cacheline_t) == CACHE_LINE_SIZE);
 	struct cacheline_t *buffer = aligned_alloc(CACHE_LINE_SIZE, sizeof(*buffer) * fan_out);
 	if (buffer == NULL)
 		err(1, "aligned allocation of write-combining buffer");
@@ -418,7 +433,8 @@ struct cacheline_t * wc_alloc(u32 fan_out)
 void wc_prime(struct cacheline_t * buffer, u32 fan_out)
 {
 	for (u32 i = 0; i < fan_out; i++ )
-		buffer[i].index = buffer[i].start & 7;
+		assert((buffer[i].values[7] & 7) == 0);
+		// buffer[i].index = buffer[i].start & 7;
 }
 
 @ All items enter the buffer through the [[wc_push]] function, with [[h]]
@@ -426,25 +442,26 @@ indicating in which bucket they should land. Writing in [[value[7]]] would
 overwrite [[start]] and [[index]], so we take care to preserve them.
 
 <<Auxiliary functions>>=
-static inline void wc_push(struct cacheline_t * buffer, u32 fan_out, u64 *OUT, u64 x, u32 h)
+static inline void wc_push(struct cacheline_t * buffer, u64 *OUT, u64 x, u32 h)
 {
-	(void) fan_out;
-	u32 index = buffer[h].index;
-	u32 start = buffer[h].start;
+	u64 meta = buffer[h].values[7];
+	u64 index = meta & 7;
 	buffer[h].values[index] = x;
 	if (index == 7) {
-		<<Flush [[buffer[h]]] to [[OUT]] and re-prime it>>
-	} else {
-		buffer[h].index = index + 1;
+		u64 start = meta & 0xfffffffffffffff8;
+		store_nontemp_64B(&OUT[start], buffer[h].values);
 	}
+	buffer[h].values[7] = meta + 1;
 }
 
 @ Flushing is the tricky part. If [[start]] is aligned on a cache-line
 boundary, then the whole cache-line is flushed using a \emph{non-temporal
-store} (that does not leave the data in L2 cache, since we won't use it
+store} (that does not leave the data in L2 cache, since we will not use it
 anytime soon). If the cacheline is only partially full, then its elements are
 flushed one-by-one. This \emph{requires} however that [[OUT]] is aligned on a
 cache-line boundary.
+
+We only do this for CPUs with AVX.
 
 <<Function prototypes>>=
 void store_nontemp_64B(void * dst, void * src);
@@ -452,30 +469,36 @@ void store_nontemp_64B(void * dst, void * src);
 <<Auxiliary functions>>=
 void store_nontemp_64B(void * dst, void * src)
 {
-    register __m256i * d1 = (__m256i*) dst;
-    register __m256i s1 = *((__m256i*) src);
-    register __m256i * d2 = d1+1;
-    register __m256i s2 = *(((__m256i*) src)+1);
-    _mm256_stream_si256(d1, s1);
-    _mm256_stream_si256(d2, s2);
+#if __AVX__
+	register __m256i * d1 = (__m256i*) dst;
+	register __m256i s1 = *((__m256i*) src);
+	register __m256i * d2 = d1+1;
+	register __m256i s2 = *(((__m256i*) src)+1);
+	_mm256_stream_si256(d1, s1);
+	_mm256_stream_si256(d2, s2);
+	// note : on peut aussi le faire en SSE
+#else
+	u64 *in = src;
+	u64 *out = dst;
+	u64 a = in[0];
+	u64 b = in[1];
+	u64 c = in[2];
+	u64 d = in[3];
+	u64 e = in[4];
+	u64 f = in[5];
+	u64 g = in[6];
+	u64 h = in[7];
+	out[0] = a; 
+	out[1] = b;
+	out[2] = c;
+	out[3] = d;
+	out[4] = e;
+	out[5] = f;
+	out[6] = g;
+	out[7] = h;
+#endif
 }
 
-
-<<Flush [[buffer[h]]] to [[OUT]] and re-prime it>>=
-if ((start & 7) == 0) {
-	store_nontemp_64B(&OUT[start], &buffer[h]);
-	start += 8;
-} else {
-	while ((start & 7) != 0) {
-		OUT[start] = buffer[h].values[start & 7];
-		start += 1;
-	}
-}
-buffer[h].start = start;
-buffer[h].index = 0;
-	
-@  TODO : check if a [[u64 meta]] is faster.
- 
 @ Once all the input has been processed, some values remain in the buffer, and
 they also need to be flushed to [[OUT]] one-by-one.
 
@@ -483,13 +506,10 @@ they also need to be flushed to [[OUT]] one-by-one.
 void wc_flush(struct cacheline_t * buffer, u32 fan_out, u64 *OUT)
 {
 	for (u32 i = 0; i < fan_out; i++) {
-		u32 start = buffer[i].start;
-		u32 index = buffer[i].index;
-		while ((start & 7) < index) {
-			OUT[start] = buffer[i].values[start & 7];
-			start += 1;
-		}
-		buffer[i].start = start;
+		u64 meta = buffer[i].values[7];
+		u64 start = meta & 0xfffffffffffffff8;
+		for (u64 j = start; j < meta; j++)
+			OUT[j] = buffer[i].values[j & 7];
 	}
 }
 
@@ -500,8 +520,33 @@ need to read the size of individual buckets from it.
 void wc_get_count(struct cacheline_t * buffer, u32 fan_out, u32 *COUNT)
 {
 	for (u32 i = 0; i < fan_out; i++)
-		COUNT[i] = buffer[i].start;
+		COUNT[i] = buffer[i].values[7];
 }
+
+@ \section{Instrumentation}
+
+<<Start PAPI counters>>=
+int events[4] = {
+	PAPI_L1_LDM, // 0x80000017 Yes No Level 1 load misses
+	// PAPI_TLB_DM, // 0x80000014 Yes Yes Data translation lookaside buffer misses
+	PAPI_LD_INS, //  0x80000035  Yes   No   Load instructions
+	PAPI_TOT_INS, // 0x80000032 Yes No Instructions completed
+	PAPI_TOT_CYC, // 0x8000003b Yes No Total cycles
+};
+int rc = PAPI_start_counters(events, 4);
+if (rc < PAPI_OK)
+	errx(1, "PAPI_start_counters : %d", rc);
+
+
+<<Stop PAPI counters and report>>=
+rc = PAPI_stop_counters(counters, 4);
+if (rc < PAPI_OK)
+    	errx(1, "PAPI_stop_counters : %d", rc);
+printf("[tid=%d] PAPI_L1_LDM = %lld\n", t, counters[0]);
+// printf("[tid=%d] PAPI_TLB_DM = %lld\n", t, counters[1]);
+printf("[tid=%d] PAPI_LD_INS = %lld\n", t,  counters[1]);
+printf("[tid=%d] PAPI_TOT_INS = %lld\n", t,  counters[2]);
+printf("[tid=%d] PAPI_TOT_CYC = %lld\n", t,  counters[3]);
 
 @ \section{Results}
 
@@ -538,29 +583,28 @@ machine                 & [[hpac]] & [[ppti-gpu-3]] & [[chiclet]] & [[turing]] \
 \hline
 cores (numa node 0)     & 8        & 18             & 4           & 16 \\
 SMT ?                   & no       & 2              & 2           & 4  \\
-memory BW (GB/s)        & 22       & 26             & 15          & 42 \\
+memory BW (GB/s)        & 22       & 26             & 15          & 26 \\
 BW / thread             & 2.75     & 0.7            & 3.75        & 0.6 \\ 
 \hline
-max rate (Gitem/s)      & 1.37     & 1.6            & 0.9         & 2.6 \\
+max rate (Gitem/s)      & 1.37     & 1.6            & 0.9         & 1.6 \\
 \hline
-observed rate (Gitem/s) & 1.15     & 1.65           & 0.85        & ?\\
+observed rate (Gitem/s) & 1.15     & 1.65           & 0.85        & 1.6 \\
 \hline
-observed GEMV (Gitem/s) & 0.575    & 1.65           & 0.525       & ?\\
+observed w/ GEMV (Gitem/s) & 0.575 & 1.65           & 0.525       & 0.5\\
 \hline
-bound by                & compute  & memory         & compute     & ?\\
+bound by                & compute  & memory         & compute     & compute \\
 \hline	
 \end{tabular}
 
-
-
 \begin{itemize}
-\item The write-combining buffer is always a win.
-\item Using all available hardware threads is the way to go.
+\item The write-combining buffer is always a win \emph{EXCEPT ON THE BlueGene}.
+\item Using all available hardware threads is the way to go (EXCEPT : BG/Q. Partitioning is best at 3 threads/core).
 \item Performing GEMV halves the processing speed... unless memory BW is the limit.
 \item Unless so many threads are available that the memory bandwidth can be saturated.
 \item Scalability is good, up to a limit.
 \item Using the WC, there is a largish band for $1 \leq p \leq 10$ where GEMV+partitioning is fast
 (the actual upper-bound depends on the machine).
+\item On the BG/Q, doing GEMV first THEN partitioning is a bit faster. To investigate (compute bound in parallel with memory-bound ?)
 \end{itemize}
 
 @ \end{document}

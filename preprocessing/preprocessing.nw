@@ -93,7 +93,7 @@ Filesystem-wise, we use the following conventions :
 
 All programs may assume that the directories already exist.
 
-@ As stated above, the \emph{kind} of a preimage/dictionary file can be inferred from its name.
+As stated above, the \emph{kind} of a preimage/dictionary file can be inferred from its name.
 
 <<preprocessing.h>>=
 #ifndef _PREPROCESSING_H
@@ -160,4 +160,34 @@ u32 file_get_partition(const char *filename)
 	return out;
 }
 
-@ \end{document}
+@ \section{Additional Preprocessing for Joux's Algorithm}
+
+Lists $A$ and $B$ must not be sorted, so that it would make sense to randomly
+permute each hash file.
+
+For $C$, it seems reasonable to precompute the slices (thus enabling more
+intensive precomputations in order to increase the size of slices). In
+Addition to slice boundaries, we could store : $CM$ instead of $C$, as well as
+$M$ and $M^{-1}$. Advantage: this drops the "compute-time" dependency on M4RI.
+
+The $C$ hash file could be replaced by a sequence of :
+
+<<preprocessing.h>>=
+struct C_record_t {
+	u64 M[64];
+	u64 Minv[64];
+	u32 n;
+	u32 l;
+	u64 CM[];
+}  __attribute__((packed));
+
+static inline u64 LEFT_MASK(u8 n)
+{
+	return ~((1ull << (64 - n)) - 1);
+}
+
+
+@ If the ``compute'' phase happens on the BGQ, then hash files should be byte-
+swapped in advance.
+
+\end{document}

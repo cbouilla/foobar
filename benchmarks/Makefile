@@ -1,16 +1,17 @@
-CFLAGS = -std=c11 -g -Wall -mavx2 -Wextra -O3 -Werror -fopenmp -I$(HOME)/prison/m4ri/install/include
+CFLAGS = -std=c11 -g -Wall -Wextra -O3 -Werror -fopenmp -I$(HOME)/prison/m4ri/install/include
 LDFLAGS = -fopenmp -L$(HOME)/prison/m4ri/install/lib
-LDLIBS = -lm 
-all: programs doc.pdf
+LDLIBS = -lm -lpapi
+all: programs
 
 common.o: common.h
 partitioning.o: common.h
 partitioning_size.o: common.h
 
-programs: partitioning partitioning_size
+programs: partitioning gemm #partitioning_size
 doc.pdf: common.pdf partitioning.pdf partitioning_size.pdf
 	pdftk $^ cat output $@
 
+gemm: common.o gemm.o
 partitioning: common.o partitioning.o
 partitioning_size: common.o partitioning_size.o
 
@@ -20,7 +21,7 @@ partitioning_size: common.o partitioning_size.o
 	notangle -L $^ > $@
 
 %.h : %.nw
-	notangle -L -R$@ $^ > $@
+	notangle -R$@ $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@

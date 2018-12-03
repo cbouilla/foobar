@@ -1,0 +1,931 @@
+# Loading random junk
+# Benchmarking direct, 5 iterations
+# using T = 4 threads
+# |scratch| = 134692864 items (expansion = 312.5 %), tisze=16836608, psize=67346432
+direct; 1; 4; 47.48; 47.48; 47.48; 47.48; 47.48; 
+# |scratch| = 134889472 items (expansion = 312.6 %), tisze=8430592, psize=33722368
+direct; 2; 4; 45.66; 45.68; 45.71; 45.68; 45.69; 
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=16896000
+direct; 3; 4; 89.93; 89.95; 89.94; 89.94; 89.94; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=8472576
+direct; 4; 4; 93.31; 93.30; 93.30; 93.30; 93.30; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=4253696
+direct; 5; 4; 114.43; 114.43; 114.42; 114.43; 114.44; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=2139136
+direct; 6; 4; 158.17; 158.16; 158.17; 158.14; 158.17; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=1078272
+direct; 7; 4; 197.36; 197.64; 197.33; 197.64; 197.33; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=545280
+direct; 8; 4; 228.18; 228.40; 228.40; 228.38; 228.41; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=276992
+direct; 9; 4; 248.29; 248.43; 248.43; 248.43; 248.43; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=141568
+direct; 10; 4; 260.09; 260.08; 260.08; 260.07; 260.07; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=72960
+direct; 11; 4; 261.05; 261.04; 261.04; 261.03; 261.04; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=38144
+direct; 12; 4; 173.39; 173.40; 173.39; 173.40; 173.40; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=20224
+direct; 13; 4; 100.32; 100.32; 100.33; 100.33; 100.32; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=11008
+direct; 14; 4; 79.28; 79.28; 79.28; 79.28; 79.28; 
+# using T = 8 threads
+# |scratch| = 134889472 items (expansion = 312.6 %), tisze=8430592, psize=67444736
+direct; 1; 8; 45.99; 46.02; 45.95; 46.01; 46.01; 
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=33792000
+direct; 2; 8; 89.13; 89.13; 89.14; 89.14; 89.14; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=16945152
+direct; 3; 8; 101.36; 101.38; 101.39; 101.37; 101.40; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=8507392
+direct; 4; 8; 186.19; 186.18; 186.18; 186.20; 186.17; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=4278272
+direct; 5; 8; 208.84; 208.85; 208.83; 208.85; 208.84; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=2156544
+direct; 6; 8; 305.36; 307.12; 307.12; 307.10; 307.13; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=1090560
+direct; 7; 8; 388.78; 388.88; 388.90; 388.88; 388.87; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=553984
+direct; 8; 8; 453.06; 454.03; 453.24; 453.16; 454.02; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=283136
+direct; 9; 8; 494.70; 495.26; 495.25; 494.83; 495.26; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=145920
+direct; 10; 8; 519.05; 518.93; 518.90; 518.96; 519.02; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=76288
+direct; 11; 8; 520.58; 520.75; 520.71; 520.81; 520.63; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=40448
+direct; 12; 8; 345.05; 345.17; 345.20; 345.13; 345.20; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=22016
+direct; 13; 8; 199.81; 199.87; 199.85; 199.85; 199.84; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=12288
+direct; 14; 8; 158.00; 157.99; 157.98; 157.98; 157.99; 
+# using T = 12 threads
+# |scratch| = 135040512 items (expansion = 312.6 %), tisze=5626688, psize=67520256
+direct; 1; 12; 68.89; 68.96; 69.01; 69.05; 68.99; 
+# |scratch| = 135383040 items (expansion = 312.6 %), tisze=2820480, psize=33845760
+direct; 2; 12; 74.83; 74.59; 74.65; 74.86; 74.72; 
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=16983552
+direct; 3; 12; 152.43; 152.49; 152.46; 152.48; 152.49; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=8534016
+direct; 4; 12; 272.94; 272.99; 273.00; 272.99; 272.98; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=4297728
+direct; 5; 12; 818.22; 818.36; 818.34; 818.40; 818.37; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=2170368
+direct; 6; 12; 818.72; 818.86; 818.82; 818.88; 818.82; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=1100544
+direct; 7; 12; 818.91; 819.04; 819.00; 819.09; 819.02; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=560640
+direct; 8; 12; 818.94; 819.01; 819.17; 819.06; 819.12; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=288000
+direct; 9; 12; 818.77; 819.10; 819.10; 819.17; 819.14; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=149760
+direct; 10; 12; 818.50; 819.08; 819.12; 819.04; 819.13; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=79104
+direct; 11; 12; 799.28; 799.90; 799.87; 799.85; 799.91; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=42240
+direct; 12; 12; 515.88; 516.28; 516.23; 516.28; 516.27; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=23040
+direct; 13; 12; 298.25; 298.36; 298.45; 298.44; 298.46; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=13056
+direct; 14; 12; 235.93; 235.90; 235.90; 235.90; 235.90; 
+# using T = 16 threads
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=67584000
+direct; 1; 16; 91.86; 91.95; 91.97; 91.91; 91.83; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=33890304
+direct; 2; 16; 98.43; 98.27; 98.48; 98.61; 98.61; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=17014784
+direct; 3; 16; 202.74; 202.77; 202.75; 202.76; 202.76; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=8556544
+direct; 4; 16; 371.56; 371.63; 371.63; 371.61; 371.66; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=4313088
+direct; 5; 16; 1086.22; 1089.70; 1090.00; 1089.85; 1089.73; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=2181120
+direct; 6; 16; 1088.84; 1090.79; 1090.68; 1090.76; 1090.81; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=1107968
+direct; 7; 16; 1088.81; 1090.87; 1091.11; 1090.91; 1090.99; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=566272
+direct; 8; 16; 1088.51; 1091.21; 1091.24; 1090.99; 1091.05; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=291840
+direct; 9; 16; 1088.53; 1090.97; 1091.22; 1091.11; 1090.96; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=152576
+direct; 10; 16; 1088.02; 1090.68; 1090.80; 1090.69; 1090.79; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=80896
+direct; 11; 16; 1059.64; 1062.81; 1062.42; 1062.23; 1062.58; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=44032
+direct; 12; 16; 680.14; 682.15; 682.10; 682.07; 682.08; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=24576
+direct; 13; 16; 365.03; 364.59; 364.68; 364.67; 364.65; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=14336
+direct; 14; 16; 251.59; 251.33; 251.26; 251.18; 251.13; 
+# using T = 20 threads
+# |scratch| = 135280640 items (expansion = 312.6 %), tisze=3382016, psize=67640320
+direct; 1; 20; 66.58; 66.61; 66.63; 66.63; 66.63; 
+# |scratch| = 135720960 items (expansion = 312.6 %), tisze=1696512, psize=33930240
+direct; 2; 20; 123.92; 123.68; 123.70; 123.72; 123.91; 
+# |scratch| = 136345600 items (expansion = 312.7 %), tisze=852160, psize=17043200
+direct; 3; 20; 253.44; 253.49; 253.47; 253.50; 253.56; 
+# |scratch| = 137236480 items (expansion = 312.8 %), tisze=428864, psize=8577280
+direct; 4; 20; 426.46; 426.56; 426.60; 426.50; 426.47; 
+# |scratch| = 138485760 items (expansion = 312.9 %), tisze=216384, psize=4327680
+direct; 5; 20; 489.04; 490.13; 489.80; 489.38; 489.46; 
+# |scratch| = 140247040 items (expansion = 313.1 %), tisze=109568, psize=2191360
+direct; 6; 20; 685.38; 686.05; 686.56; 687.23; 686.04; 
+# |scratch| = 142868480 items (expansion = 313.3 %), tisze=55808, psize=1116160
+direct; 7; 20; 831.49; 831.72; 831.91; 833.55; 831.89; 
+# |scratch| = 146472960 items (expansion = 313.6 %), tisze=28608, psize=572160
+direct; 8; 20; 942.22; 943.17; 943.05; 943.44; 943.15; 
+# |scratch| = 151388160 items (expansion = 314.1 %), tisze=14784, psize=295680
+direct; 9; 20; 1007.99; 1010.00; 1010.15; 1010.01; 1010.56; 
+# |scratch| = 158597120 items (expansion = 314.8 %), tisze=7744, psize=154880
+direct; 10; 20; 1021.18; 1024.97; 1024.69; 1025.03; 1024.93; 
+# |scratch| = 170393600 items (expansion = 315.9 %), tisze=4160, psize=83200
+direct; 11; 20; 737.11; 738.82; 738.84; 739.03; 739.00; 
+# |scratch| = 183500800 items (expansion = 317.1 %), tisze=2240, psize=44800
+direct; 12; 20; 466.37; 466.93; 467.06; 466.94; 466.96; 
+# |scratch| = 209715200 items (expansion = 319.5 %), tisze=1280, psize=25600
+direct; 13; 20; 336.88; 337.04; 337.20; 337.09; 337.16; 
+# |scratch| = 230686720 items (expansion = 321.5 %), tisze=704, psize=14080
+direct; 14; 20; 195.69; 195.88; 195.78; 195.72; 195.78; 
+# using T = 24 threads
+# |scratch| = 135383040 items (expansion = 312.6 %), tisze=2820480, psize=67691520
+direct; 1; 24; 81.17; 81.25; 81.25; 81.24; 81.25; 
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=33967104
+direct; 2; 24; 148.88; 148.79; 148.75; 148.85; 148.77; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=17068032
+direct; 3; 24; 301.39; 301.48; 301.51; 301.48; 301.51; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=8595456
+direct; 4; 24; 465.57; 465.80; 465.95; 465.77; 465.85; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=4340736
+direct; 5; 24; 559.42; 559.78; 560.11; 559.79; 559.85; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=2201088
+direct; 6; 24; 804.87; 805.25; 805.33; 803.58; 802.97; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=1121280
+direct; 7; 24; 983.21; 984.52; 984.40; 976.64; 986.52; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=576000
+direct; 8; 24; 1118.22; 1122.18; 1122.68; 1122.29; 1122.22; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=299520
+direct; 9; 24; 1200.32; 1206.50; 1207.99; 1205.27; 1206.08; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=158208
+direct; 10; 24; 1214.41; 1223.75; 1223.59; 1223.37; 1223.38; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=84480
+direct; 11; 24; 867.45; 870.28; 870.49; 870.22; 870.03; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=46080
+direct; 12; 24; 549.10; 549.79; 549.49; 549.48; 549.52; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=26112
+direct; 13; 24; 416.15; 415.67; 415.68; 415.65; 415.80; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=640, psize=15360
+direct; 14; 24; 171.28; 171.15; 171.14; 171.07; 171.23; 
+# using T = 28 threads
+# |scratch| = 135475200 items (expansion = 312.6 %), tisze=2419200, psize=67737600
+direct; 1; 28; 95.10; 95.20; 95.20; 95.21; 95.20; 
+# |scratch| = 135998464 items (expansion = 312.7 %), tisze=1214272, psize=33999616
+direct; 2; 28; 173.64; 173.72; 173.63; 173.73; 173.74; 
+# |scratch| = 136736768 items (expansion = 312.7 %), tisze=610432, psize=17092096
+direct; 3; 28; 350.50; 350.68; 350.58; 350.67; 350.64; 
+# |scratch| = 137797632 items (expansion = 312.8 %), tisze=307584, psize=8612352
+direct; 4; 28; 595.34; 595.53; 595.36; 595.47; 595.65; 
+# |scratch| = 139288576 items (expansion = 313.0 %), tisze=155456, psize=4352768
+direct; 5; 28; 646.10; 646.34; 646.36; 646.44; 646.45; 
+# |scratch| = 141410304 items (expansion = 313.2 %), tisze=78912, psize=2209536
+direct; 6; 28; 925.15; 925.32; 925.78; 925.56; 925.56; 
+# |scratch| = 144277504 items (expansion = 313.4 %), tisze=40256, psize=1127168
+direct; 7; 28; 1135.88; 1139.09; 1139.53; 1139.08; 1139.09; 
+# |scratch| = 148635648 items (expansion = 313.8 %), tisze=20736, psize=580608
+direct; 8; 28; 1292.24; 1300.08; 1300.31; 1300.19; 1300.22; 
+# |scratch| = 155058176 items (expansion = 314.4 %), tisze=10816, psize=302848
+direct; 9; 28; 1387.25; 1398.75; 1398.78; 1399.44; 1399.83; 
+# |scratch| = 163315712 items (expansion = 315.2 %), tisze=5696, psize=159488
+direct; 10; 28; 1403.85; 1415.49; 1415.80; 1416.31; 1414.60; 
+# |scratch| = 176160768 items (expansion = 316.4 %), tisze=3072, psize=86016
+direct; 11; 28; 995.23; 998.88; 998.65; 998.71; 987.97; 
+# |scratch| = 198180864 items (expansion = 318.5 %), tisze=1728, psize=48384
+direct; 12; 28; 637.96; 639.05; 638.91; 638.64; 638.95; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=960, psize=26880
+direct; 13; 28; 354.97; 354.44; 354.43; 354.49; 354.29; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=576, psize=16128
+direct; 14; 28; 156.25; 156.19; 156.15; 156.14; 156.20; 
+# using T = 32 threads
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=67780608
+direct; 1; 32; 109.61; 109.74; 109.76; 109.73; 109.75; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=34029568
+direct; 2; 32; 199.91; 199.85; 199.76; 199.84; 199.86; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=17113088
+direct; 3; 32; 400.53; 400.80; 400.76; 400.68; 400.75; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=8626176
+direct; 4; 32; 691.03; 691.30; 691.84; 691.24; 691.12; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=4362240
+direct; 5; 32; 732.89; 733.12; 733.51; 732.85; 733.38; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=2215936
+direct; 6; 32; 1045.98; 1047.28; 1047.87; 1047.65; 1047.40; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=1132544
+direct; 7; 32; 1279.33; 1285.19; 1285.00; 1285.27; 1284.69; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=583680
+direct; 8; 32; 1430.23; 1439.77; 1436.51; 1436.69; 1439.12; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=305152
+direct; 9; 32; 1482.93; 1496.53; 1495.22; 1497.11; 1495.12; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=161792
+direct; 10; 32; 1505.76; 1514.20; 1516.91; 1514.81; 1516.26; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=88064
+direct; 11; 32; 1124.94; 1128.69; 1128.74; 1128.63; 1128.65; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=49152
+direct; 12; 32; 554.56; 556.48; 555.79; 556.81; 554.50; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=28672
+direct; 13; 32; 252.77; 252.35; 252.39; 252.48; 252.38; 
+# |scratch| = 268435456 items (expansion = 325.0 %), tisze=512, psize=16384
+direct; 14; 32; 117.78; 118.10; 118.09; 118.07; 118.05; 
+# using T = 36 threads
+# |scratch| = 135645696 items (expansion = 312.6 %), tisze=1883968, psize=67822848
+direct; 1; 36; 124.03; 124.18; 124.19; 124.18; 124.19; 
+# |scratch| = 136240128 items (expansion = 312.7 %), tisze=946112, psize=34060032
+direct; 2; 36; 223.14; 223.28; 223.09; 223.21; 223.09; 
+# |scratch| = 137078784 items (expansion = 312.8 %), tisze=475968, psize=17134848
+direct; 3; 36; 443.85; 444.06; 443.88; 444.12; 444.22; 
+# |scratch| = 138276864 items (expansion = 312.9 %), tisze=240064, psize=8642304
+direct; 4; 36; 664.54; 664.84; 664.73; 665.41; 664.89; 
+# |scratch| = 139935744 items (expansion = 313.0 %), tisze=121472, psize=4372992
+direct; 5; 36; 1378.43; 1390.67; 1389.30; 1391.00; 1389.90; 
+# |scratch| = 142295040 items (expansion = 313.3 %), tisze=61760, psize=2223360
+direct; 6; 36; 1366.34; 1380.22; 1380.38; 1380.29; 1380.11; 
+# |scratch| = 145686528 items (expansion = 313.6 %), tisze=31616, psize=1138176
+direct; 7; 36; 1342.69; 1356.90; 1355.78; 1355.97; 1356.88; 
+# |scratch| = 150405120 items (expansion = 314.0 %), tisze=16320, psize=587520
+direct; 8; 36; 1310.94; 1324.19; 1325.23; 1323.82; 1325.39; 
+# |scratch| = 158072832 items (expansion = 314.7 %), tisze=8576, psize=308736
+direct; 9; 36; 1321.71; 1334.14; 1334.11; 1333.95; 1333.47; 
+# |scratch| = 167510016 items (expansion = 315.6 %), tisze=4544, psize=163584
+direct; 10; 36; 1257.31; 1267.24; 1268.38; 1267.20; 1267.34; 
+# |scratch| = 184025088 items (expansion = 317.1 %), tisze=2496, psize=89856
+direct; 11; 36; 851.83; 855.72; 856.15; 855.90; 855.65; 
+# |scratch| = 207618048 items (expansion = 319.3 %), tisze=1408, psize=50688
+direct; 12; 36; 572.26; 573.19; 573.32; 572.87; 573.18; 
+# |scratch| = 226492416 items (expansion = 321.1 %), tisze=768, psize=27648
+direct; 13; 36; 191.46; 191.39; 191.35; 191.35; 191.33; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=448, psize=16128
+direct; 14; 36; 134.30; 134.25; 134.24; 133.75; 134.25; 
+# using T = 40 threads
+# |scratch| = 135720960 items (expansion = 312.6 %), tisze=1696512, psize=67860480
+direct; 1; 40; 120.10; 120.26; 120.27; 120.28; 120.26; 
+# |scratch| = 136345600 items (expansion = 312.7 %), tisze=852160, psize=34086400
+direct; 2; 40; 247.32; 247.28; 247.33; 247.37; 247.29; 
+# |scratch| = 137236480 items (expansion = 312.8 %), tisze=428864, psize=17154560
+direct; 3; 40; 491.75; 492.09; 492.01; 492.12; 492.07; 
+# |scratch| = 138485760 items (expansion = 312.9 %), tisze=216384, psize=8655360
+direct; 4; 40; 736.64; 737.22; 737.23; 738.00; 738.02; 
+# |scratch| = 140247040 items (expansion = 313.1 %), tisze=109568, psize=4382720
+direct; 5; 40; 1410.68; 1429.34; 1430.76; 1430.77; 1431.21; 
+# |scratch| = 142868480 items (expansion = 313.3 %), tisze=55808, psize=2232320
+direct; 6; 40; 1440.21; 1457.91; 1459.49; 1458.26; 1458.04; 
+# |scratch| = 146472960 items (expansion = 313.6 %), tisze=28608, psize=1144320
+direct; 7; 40; 1453.47; 1468.16; 1468.85; 1467.86; 1466.92; 
+# |scratch| = 151388160 items (expansion = 314.1 %), tisze=14784, psize=591360
+direct; 8; 40; 1425.41; 1438.17; 1440.71; 1440.14; 1440.50; 
+# |scratch| = 158597120 items (expansion = 314.8 %), tisze=7744, psize=309760
+direct; 9; 40; 1389.90; 1362.95; 1401.59; 1403.77; 1402.54; 
+# |scratch| = 170393600 items (expansion = 315.9 %), tisze=4160, psize=166400
+direct; 10; 40; 1370.98; 1383.25; 1382.59; 1382.77; 1383.33; 
+# |scratch| = 183500800 items (expansion = 317.1 %), tisze=2240, psize=89600
+direct; 11; 40; 928.06; 931.31; 931.18; 931.19; 931.20; 
+# |scratch| = 209715200 items (expansion = 319.5 %), tisze=1280, psize=51200
+direct; 12; 40; 456.91; 457.72; 456.12; 455.36; 456.30; 
+# |scratch| = 230686720 items (expansion = 321.5 %), tisze=704, psize=28160
+direct; 13; 40; 214.06; 214.07; 214.01; 213.83; 213.88; 
+# |scratch| = 293601280 items (expansion = 327.3 %), tisze=448, psize=17920
+direct; 14; 40; 130.03; 129.95; 129.96; 129.96; 129.93; 
+# using T = 44 threads
+# |scratch| = 135793152 items (expansion = 312.6 %), tisze=1543104, psize=67896576
+direct; 1; 44; 137.90; 138.11; 138.10; 138.09; 138.09; 
+# |scratch| = 136452096 items (expansion = 312.7 %), tisze=775296, psize=34113024
+direct; 2; 44; 272.10; 272.19; 272.34; 272.19; 272.04; 
+# |scratch| = 137375744 items (expansion = 312.8 %), tisze=390272, psize=17171968
+direct; 3; 44; 540.13; 540.57; 540.69; 540.54; 540.42; 
+# |scratch| = 138682368 items (expansion = 312.9 %), tisze=196992, psize=8667648
+direct; 4; 44; 608.02; 608.49; 608.24; 609.22; 608.84; 
+# |scratch| = 140574720 items (expansion = 313.1 %), tisze=99840, psize=4392960
+direct; 5; 44; 895.27; 896.18; 896.70; 895.68; 895.69; 
+# |scratch| = 143278080 items (expansion = 313.3 %), tisze=50880, psize=2238720
+direct; 6; 44; 1261.55; 1265.17; 1267.92; 1266.47; 1269.31; 
+# |scratch| = 147062784 items (expansion = 313.7 %), tisze=26112, psize=1148928
+direct; 7; 44; 1458.72; 1471.65; 1475.76; 1475.98; 1472.79; 
+# |scratch| = 152109056 items (expansion = 314.2 %), tisze=13504, psize=594176
+direct; 8; 44; 1527.79; 1544.40; 1542.82; 1542.72; 1545.54; 
+# |scratch| = 160038912 items (expansion = 314.9 %), tisze=7104, psize=312576
+direct; 9; 44; 1543.86; 1560.40; 1559.85; 1560.98; 1560.39; 
+# |scratch| = 170131456 items (expansion = 315.8 %), tisze=3776, psize=166144
+direct; 10; 44; 1498.12; 1508.60; 1509.81; 1510.58; 1509.59; 
+# |scratch| = 184549376 items (expansion = 317.2 %), tisze=2048, psize=90112
+direct; 11; 44; 956.84; 960.69; 960.74; 959.69; 961.16; 
+# |scratch| = 207618048 items (expansion = 319.3 %), tisze=1152, psize=50688
+direct; 12; 44; 517.87; 517.08; 517.99; 517.91; 517.70; 
+# |scratch| = 253755392 items (expansion = 323.6 %), tisze=704, psize=30976
+direct; 13; 44; 190.06; 189.95; 188.86; 189.90; 190.00; 
+# |scratch| = 276824064 items (expansion = 325.8 %), tisze=384, psize=16896
+direct; 14; 44; 119.41; 119.33; 119.30; 119.34; 119.33; 
+# using T = 48 threads
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=67934208
+direct; 1; 48; 124.82; 125.02; 125.02; 124.99; 125.00; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=34136064
+direct; 2; 48; 296.08; 296.22; 296.22; 296.08; 296.05; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=17190912
+direct; 3; 48; 586.85; 587.45; 587.74; 587.40; 587.54; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=8681472
+direct; 4; 48; 873.53; 874.61; 874.47; 876.08; 875.29; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=4402176
+direct; 5; 48; 975.68; 977.25; 977.18; 977.42; 977.34; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=2242560
+direct; 6; 48; 1365.61; 1377.19; 1376.48; 1378.24; 1374.91; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=1152000
+direct; 7; 48; 1550.03; 1571.86; 1567.84; 1564.18; 1570.44; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=599040
+direct; 8; 48; 1583.53; 1600.30; 1600.98; 1600.72; 1601.66; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=316416
+direct; 9; 48; 1554.55; 1568.53; 1569.89; 1567.86; 1569.17; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=168960
+direct; 10; 48; 1567.32; 1577.56; 1579.57; 1577.93; 1578.65; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=92160
+direct; 11; 48; 1030.07; 1033.08; 1032.42; 1034.03; 1033.61; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=52224
+direct; 12; 48; 434.30; 434.66; 435.10; 434.34; 434.66; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=640, psize=30720
+direct; 13; 48; 160.03; 159.83; 159.88; 159.79; 159.87; 
+# |scratch| = 301989888 items (expansion = 328.1 %), tisze=384, psize=18432
+direct; 14; 48; 113.05; 112.59; 112.96; 112.96; 112.95; 
+# using T = 52 threads
+# |scratch| = 135935488 items (expansion = 312.7 %), tisze=1307072, psize=67967744
+direct; 1; 52; 158.50; 158.81; 158.81; 158.81; 158.82; 
+# |scratch| = 136647680 items (expansion = 312.7 %), tisze=656960, psize=34161920
+direct; 2; 52; 321.82; 322.06; 322.08; 322.14; 321.89; 
+# |scratch| = 137646080 items (expansion = 312.8 %), tisze=330880, psize=17205760
+direct; 3; 52; 630.95; 631.51; 632.11; 631.74; 631.59; 
+# |scratch| = 139083776 items (expansion = 313.0 %), tisze=167168, psize=8692736
+direct; 4; 52; 899.24; 900.08; 900.99; 899.97; 900.99; 
+# |scratch| = 141107200 items (expansion = 313.1 %), tisze=84800, psize=4409600
+direct; 5; 52; 1381.80; 1394.53; 1394.90; 1393.82; 1396.08; 
+# |scratch| = 143982592 items (expansion = 313.4 %), tisze=43264, psize=2249728
+direct; 6; 52; 1392.47; 1408.25; 1408.36; 1408.98; 1410.25; 
+# |scratch| = 148242432 items (expansion = 313.8 %), tisze=22272, psize=1158144
+direct; 7; 52; 1352.52; 1365.35; 1366.31; 1366.34; 1364.20; 
+# |scratch| = 154206208 items (expansion = 314.4 %), tisze=11584, psize=602368
+direct; 8; 52; 1373.77; 1386.18; 1351.62; 1387.39; 1387.76; 
+# |scratch| = 161873920 items (expansion = 315.1 %), tisze=6080, psize=316160
+direct; 9; 52; 1378.25; 1391.67; 1390.56; 1390.07; 1391.67; 
+# |scratch| = 173801472 items (expansion = 316.2 %), tisze=3264, psize=169728
+direct; 10; 52; 1281.87; 1292.57; 1292.29; 1292.89; 1292.41; 
+# |scratch| = 190840832 items (expansion = 317.8 %), tisze=1792, psize=93184
+direct; 11; 52; 876.55; 886.95; 880.38; 879.18; 883.48; 
+# |scratch| = 218103808 items (expansion = 320.3 %), tisze=1024, psize=53248
+direct; 12; 52; 300.43; 300.74; 301.09; 300.06; 300.78; 
+# |scratch| = 245366784 items (expansion = 322.9 %), tisze=576, psize=29952
+direct; 13; 52; 165.47; 165.46; 165.48; 165.48; 165.51; 
+# |scratch| = 327155712 items (expansion = 330.5 %), tisze=384, psize=19968
+direct; 14; 52; 114.12; 114.05; 114.08; 114.06; 113.69; 
+# using T = 56 threads
+# |scratch| = 135998464 items (expansion = 312.7 %), tisze=1214272, psize=67999232
+direct; 1; 56; 148.06; 148.40; 148.41; 148.40; 148.39; 
+# |scratch| = 136736768 items (expansion = 312.7 %), tisze=610432, psize=34184192
+direct; 2; 56; 345.79; 345.95; 346.05; 346.05; 345.86; 
+# |scratch| = 137797632 items (expansion = 312.8 %), tisze=307584, psize=17224704
+direct; 3; 56; 370.61; 370.90; 370.72; 370.77; 370.95; 
+# |scratch| = 139288576 items (expansion = 313.0 %), tisze=155456, psize=8705536
+direct; 4; 56; 761.01; 762.45; 761.72; 762.76; 762.53; 
+# |scratch| = 141410304 items (expansion = 313.2 %), tisze=78912, psize=4419072
+direct; 5; 56; 1449.29; 1464.38; 1465.24; 1466.73; 1465.96; 
+# |scratch| = 144277504 items (expansion = 313.4 %), tisze=40256, psize=2254336
+direct; 6; 56; 1485.85; 1503.95; 1505.62; 1503.07; 1501.77; 
+# |scratch| = 148635648 items (expansion = 313.8 %), tisze=20736, psize=1161216
+direct; 7; 56; 1454.51; 1473.04; 1471.42; 1470.88; 1472.36; 
+# |scratch| = 155058176 items (expansion = 314.4 %), tisze=10816, psize=605696
+direct; 8; 56; 1481.07; 1497.38; 1497.25; 1496.32; 1497.53; 
+# |scratch| = 163315712 items (expansion = 315.2 %), tisze=5696, psize=318976
+direct; 9; 56; 1463.18; 1476.52; 1476.51; 1476.31; 1477.67; 
+# |scratch| = 176160768 items (expansion = 316.4 %), tisze=3072, psize=172032
+direct; 10; 56; 1380.29; 1389.16; 1390.47; 1387.53; 1388.95; 
+# |scratch| = 198180864 items (expansion = 318.5 %), tisze=1728, psize=96768
+direct; 11; 56; 1016.11; 1020.61; 1019.77; 1019.86; 1020.68; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=960, psize=53760
+direct; 12; 56; 361.48; 361.78; 357.32; 361.83; 361.94; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=576, psize=32256
+direct; 13; 56; 161.84; 161.82; 161.84; 161.78; 161.80; 
+# |scratch| = 352321536 items (expansion = 332.8 %), tisze=384, psize=21504
+direct; 14; 56; 111.18; 111.07; 111.11; 111.06; 111.10; 
+# using T = 60 threads
+# |scratch| = 136058880 items (expansion = 312.7 %), tisze=1133824, psize=68029440
+direct; 1; 60; 161.54; 161.90; 161.87; 161.94; 161.92; 
+# |scratch| = 136826880 items (expansion = 312.7 %), tisze=570112, psize=34206720
+direct; 2; 60; 371.01; 371.42; 371.40; 371.49; 371.36; 
+# |scratch| = 137902080 items (expansion = 312.8 %), tisze=287296, psize=17237760
+direct; 3; 60; 724.30; 725.33; 725.26; 725.48; 725.33; 
+# |scratch| = 139468800 items (expansion = 313.0 %), tisze=145280, psize=8716800
+direct; 4; 60; 1028.47; 1031.72; 1030.85; 1030.77; 1031.16; 
+# |scratch| = 141680640 items (expansion = 313.2 %), tisze=73792, psize=4427520
+direct; 5; 60; 1055.29; 1059.73; 1059.51; 1058.48; 1059.11; 
+# |scratch| = 144752640 items (expansion = 313.5 %), tisze=37696, psize=2261760
+direct; 6; 60; 1482.94; 1498.97; 1500.16; 1500.15; 1496.48; 
+# |scratch| = 148930560 items (expansion = 313.9 %), tisze=19392, psize=1163520
+direct; 7; 60; 1533.39; 1551.38; 1555.07; 1552.12; 1552.21; 
+# |scratch| = 155320320 items (expansion = 314.5 %), tisze=10112, psize=606720
+direct; 8; 60; 1546.79; 1562.10; 1564.64; 1562.39; 1563.89; 
+# |scratch| = 165150720 items (expansion = 315.4 %), tisze=5376, psize=322560
+direct; 9; 60; 1545.15; 1563.38; 1562.59; 1561.47; 1560.63; 
+# |scratch| = 176947200 items (expansion = 316.5 %), tisze=2880, psize=172800
+direct; 10; 60; 1470.98; 1480.49; 1481.14; 1480.69; 1480.62; 
+# |scratch| = 196608000 items (expansion = 318.3 %), tisze=1600, psize=96000
+direct; 11; 60; 869.45; 871.09; 870.29; 871.39; 871.95; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=896, psize=53760
+direct; 12; 60; 308.30; 308.45; 308.67; 308.52; 308.60; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=512, psize=30720
+direct; 13; 60; 129.88; 129.77; 129.76; 129.29; 129.76; 
+# |scratch| = 314572800 items (expansion = 329.3 %), tisze=320, psize=19200
+direct; 14; 60; 109.48; 109.43; 109.47; 109.47; 109.44; 
+# using T = 64 threads
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=68059136
+direct; 1; 64; 176.15; 176.59; 176.61; 176.59; 176.59; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=34226176
+direct; 2; 64; 398.31; 398.63; 398.77; 398.53; 398.63; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=17252352
+direct; 3; 64; 618.67; 619.25; 618.99; 619.85; 619.79; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=8724480
+direct; 4; 64; 877.94; 880.52; 881.19; 880.10; 879.74; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=4431872
+direct; 5; 64; 1111.94; 1115.32; 1115.48; 1115.31; 1115.08; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=2265088
+direct; 6; 64; 1531.41; 1544.52; 1546.81; 1544.49; 1543.36; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=1167360
+direct; 7; 64; 1553.19; 1567.28; 1569.97; 1567.34; 1567.38; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=610304
+direct; 8; 64; 1566.36; 1582.26; 1581.19; 1582.04; 1580.73; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=323584
+direct; 9; 64; 1519.20; 1532.70; 1534.71; 1532.84; 1535.03; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=176128
+direct; 10; 64; 1527.43; 1533.89; 1538.29; 1532.59; 1532.51; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=98304
+direct; 11; 64; 769.27; 767.75; 773.47; 777.60; 762.99; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=57344
+direct; 12; 64; 264.62; 264.88; 264.58; 264.20; 264.35; 
+# |scratch| = 268435456 items (expansion = 325.0 %), tisze=512, psize=32768
+direct; 13; 64; 118.41; 118.36; 118.35; 118.37; 118.36; 
+# |scratch| = 335544320 items (expansion = 331.2 %), tisze=320, psize=20480
+direct; 14; 64; 106.18; 106.43; 106.42; 106.44; 106.43; 
+# Benchmarking write-combining, 5 iterations
+# using T = 4 threads
+# |scratch| = 134692864 items (expansion = 312.5 %), tisze=16836608, psize=67346432
+write-combining; 1; 4; 171.01; 171.28; 171.28; 171.28; 171.28; 
+# |scratch| = 134889472 items (expansion = 312.6 %), tisze=8430592, psize=33722368
+write-combining; 2; 4; 171.06; 171.06; 171.05; 171.06; 171.06; 
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=16896000
+write-combining; 3; 4; 170.94; 170.94; 170.94; 170.95; 170.94; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=8472576
+write-combining; 4; 4; 170.62; 170.90; 170.90; 170.90; 170.90; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=4253696
+write-combining; 5; 4; 170.89; 170.89; 170.89; 170.89; 170.89; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=2139136
+write-combining; 6; 4; 170.88; 170.88; 170.88; 170.88; 170.88; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=1078272
+write-combining; 7; 4; 168.57; 168.57; 168.57; 168.57; 168.57; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=545280
+write-combining; 8; 4; 124.74; 124.73; 124.73; 124.73; 124.73; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=276992
+write-combining; 9; 4; 80.78; 80.78; 80.79; 80.78; 80.78; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=141568
+write-combining; 10; 4; 66.22; 66.22; 66.22; 66.22; 66.22; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=72960
+write-combining; 11; 4; 60.41; 60.41; 60.41; 60.41; 60.41; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=38144
+write-combining; 12; 4; 57.81; 57.81; 57.81; 57.81; 57.81; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=20224
+write-combining; 13; 4; 56.57; 56.57; 56.57; 56.57; 56.57; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=11008
+write-combining; 14; 4; 55.95; 55.95; 55.95; 55.95; 55.95; 
+# using T = 8 threads
+# |scratch| = 134889472 items (expansion = 312.6 %), tisze=8430592, psize=67444736
+write-combining; 1; 8; 342.35; 342.37; 342.36; 342.36; 342.38; 
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=33792000
+write-combining; 2; 8; 341.93; 341.94; 341.49; 341.95; 341.95; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=16945152
+write-combining; 3; 8; 341.76; 341.78; 341.78; 341.78; 341.77; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=8507392
+write-combining; 4; 8; 340.69; 341.74; 341.71; 341.72; 341.71; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=4278272
+write-combining; 5; 8; 341.67; 341.67; 341.67; 341.68; 341.67; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=2156544
+write-combining; 6; 8; 341.64; 341.65; 341.65; 341.65; 341.67; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=1090560
+write-combining; 7; 8; 336.87; 336.87; 336.87; 336.87; 336.87; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=553984
+write-combining; 8; 8; 248.60; 248.62; 248.61; 248.61; 248.61; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=283136
+write-combining; 9; 8; 160.92; 160.90; 160.93; 160.90; 160.93; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=145920
+write-combining; 10; 8; 131.95; 131.96; 131.95; 131.96; 131.96; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=76288
+write-combining; 11; 8; 120.39; 120.39; 120.40; 120.40; 120.40; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=40448
+write-combining; 12; 8; 115.19; 115.21; 115.21; 115.21; 115.21; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=22016
+write-combining; 13; 8; 112.71; 112.74; 112.74; 112.73; 112.74; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=12288
+write-combining; 14; 8; 111.11; 111.11; 111.23; 111.23; 111.23; 
+# using T = 12 threads
+# |scratch| = 135040512 items (expansion = 312.6 %), tisze=5626688, psize=67520256
+write-combining; 1; 12; 513.09; 513.16; 513.16; 513.27; 513.17; 
+# |scratch| = 135383040 items (expansion = 312.6 %), tisze=2820480, psize=33845760
+write-combining; 2; 12; 512.63; 512.67; 512.68; 512.66; 512.67; 
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=16983552
+write-combining; 3; 12; 512.38; 512.43; 512.42; 512.41; 512.40; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=8534016
+write-combining; 4; 12; 512.27; 512.32; 512.32; 512.30; 512.37; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=4297728
+write-combining; 5; 12; 512.23; 512.24; 512.29; 512.24; 512.24; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=2170368
+write-combining; 6; 12; 512.19; 512.28; 512.24; 512.30; 512.29; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=1100544
+write-combining; 7; 12; 504.86; 504.90; 504.91; 504.92; 504.92; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=560640
+write-combining; 8; 12; 371.54; 371.59; 371.56; 371.55; 371.57; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=288000
+write-combining; 9; 12; 240.30; 240.34; 240.33; 240.32; 240.34; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=149760
+write-combining; 10; 12; 197.12; 197.15; 197.15; 197.15; 197.15; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=79104
+write-combining; 11; 12; 179.88; 179.91; 179.91; 179.91; 179.93; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=42240
+write-combining; 12; 12; 172.10; 172.16; 172.16; 172.15; 172.15; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=23040
+write-combining; 13; 12; 168.17; 168.27; 168.27; 168.27; 168.27; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=13056
+write-combining; 14; 12; 164.44; 164.72; 164.56; 164.75; 165.30; 
+# using T = 16 threads
+# |scratch| = 135168000 items (expansion = 312.6 %), tisze=4224000, psize=67584000
+write-combining; 1; 16; 683.78; 684.08; 683.96; 683.92; 683.97; 
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=33890304
+write-combining; 2; 16; 683.18; 683.36; 683.38; 683.34; 683.32; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=17014784
+write-combining; 3; 16; 682.84; 683.01; 682.09; 683.09; 683.12; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=8556544
+write-combining; 4; 16; 682.72; 682.95; 682.89; 682.80; 682.94; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=4313088
+write-combining; 5; 16; 682.57; 682.73; 682.76; 682.79; 682.71; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=2181120
+write-combining; 6; 16; 682.58; 682.70; 682.77; 682.78; 682.77; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=1107968
+write-combining; 7; 16; 672.59; 672.67; 672.67; 672.50; 672.54; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=566272
+write-combining; 8; 16; 493.21; 493.33; 493.32; 493.41; 493.36; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=291840
+write-combining; 9; 16; 318.85; 318.94; 318.92; 318.92; 318.90; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=152576
+write-combining; 10; 16; 261.70; 261.75; 261.73; 261.76; 261.75; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=80896
+write-combining; 11; 16; 238.84; 238.92; 238.91; 238.90; 238.92; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=44032
+write-combining; 12; 16; 228.43; 228.55; 228.57; 228.57; 228.57; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=24576
+write-combining; 13; 16; 221.21; 221.47; 221.47; 221.47; 221.47; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=14336
+write-combining; 14; 16; 206.43; 206.81; 206.77; 207.30; 211.02; 
+# using T = 20 threads
+# |scratch| = 135280640 items (expansion = 312.6 %), tisze=3382016, psize=67640320
+write-combining; 1; 20; 723.90; 724.17; 723.79; 723.90; 723.92; 
+# |scratch| = 135720960 items (expansion = 312.6 %), tisze=1696512, psize=33930240
+write-combining; 2; 20; 723.09; 723.38; 723.34; 723.31; 723.27; 
+# |scratch| = 136345600 items (expansion = 312.7 %), tisze=852160, psize=17043200
+write-combining; 3; 20; 722.96; 723.02; 722.94; 722.86; 722.98; 
+# |scratch| = 137236480 items (expansion = 312.8 %), tisze=428864, psize=8577280
+write-combining; 4; 20; 722.77; 722.75; 722.71; 722.86; 722.84; 
+# |scratch| = 138485760 items (expansion = 312.9 %), tisze=216384, psize=4327680
+write-combining; 5; 20; 722.74; 722.84; 722.75; 722.63; 722.68; 
+# |scratch| = 140247040 items (expansion = 313.1 %), tisze=109568, psize=2191360
+write-combining; 6; 20; 711.86; 712.01; 712.03; 712.00; 712.14; 
+# |scratch| = 142868480 items (expansion = 313.3 %), tisze=55808, psize=1116160
+write-combining; 7; 20; 550.19; 550.43; 550.39; 550.16; 550.44; 
+# |scratch| = 146472960 items (expansion = 313.6 %), tisze=28608, psize=572160
+write-combining; 8; 20; 375.55; 375.63; 375.64; 375.63; 375.64; 
+# |scratch| = 151388160 items (expansion = 314.1 %), tisze=14784, psize=295680
+write-combining; 9; 20; 311.73; 311.72; 311.76; 311.68; 311.71; 
+# |scratch| = 158597120 items (expansion = 314.8 %), tisze=7744, psize=154880
+write-combining; 10; 20; 287.80; 287.85; 287.84; 287.85; 287.85; 
+# |scratch| = 170393600 items (expansion = 315.9 %), tisze=4160, psize=83200
+write-combining; 11; 20; 276.28; 276.39; 276.40; 276.39; 276.38; 
+# |scratch| = 183500800 items (expansion = 317.1 %), tisze=2240, psize=44800
+write-combining; 12; 20; 265.39; 265.46; 265.46; 265.44; 265.45; 
+# |scratch| = 209715200 items (expansion = 319.5 %), tisze=1280, psize=25600
+write-combining; 13; 20; 241.55; 241.93; 241.91; 240.90; 241.94; 
+# |scratch| = 230686720 items (expansion = 321.5 %), tisze=704, psize=14080
+write-combining; 14; 20; 220.40; 221.13; 220.87; 221.18; 221.19; 
+# using T = 24 threads
+# |scratch| = 135383040 items (expansion = 312.6 %), tisze=2820480, psize=67691520
+write-combining; 1; 24; 867.29; 868.30; 868.20; 868.31; 868.17; 
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=33967104
+write-combining; 2; 24; 866.58; 867.56; 867.47; 867.43; 867.09; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=17068032
+write-combining; 3; 24; 866.73; 867.09; 867.03; 866.98; 867.01; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=8595456
+write-combining; 4; 24; 866.79; 866.91; 866.96; 866.84; 866.98; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=4340736
+write-combining; 5; 24; 866.61; 866.85; 867.00; 866.83; 866.82; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=2201088
+write-combining; 6; 24; 853.25; 853.69; 853.36; 853.40; 853.35; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=1121280
+write-combining; 7; 24; 655.46; 655.62; 655.56; 655.71; 655.51; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=576000
+write-combining; 8; 24; 446.89; 447.04; 446.96; 446.93; 447.05; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=299520
+write-combining; 9; 24; 371.68; 371.68; 371.78; 371.75; 371.75; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=158208
+write-combining; 10; 24; 343.30; 343.36; 343.44; 343.43; 343.45; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=84480
+write-combining; 11; 24; 326.36; 326.48; 326.48; 326.54; 326.54; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=46080
+write-combining; 12; 24; 239.53; 239.69; 239.86; 239.90; 239.80; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=26112
+write-combining; 13; 24; 211.79; 212.19; 212.11; 212.21; 212.18; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=640, psize=15360
+write-combining; 14; 24; 224.01; 224.48; 224.81; 224.97; 225.70; 
+# using T = 28 threads
+# |scratch| = 135475200 items (expansion = 312.6 %), tisze=2419200, psize=67737600
+write-combining; 1; 28; 1009.50; 1011.58; 1011.70; 1010.16; 1011.67; 
+# |scratch| = 135998464 items (expansion = 312.7 %), tisze=1214272, psize=33999616
+write-combining; 2; 28; 1009.90; 1009.77; 1010.89; 1011.36; 1010.53; 
+# |scratch| = 136736768 items (expansion = 312.7 %), tisze=610432, psize=17092096
+write-combining; 3; 28; 1009.65; 1010.95; 1010.95; 1000.28; 1011.06; 
+# |scratch| = 137797632 items (expansion = 312.8 %), tisze=307584, psize=8612352
+write-combining; 4; 28; 1009.42; 1010.86; 1010.96; 1011.00; 1010.72; 
+# |scratch| = 139288576 items (expansion = 313.0 %), tisze=155456, psize=4352768
+write-combining; 5; 28; 1009.50; 1010.92; 1010.74; 1011.00; 1011.10; 
+# |scratch| = 141410304 items (expansion = 313.2 %), tisze=78912, psize=2209536
+write-combining; 6; 28; 993.74; 994.78; 994.93; 994.69; 994.58; 
+# |scratch| = 144277504 items (expansion = 313.4 %), tisze=40256, psize=1127168
+write-combining; 7; 28; 759.84; 760.23; 760.33; 760.32; 760.18; 
+# |scratch| = 148635648 items (expansion = 313.8 %), tisze=20736, psize=580608
+write-combining; 8; 28; 517.43; 517.73; 517.73; 517.77; 517.77; 
+# |scratch| = 155058176 items (expansion = 314.4 %), tisze=10816, psize=302848
+write-combining; 9; 28; 430.58; 430.73; 430.66; 430.44; 430.73; 
+# |scratch| = 163315712 items (expansion = 315.2 %), tisze=5696, psize=159488
+write-combining; 10; 28; 397.98; 398.21; 398.22; 398.14; 398.16; 
+# |scratch| = 176160768 items (expansion = 316.4 %), tisze=3072, psize=86016
+write-combining; 11; 28; 370.48; 370.80; 370.74; 370.74; 370.76; 
+# |scratch| = 198180864 items (expansion = 318.5 %), tisze=1728, psize=48384
+write-combining; 12; 28; 233.05; 233.30; 233.30; 233.23; 233.25; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=960, psize=26880
+write-combining; 13; 28; 201.74; 202.03; 201.14; 202.06; 201.85; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=576, psize=16128
+write-combining; 14; 28; 209.15; 218.53; 218.43; 218.45; 218.52; 
+# using T = 32 threads
+# |scratch| = 135561216 items (expansion = 312.6 %), tisze=2118144, psize=67780608
+write-combining; 1; 32; 1150.47; 1153.77; 1151.01; 1155.28; 1152.71; 
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=34029568
+write-combining; 2; 32; 1142.68; 1153.91; 1152.21; 1152.99; 1152.82; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=17113088
+write-combining; 3; 32; 1150.39; 1153.79; 1153.57; 1154.11; 1153.25; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=8626176
+write-combining; 4; 32; 1150.91; 1154.15; 1154.00; 1153.92; 1153.54; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=4362240
+write-combining; 5; 32; 1151.29; 1153.80; 1153.90; 1153.89; 1153.98; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=2215936
+write-combining; 6; 32; 1132.73; 1134.79; 1134.93; 1134.45; 1135.36; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=1132544
+write-combining; 7; 32; 862.13; 862.75; 862.80; 862.76; 862.69; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=583680
+write-combining; 8; 32; 587.39; 587.48; 587.46; 587.51; 587.65; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=305152
+write-combining; 9; 32; 489.09; 489.29; 489.10; 489.21; 489.18; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=161792
+write-combining; 10; 32; 452.14; 452.38; 452.37; 452.39; 452.25; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=88064
+write-combining; 11; 32; 404.39; 403.97; 404.78; 404.79; 404.85; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=49152
+write-combining; 12; 32; 257.34; 257.63; 257.79; 257.59; 278.17; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=28672
+write-combining; 13; 32; 197.15; 197.22; 197.17; 197.05; 197.19; 
+# |scratch| = 268435456 items (expansion = 325.0 %), tisze=512, psize=16384
+write-combining; 14; 32; 204.96; 198.16; 205.07; 205.37; 205.06; 
+# using T = 36 threads
+# |scratch| = 135645696 items (expansion = 312.6 %), tisze=1883968, psize=67822848
+write-combining; 1; 36; 917.89; 919.84; 917.73; 920.24; 918.12; 
+# |scratch| = 136240128 items (expansion = 312.7 %), tisze=946112, psize=34060032
+write-combining; 2; 36; 918.21; 919.48; 919.73; 920.21; 920.52; 
+# |scratch| = 137078784 items (expansion = 312.8 %), tisze=475968, psize=17134848
+write-combining; 3; 36; 918.45; 920.51; 920.60; 920.51; 920.54; 
+# |scratch| = 138276864 items (expansion = 312.9 %), tisze=240064, psize=8642304
+write-combining; 4; 36; 918.62; 920.84; 920.39; 920.55; 920.70; 
+# |scratch| = 139935744 items (expansion = 313.0 %), tisze=121472, psize=4372992
+write-combining; 5; 36; 917.81; 919.98; 919.97; 919.84; 919.84; 
+# |scratch| = 142295040 items (expansion = 313.3 %), tisze=61760, psize=2223360
+write-combining; 6; 36; 878.83; 880.23; 880.61; 880.64; 880.40; 
+# |scratch| = 145686528 items (expansion = 313.6 %), tisze=31616, psize=1138176
+write-combining; 7; 36; 665.16; 665.53; 665.45; 665.38; 665.47; 
+# |scratch| = 150405120 items (expansion = 314.0 %), tisze=16320, psize=587520
+write-combining; 8; 36; 541.86; 541.81; 541.96; 542.16; 541.90; 
+# |scratch| = 158072832 items (expansion = 314.7 %), tisze=8576, psize=308736
+write-combining; 9; 36; 481.14; 481.50; 481.92; 482.22; 481.95; 
+# |scratch| = 167510016 items (expansion = 315.6 %), tisze=4544, psize=163584
+write-combining; 10; 36; 437.17; 435.56; 436.20; 437.49; 436.26; 
+# |scratch| = 184025088 items (expansion = 317.1 %), tisze=2496, psize=89856
+write-combining; 11; 36; 374.72; 373.39; 375.72; 378.15; 373.96; 
+# |scratch| = 207618048 items (expansion = 319.3 %), tisze=1408, psize=50688
+write-combining; 12; 36; 281.00; 281.15; 281.11; 282.01; 280.91; 
+# |scratch| = 226492416 items (expansion = 321.1 %), tisze=768, psize=27648
+write-combining; 13; 36; 209.77; 209.57; 210.02; 209.70; 209.97; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=448, psize=16128
+write-combining; 14; 36; 188.64; 189.89; 189.92; 190.08; 190.13; 
+# using T = 40 threads
+# |scratch| = 135720960 items (expansion = 312.6 %), tisze=1696512, psize=67860480
+write-combining; 1; 40; 1018.65; 1018.58; 1021.28; 1018.07; 1019.34; 
+# |scratch| = 136345600 items (expansion = 312.7 %), tisze=852160, psize=34086400
+write-combining; 2; 40; 1017.87; 1021.06; 1021.74; 1021.62; 1020.39; 
+# |scratch| = 137236480 items (expansion = 312.8 %), tisze=428864, psize=17154560
+write-combining; 3; 40; 1017.93; 1021.81; 1021.74; 1021.66; 1021.80; 
+# |scratch| = 138485760 items (expansion = 312.9 %), tisze=216384, psize=8655360
+write-combining; 4; 40; 1018.67; 1021.92; 1022.00; 1022.04; 1021.63; 
+# |scratch| = 140247040 items (expansion = 313.1 %), tisze=109568, psize=4382720
+write-combining; 5; 40; 1018.21; 1021.31; 1021.12; 1021.52; 1021.49; 
+# |scratch| = 142868480 items (expansion = 313.3 %), tisze=55808, psize=2232320
+write-combining; 6; 40; 973.91; 976.30; 976.33; 976.41; 976.38; 
+# |scratch| = 146472960 items (expansion = 313.6 %), tisze=28608, psize=1144320
+write-combining; 7; 40; 734.18; 734.33; 734.42; 734.54; 734.43; 
+# |scratch| = 151388160 items (expansion = 314.1 %), tisze=14784, psize=591360
+write-combining; 8; 40; 597.26; 597.44; 597.49; 597.60; 597.34; 
+# |scratch| = 158597120 items (expansion = 314.8 %), tisze=7744, psize=309760
+write-combining; 9; 40; 531.21; 530.95; 531.44; 531.68; 531.71; 
+# |scratch| = 170393600 items (expansion = 315.9 %), tisze=4160, psize=166400
+write-combining; 10; 40; 482.76; 482.81; 482.22; 482.25; 483.82; 
+# |scratch| = 183500800 items (expansion = 317.1 %), tisze=2240, psize=89600
+write-combining; 11; 40; 410.22; 412.20; 411.05; 411.80; 409.94; 
+# |scratch| = 209715200 items (expansion = 319.5 %), tisze=1280, psize=51200
+write-combining; 12; 40; 288.71; 290.21; 290.36; 290.63; 290.32; 
+# |scratch| = 230686720 items (expansion = 321.5 %), tisze=704, psize=28160
+write-combining; 13; 40; 207.36; 207.57; 207.79; 208.16; 207.46; 
+# |scratch| = 293601280 items (expansion = 327.3 %), tisze=448, psize=17920
+write-combining; 14; 40; 176.41; 178.07; 178.07; 178.13; 178.31; 
+# using T = 44 threads
+# |scratch| = 135793152 items (expansion = 312.6 %), tisze=1543104, psize=67896576
+write-combining; 1; 44; 1116.47; 1116.38; 1118.84; 1121.21; 1118.74; 
+# |scratch| = 136452096 items (expansion = 312.7 %), tisze=775296, psize=34113024
+write-combining; 2; 44; 1115.63; 1120.87; 1121.75; 1120.21; 1120.74; 
+# |scratch| = 137375744 items (expansion = 312.8 %), tisze=390272, psize=17171968
+write-combining; 3; 44; 1117.22; 1122.00; 1122.90; 1121.37; 1121.52; 
+# |scratch| = 138682368 items (expansion = 312.9 %), tisze=196992, psize=8667648
+write-combining; 4; 44; 1118.23; 1122.75; 1123.08; 1122.19; 1122.46; 
+# |scratch| = 140574720 items (expansion = 313.1 %), tisze=99840, psize=4392960
+write-combining; 5; 44; 1117.45; 1122.29; 1121.59; 1122.33; 1121.30; 
+# |scratch| = 143278080 items (expansion = 313.3 %), tisze=50880, psize=2238720
+write-combining; 6; 44; 1068.98; 1071.88; 1071.29; 1071.70; 1071.44; 
+# |scratch| = 147062784 items (expansion = 313.7 %), tisze=26112, psize=1148928
+write-combining; 7; 44; 800.07; 800.60; 800.51; 800.32; 800.53; 
+# |scratch| = 152109056 items (expansion = 314.2 %), tisze=13504, psize=594176
+write-combining; 8; 44; 650.64; 650.21; 650.70; 650.76; 650.69; 
+# |scratch| = 160038912 items (expansion = 314.9 %), tisze=7104, psize=312576
+write-combining; 9; 44; 578.97; 579.59; 580.05; 579.14; 579.36; 
+# |scratch| = 170131456 items (expansion = 315.8 %), tisze=3776, psize=166144
+write-combining; 10; 44; 526.90; 526.17; 525.90; 526.74; 526.43; 
+# |scratch| = 184549376 items (expansion = 317.2 %), tisze=2048, psize=90112
+write-combining; 11; 44; 446.25; 446.90; 446.48; 447.80; 447.72; 
+# |scratch| = 207618048 items (expansion = 319.3 %), tisze=1152, psize=50688
+write-combining; 12; 44; 305.04; 306.56; 305.80; 306.56; 306.15; 
+# |scratch| = 253755392 items (expansion = 323.6 %), tisze=704, psize=30976
+write-combining; 13; 44; 206.33; 206.34; 206.61; 206.14; 206.25; 
+# |scratch| = 276824064 items (expansion = 325.8 %), tisze=384, psize=16896
+write-combining; 14; 44; 166.19; 166.48; 166.65; 166.67; 164.85; 
+# using T = 48 threads
+# |scratch| = 135868416 items (expansion = 312.7 %), tisze=1415296, psize=67934208
+write-combining; 1; 48; 1217.07; 1218.42; 1212.60; 1217.18; 1221.45; 
+# |scratch| = 136544256 items (expansion = 312.7 %), tisze=711168, psize=34136064
+write-combining; 2; 48; 1212.39; 1220.51; 1220.54; 1218.19; 1218.54; 
+# |scratch| = 137527296 items (expansion = 312.8 %), tisze=358144, psize=17190912
+write-combining; 3; 48; 1216.85; 1222.59; 1221.36; 1222.11; 1221.18; 
+# |scratch| = 138903552 items (expansion = 312.9 %), tisze=180864, psize=8681472
+write-combining; 4; 48; 1216.95; 1223.44; 1222.82; 1223.14; 1222.82; 
+# |scratch| = 140869632 items (expansion = 313.1 %), tisze=91712, psize=4402176
+write-combining; 5; 48; 1217.62; 1221.99; 1221.51; 1221.99; 1220.79; 
+# |scratch| = 143523840 items (expansion = 313.4 %), tisze=46720, psize=2242560
+write-combining; 6; 48; 1163.30; 1166.24; 1165.92; 1166.28; 1166.09; 
+# |scratch| = 147456000 items (expansion = 313.7 %), tisze=24000, psize=1152000
+write-combining; 7; 48; 867.01; 868.21; 867.97; 868.35; 867.90; 
+# |scratch| = 153354240 items (expansion = 314.3 %), tisze=12480, psize=599040
+write-combining; 8; 48; 704.49; 704.29; 705.02; 704.69; 704.68; 
+# |scratch| = 162004992 items (expansion = 315.1 %), tisze=6592, psize=316416
+write-combining; 9; 48; 626.71; 627.30; 627.86; 627.27; 628.11; 
+# |scratch| = 173015040 items (expansion = 316.1 %), tisze=3520, psize=168960
+write-combining; 10; 48; 571.04; 569.62; 571.37; 570.42; 570.93; 
+# |scratch| = 188743680 items (expansion = 317.6 %), tisze=1920, psize=92160
+write-combining; 11; 48; 397.20; 397.54; 397.65; 397.76; 399.16; 
+# |scratch| = 213909504 items (expansion = 319.9 %), tisze=1088, psize=52224
+write-combining; 12; 48; 307.71; 308.19; 307.81; 307.70; 308.16; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=640, psize=30720
+write-combining; 13; 48; 192.78; 193.33; 193.30; 192.39; 193.09; 
+# |scratch| = 301989888 items (expansion = 328.1 %), tisze=384, psize=18432
+write-combining; 14; 48; 155.64; 155.67; 155.94; 155.72; 155.81; 
+# using T = 52 threads
+# |scratch| = 135935488 items (expansion = 312.7 %), tisze=1307072, psize=67967744
+write-combining; 1; 52; 994.53; 995.59; 997.96; 996.40; 996.04; 
+# |scratch| = 136647680 items (expansion = 312.7 %), tisze=656960, psize=34161920
+write-combining; 2; 52; 992.39; 995.62; 997.48; 996.59; 994.97; 
+# |scratch| = 137646080 items (expansion = 312.8 %), tisze=330880, psize=17205760
+write-combining; 3; 52; 994.07; 996.36; 998.44; 996.83; 998.13; 
+# |scratch| = 139083776 items (expansion = 313.0 %), tisze=167168, psize=8692736
+write-combining; 4; 52; 994.73; 997.84; 997.09; 998.08; 996.95; 
+# |scratch| = 141107200 items (expansion = 313.1 %), tisze=84800, psize=4409600
+write-combining; 5; 52; 993.09; 996.23; 994.52; 994.26; 995.48; 
+# |scratch| = 143982592 items (expansion = 313.4 %), tisze=43264, psize=2249728
+write-combining; 6; 52; 930.96; 934.63; 934.04; 933.16; 933.28; 
+# |scratch| = 148242432 items (expansion = 313.8 %), tisze=22272, psize=1158144
+write-combining; 7; 52; 756.57; 756.81; 756.99; 757.74; 756.99; 
+# |scratch| = 154206208 items (expansion = 314.4 %), tisze=11584, psize=602368
+write-combining; 8; 52; 628.51; 628.35; 628.56; 628.20; 628.87; 
+# |scratch| = 161873920 items (expansion = 315.1 %), tisze=6080, psize=316160
+write-combining; 9; 52; 553.46; 552.34; 553.14; 553.23; 553.30; 
+# |scratch| = 173801472 items (expansion = 316.2 %), tisze=3264, psize=169728
+write-combining; 10; 52; 511.07; 511.39; 511.14; 509.95; 511.69; 
+# |scratch| = 190840832 items (expansion = 317.8 %), tisze=1792, psize=93184
+write-combining; 11; 52; 435.04; 430.48; 434.27; 432.64; 430.72; 
+# |scratch| = 218103808 items (expansion = 320.3 %), tisze=1024, psize=53248
+write-combining; 12; 52; 296.06; 296.63; 296.37; 295.51; 296.79; 
+# |scratch| = 245366784 items (expansion = 322.9 %), tisze=576, psize=29952
+write-combining; 13; 52; 190.11; 190.55; 190.34; 190.33; 190.41; 
+# |scratch| = 327155712 items (expansion = 330.5 %), tisze=384, psize=19968
+write-combining; 14; 52; 147.90; 148.17; 148.00; 148.08; 148.38; 
+# using T = 56 threads
+# |scratch| = 135998464 items (expansion = 312.7 %), tisze=1214272, psize=67999232
+write-combining; 1; 56; 1068.96; 1071.58; 1072.43; 1069.43; 1070.10; 
+# |scratch| = 136736768 items (expansion = 312.7 %), tisze=610432, psize=34184192
+write-combining; 2; 56; 1067.97; 1071.53; 1070.30; 1070.37; 1070.25; 
+# |scratch| = 137797632 items (expansion = 312.8 %), tisze=307584, psize=17224704
+write-combining; 3; 56; 1067.21; 1071.96; 1072.44; 1057.34; 1071.28; 
+# |scratch| = 139288576 items (expansion = 313.0 %), tisze=155456, psize=8705536
+write-combining; 4; 56; 1069.27; 1072.89; 1073.39; 1071.66; 1073.76; 
+# |scratch| = 141410304 items (expansion = 313.2 %), tisze=78912, psize=4419072
+write-combining; 5; 56; 1067.47; 1071.68; 1069.40; 1071.12; 1070.40; 
+# |scratch| = 144277504 items (expansion = 313.4 %), tisze=40256, psize=2254336
+write-combining; 6; 56; 1000.89; 1003.71; 1004.22; 1002.79; 1003.15; 
+# |scratch| = 148635648 items (expansion = 313.8 %), tisze=20736, psize=1161216
+write-combining; 7; 56; 809.91; 810.24; 808.93; 808.29; 809.98; 
+# |scratch| = 155058176 items (expansion = 314.4 %), tisze=10816, psize=605696
+write-combining; 8; 56; 671.82; 672.38; 672.85; 672.07; 671.86; 
+# |scratch| = 163315712 items (expansion = 315.2 %), tisze=5696, psize=318976
+write-combining; 9; 56; 591.56; 590.90; 592.43; 592.53; 591.90; 
+# |scratch| = 176160768 items (expansion = 316.4 %), tisze=3072, psize=172032
+write-combining; 10; 56; 553.20; 554.47; 553.56; 554.46; 553.76; 
+# |scratch| = 198180864 items (expansion = 318.5 %), tisze=1728, psize=96768
+write-combining; 11; 56; 428.40; 428.35; 428.90; 429.64; 427.77; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=960, psize=53760
+write-combining; 12; 56; 287.36; 289.74; 288.49; 288.56; 288.61; 
+# |scratch| = 264241152 items (expansion = 324.6 %), tisze=576, psize=32256
+write-combining; 13; 56; 179.65; 180.01; 180.14; 184.96; 184.02; 
+# |scratch| = 352321536 items (expansion = 332.8 %), tisze=384, psize=21504
+write-combining; 14; 56; 141.70; 141.78; 141.83; 142.14; 141.85; 
+# using T = 60 threads
+# |scratch| = 136058880 items (expansion = 312.7 %), tisze=1133824, psize=68029440
+write-combining; 1; 60; 1143.61; 1143.09; 1143.18; 1145.77; 1141.53; 
+# |scratch| = 136826880 items (expansion = 312.7 %), tisze=570112, psize=34206720
+write-combining; 2; 60; 1139.41; 1145.69; 1146.54; 1141.92; 1144.87; 
+# |scratch| = 137902080 items (expansion = 312.8 %), tisze=287296, psize=17237760
+write-combining; 3; 60; 1140.71; 1147.64; 1147.11; 1148.23; 1148.57; 
+# |scratch| = 139468800 items (expansion = 313.0 %), tisze=145280, psize=8716800
+write-combining; 4; 60; 1142.93; 1146.20; 1145.95; 1146.75; 1147.87; 
+# |scratch| = 141680640 items (expansion = 313.2 %), tisze=73792, psize=4427520
+write-combining; 5; 60; 1139.98; 1143.83; 1145.73; 1145.00; 1144.82; 
+# |scratch| = 144752640 items (expansion = 313.5 %), tisze=37696, psize=2261760
+write-combining; 6; 60; 1068.31; 1070.17; 1071.03; 1070.49; 1071.85; 
+# |scratch| = 148930560 items (expansion = 313.9 %), tisze=19392, psize=1163520
+write-combining; 7; 60; 859.11; 860.58; 860.87; 859.86; 860.28; 
+# |scratch| = 155320320 items (expansion = 314.5 %), tisze=10112, psize=606720
+write-combining; 8; 60; 713.28; 712.11; 714.32; 713.69; 714.51; 
+# |scratch| = 165150720 items (expansion = 315.4 %), tisze=5376, psize=322560
+write-combining; 9; 60; 629.60; 629.66; 629.18; 628.93; 629.29; 
+# |scratch| = 176947200 items (expansion = 316.5 %), tisze=2880, psize=172800
+write-combining; 10; 60; 588.48; 588.19; 589.09; 588.09; 589.22; 
+# |scratch| = 196608000 items (expansion = 318.3 %), tisze=1600, psize=96000
+write-combining; 11; 60; 444.28; 442.76; 446.64; 442.93; 440.35; 
+# |scratch| = 220200960 items (expansion = 320.5 %), tisze=896, psize=53760
+write-combining; 12; 60; 284.81; 284.32; 275.64; 274.91; 275.29; 
+# |scratch| = 251658240 items (expansion = 323.4 %), tisze=512, psize=30720
+write-combining; 13; 60; 182.97; 183.35; 183.46; 183.25; 183.44; 
+# |scratch| = 314572800 items (expansion = 329.3 %), tisze=320, psize=19200
+write-combining; 14; 60; 136.10; 136.36; 136.11; 136.13; 136.07; 
+# using T = 64 threads
+# |scratch| = 136118272 items (expansion = 312.7 %), tisze=1063424, psize=68059136
+write-combining; 1; 64; 1211.97; 1216.69; 1212.54; 1218.76; 1206.44; 
+# |scratch| = 136904704 items (expansion = 312.8 %), tisze=534784, psize=34226176
+write-combining; 2; 64; 1212.69; 1220.09; 1217.91; 1218.44; 1219.64; 
+# |scratch| = 138018816 items (expansion = 312.9 %), tisze=269568, psize=17252352
+write-combining; 3; 64; 1214.32; 1218.47; 1222.53; 1217.10; 1218.25; 
+# |scratch| = 139591680 items (expansion = 313.0 %), tisze=136320, psize=8724480
+write-combining; 4; 64; 1217.07; 1222.77; 1220.61; 1219.15; 1221.90; 
+# |scratch| = 141819904 items (expansion = 313.2 %), tisze=69248, psize=4431872
+write-combining; 5; 64; 1213.55; 1218.38; 1218.39; 1218.97; 1202.18; 
+# |scratch| = 144965632 items (expansion = 313.5 %), tisze=35392, psize=2265088
+write-combining; 6; 64; 1135.30; 1139.20; 1136.80; 1136.48; 1139.86; 
+# |scratch| = 149422080 items (expansion = 313.9 %), tisze=18240, psize=1167360
+write-combining; 7; 64; 912.38; 911.63; 912.37; 910.88; 911.91; 
+# |scratch| = 156237824 items (expansion = 314.6 %), tisze=9536, psize=610304
+write-combining; 8; 64; 755.30; 754.59; 755.56; 755.75; 755.04; 
+# |scratch| = 165675008 items (expansion = 315.4 %), tisze=5056, psize=323584
+write-combining; 9; 64; 665.01; 666.01; 664.19; 666.82; 665.25; 
+# |scratch| = 180355072 items (expansion = 316.8 %), tisze=2752, psize=176128
+write-combining; 10; 64; 606.43; 607.37; 607.25; 606.36; 607.30; 
+# |scratch| = 201326592 items (expansion = 318.8 %), tisze=1536, psize=98304
+write-combining; 11; 64; 418.75; 419.10; 420.85; 419.91; 418.70; 
+# |scratch| = 234881024 items (expansion = 321.9 %), tisze=896, psize=57344
+write-combining; 12; 64; 258.99; 259.14; 258.61; 258.68; 258.61; 
+# |scratch| = 268435456 items (expansion = 325.0 %), tisze=512, psize=32768
+write-combining; 13; 64; 180.53; 180.95; 181.01; 180.96; 180.83; 
+# |scratch| = 335544320 items (expansion = 331.2 %), tisze=320, psize=20480
+write-combining; 14; 64; 131.60; 131.51; 132.01; 132.26; 132.24; 

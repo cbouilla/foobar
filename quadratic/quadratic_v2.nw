@@ -28,7 +28,7 @@
 \chapter{The Quadratic Algorithm}
 
 
-This file describes an implementation of the quadratic algorithm. 
+This file describes an implementation of the quadratic algorithm. It uses vectorized hash probing.
 
 The main function described in this file ``solves'' a task. Once all tasks are
 solved, the original instance has been solved. 
