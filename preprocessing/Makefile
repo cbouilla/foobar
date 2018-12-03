@@ -1,10 +1,15 @@
 CFLAGS = -std=c99 -g -Wall -Wextra -Werror -O3 -I.
 
+# M4RI
+CFLAGS += -I$(HOME)/prison/m4ri/install/include
+LDFLAGS += -L$(HOME)/prison/m4ri/install/lib
+
+
 all: programs doc.pdf
 
-programs: splitter dict_checker sorter merger hash_checker forger # indexer index_checker
+programs: splitter dict_checker sorter merger hash_checker forger slicer # indexer index_checker
 
-doc.pdf: preprocessing.pdf hasher.pdf splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf forger.pdf #indexer.pdf index_checker.pdf 
+doc.pdf: preprocessing.pdf hasher.pdf splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf forger.pdf slicer.pdf #indexer.pdf index_checker.pdf 
 	pdftk $^ cat output $@
 
 hasher.o: hasher.c hasher.h preprocessing.h ../types.h
@@ -15,6 +20,9 @@ splitter: preprocessing.o sha256.o hasher.o splitter.o
 splitter: CC = mpicc
 
 sorter.o: hasher.h sorter.c preprocessing.h
+
+slicer.o: preprocessing.h
+slicer: LDLIBS += -lm4ri -lm
 
 dict_checker.o: dict_checker.c hasher.h preprocessing.h
 dict_checker: preprocessing.o sha256.o hasher.o dict_checker.o
