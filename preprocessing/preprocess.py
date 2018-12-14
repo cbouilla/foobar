@@ -8,18 +8,23 @@ import math
 import argparse
 parser = argparse.ArgumentParser(description="This script runs all the preprocessing")
 
-parser.add_argument("k", help="number of bits to split", type=int)
-parser.add_argument("--dry-run", help="print commands but don't run them", action="store_true")
+parser.add_argument("--partitioning-bits", help="number of bits to split", type=int, required=True, dest="k")
 parser.add_argument("--stats", help="display stats", action="store_true")
+parser.add_argument("--dry-run", help="print commands but don't run them", action="store_true")
 parser.add_argument("--verbose", help="display more information", action="store_true")
 parser.add_argument("--cores", help="number of cores of this machine", type=int, default=1)
 parser.add_argument("--check", help="run check programs", action="store_true")
 args = parser.parse_args()
 
+print("Running with k = {}".format(args.k))
+print()
+
+
 L1_cache_size = 16384
 
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
-PREIMAGE_DIR = '../data/preimages'
+#PREIMAGE_DIR = '../data/preimages'
+PREIMAGE_DIR = '../foobar'
 DICT_DIR = '../data/dict'
 HASH_DIR = '../data/hash'
 SPLITTER = './splitter'
@@ -96,6 +101,7 @@ def hash_stats(verbose=True):
         for kind in KINDS:
         	n_entries *= n_hash[kind]
         sizes = [n_hash[kind] * 8 / (1 << args.k)/ 1024**2 for kind in KINDS]
+        print()
         print("task size = {:.1f}Mbyte x {:.1f}Mbyte x {:.1f}Mbyte".format(*sizes))
         print("Est # (64+k)-bit solutions = {:.1f}".format(n_entries / 2**(64 + args.k)))
         print()
@@ -164,6 +170,8 @@ def merging():
     for kind in KINDS:
         for i in range(1 << args.k):
             input_files = sorted(glob.glob('{}/{:03x}/{}.*.sorted'.format(DICT_DIR, i, kind)))
+            if not input_files:
+                continue
             output_file = '{}/{}.{:03x}'.format(HASH_DIR, kind, i)
             if os.path.exists(output_file):
                 output_mtime = os.stat(output_file).st_mtime

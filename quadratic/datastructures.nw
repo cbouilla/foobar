@@ -65,7 +65,7 @@ struct hash_table_t {
 
 <<Function declarations>>=
 u32 hashtable_size(u32 n_items);
-struct hash_table_t * hashtable_build(u64 * const L, u32 lo, u32 hi);
+struct hash_table_t * hashtable_build(const u64 * L, u32 lo, u32 hi);
 void hashtable_free(struct hash_table_t *s);
 
 
@@ -119,7 +119,7 @@ u32 hashtable_size(u32 n_items)
 @ The function takes a sequence $L$ of 64-bits integers and returns a hash table. 
 
 <<Public functions>>=
-struct hash_table_t * hashtable_build(u64 * const L, u32 lo, u32 hi)
+struct hash_table_t * hashtable_build(const u64 * L, u32 lo, u32 hi)
 {
 	struct hash_table_t *s = malloc(sizeof(*s));
 	u32 size = hashtable_size(hi - lo);

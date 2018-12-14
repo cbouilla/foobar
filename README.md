@@ -7,6 +7,8 @@ Look at the mining/README.md file
 Preprocessing the result of the mining phase
 ============================================
 
+s3fs 3sum-pool foobar -o ro,uid=1000
+
 Look at preprocessing/preprocess.py
 
 

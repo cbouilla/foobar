@@ -2,6 +2,7 @@ data/hash/*
 data/dict/*
 data/preimages/*
 data/tmphash/*
+data/slice/*
 /3XORv2.sublime-workspace
 /mining/server.out
 built_0MQ_lib

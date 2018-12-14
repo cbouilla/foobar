@@ -29,17 +29,17 @@ nonce) pairs. In this document, we call this a \textbf{preimage}. Each preimage
 requires 12 bytes, and we expect to have 3 lists of $2^{31.7}$ entries each,
 for a total storage space of 117Gbyte.
 
-The preimage files must be checked (i.e. the corresponding hashes must have 32
+The preimage files must be checked (i.e. the corresponding hashes must have 33
 zero bits). They must then be hashed, and 64 bits of each hash stored to disk.
 This yields three hash lists, of $25.4$Gbyte each. These lists have to be
 sorted and checked for duplicates. Thus in total, we expect to need $\approx
 150$ Gbyte of storage.
 
-Each preimage is associated to a 256-bit \textbf{full hash}, of which 33 at
+Each preimage is associated to a 256-bit \textbf{full hash}, of which 33 bits at
 least must be zero. More precisely, bits $[0:33]$ are zero. From this full hash, 
 we extract a subset of 64 (uniformly distributed) bits (bits $[33:97]$) that we 
 call the \textbf{hash}. Furthermore, we extract a $k$-bit \emph{partionning key} 
-from the hash by taking bits $[97:97+k]$.
+from the full hash by taking bits $[97:97+k]$.
 
 Each input list is partitionned according the the partitionning key into $2^k$ sublists. This serves two purposes
 \begin{enumerate}
@@ -116,6 +116,7 @@ struct dict_t {
 	struct preimage_t preimage;
 } __attribute__((packed));
 
+<<More stuff>>
 
 enum kind_t file_get_kind(const char *filename);
 u32 file_get_partition(const char *filename);
@@ -172,7 +173,7 @@ $M$ and $M^{-1}$. Advantage: this drops the "compute-time" dependency on M4RI.
 
 The $C$ hash file could be replaced by a sequence of :
 
-<<preprocessing.h>>=
+<<More stuff>>=
 struct C_record_t {
 	u64 M[64];
 	u64 Minv[64];
@@ -186,6 +187,8 @@ static inline u64 LEFT_MASK(u8 n)
 	return ~((1ull << (64 - n)) - 1);
 }
 
+@ An important caveat is that for Joux's algorithm, the hash files \textbf{must not} be sorted.
+Otherwise, probabilistic reasonings based on Chernoff bounds fail badly.
 
 @ If the ``compute'' phase happens on the BGQ, then hash files should be byte-
 swapped in advance.

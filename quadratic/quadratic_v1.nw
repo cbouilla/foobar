@@ -303,7 +303,7 @@ void process_block(struct context_t *self, u32 u, bool verbose)
 	
 	int rc = PAPI_ipc(&rtime, &ptime, &ins, &ipc);
 	if (rc < PAPI_OK)
-    		errx(1, "PAPI_ipc : %d", rc);
+    		errx(1, "PAPI_ipc : %d (%s)", rc, PAPI_strerror(rc));
 
 	u32 grid_size = self->grid_size;
 	if (verbose)

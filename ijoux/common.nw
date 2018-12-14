@@ -25,21 +25,21 @@ and $B_j$ simultaneously fit in the RAM of the worker nodes.
 
 The computation is in organised along a 3D partition of the original instance. 
 
-\begin{description}
-\item[Coarse tasks] The original instance is split into a 2D array of 
-\textbf{coarse tasks} of size $2^k \times 2^k$ during preprocessing, according 
-to the partitioning key, just as in the quadratic algorithm. The slices of the 
-input lists corresponding to coarse tasks should be small enough to fit in RAM.
-$k = 4$ or $k = 5$ seems reasonable.
+\begin{description} \item[Coarse tasks] The original instance is split into a
+2D array of  \textbf{coarse tasks} of size $2^k \times 2^k$ during
+preprocessing, according  to the partitioning key, just as in the quadratic
+algorithm. We have interest to create the biggest possible coarse task that
+actually fit in RAM. The slices of the  input lists corresponding to coarse
+tasks should be small enough to fit in RAM. $k = 3, 4, 5$ seems reasonable.
 
 \item[Fine tasks] The processing time of a coarse task is likely too large for 
 practical purposes. Coarse tasks are then partitioned into a 1D array of \textbf{fine tasks}
-by partitioning $C_{i \oplus j}$ into $k'$ equal-sized subslices. The 
+by partitioning $C_{i \oplus j}$ into $k'$ equal-sized chunks. The 
 ``unit of computation'' is the fine task (i.e. the task server dispatches fine 
 tasks). In the sequel, ``tasks'' are \emph{fine} tasks.
 
 \item[Blocks] On a single machine, fine tasks $(A', B', C')$ are split into a 
-1D array by splitting $C'$ in very small slices $C'_i$ (of size $\leq 64$). 
+1D array by splitting $C'$ in very small \textbf{slices} $C'_i$ (of size $\leq 64$). 
 A \textbf{block} corresponds to one slice $C_i$ (and the full $A', B'$). 
 The work to do inside a block can be parallelized, but this is non-trivial.
 \end{description}
@@ -74,9 +74,6 @@ The work to do inside a block can be parallelized, but this is non-trivial.
 \end{center}
 
 Splitting the computation in fine tasks enables the use of several machines. 
-Splitting a task in blocks enable the use of several computing units on the same 
-machine. Splitting a block in chunks enable the use of several threads per 
-computing unit.
 
 \section{Work Distribution}
 
@@ -111,15 +108,17 @@ Some very common function, such as timing, are also here.
 
 <<Function declarations>>=
 double wtime();
+#ifdef __i386__
 u64 ticks();
+#endif
 
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-static inline u64 LEFT_MASK(u32 n)
-{
-	return ~((1ull << (64 - n)) - 1);
-}
+// static inline u64 LEFT_MASK(u32 n)
+// {
+// 	return ~((1ull << (64 - n)) - 1);
+// }
 
 static inline u64 RIGHT_MASK(u32 n)
 {
@@ -142,12 +141,14 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
+#ifdef __i386__
 u64 ticks()
 {
 	u64 low, high;
 	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
 	return (high << 32) | low;
 }
+#endif
 
 @ \section{Results}
 
