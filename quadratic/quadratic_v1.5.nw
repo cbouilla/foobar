@@ -30,7 +30,7 @@
 
 This file describes an implementation of the quadratic algorithm. It is plain C.
 
-PowerPC A2 : 30.8-31.1Mpair/s. 47.2Mpair/s avec SMT4. 16.8 instructions / paire
+PowerPC A2 : 30.8-31.1Mpair/s. 47.2Mpair/s avec SMT4. 16.8 instructions / pair
 
 The main function described in this file ``solves'' a task. Once all tasks are
 solved, the original instance has been solved. 

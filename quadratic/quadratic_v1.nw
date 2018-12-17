@@ -35,7 +35,7 @@ This file describes an implementation of the quadratic algorithm. It is plain C.
 
 PowerPC A2 : 26.8Mpair/s, 37.2 Mpair/s with SMT4. 
 
-update PowerPC A2 : 27.3Mpair/s. 15 instructions / pair. Peak --> 100Mpair/s
+update PowerPC A2 : 27.3Mpair/s. 15 instructions / pair. Peak --> 100Mpair/s per core
 
 The main function described in this file ``solves'' a task. Once all tasks are
 solved, the original instance has been solved. 

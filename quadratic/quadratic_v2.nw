@@ -60,7 +60,8 @@ struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *ta
 {
 	static const bool verbose = true;
 	<<Prepare [[result]]>>
-	printf("[%.1f] task launch\n", wtime());
+	double start = wtime();
+	printf("[%.1f] task launch\n", start);
 	<<Allocate memory and load data from disk>>
 	<<Determine the block size ($\ell$)>>
 	<<Split the task into blocks and chunks>>
@@ -72,7 +73,8 @@ struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *ta
 	for (u32 u = 0; u < grid_size; u++)
 		process_block(&self, u, verbose);
 	<<Release memory>>
-	printf("[%.1f] task stop\n", wtime());
+	double stop = wtime();
+	printf("[%.1f] task stop. Duration = %.1fs\n", stop, stop - start);
 	return result;
 }
 
@@ -308,7 +310,7 @@ void process_block(struct context_t *self, u32 u, bool verbose)
 		u64 cycles = ticks() - clock;
 		double rate = (1.0 * n_pairs) / wall;
 		double inv_throughput = (1.0 * cycles) / n_pairs;
-		printf("Rate: %.1fMpair/s / %.1f cycle/pair.\n", rate / (1024 * 1024), inv_throughput);
+		printf("Rate: %.1fMpair/s / %.1f cycle/pair. ", rate / (1024 * 1024), inv_throughput);
 		u32 n_tasks = 1 << (2 * self->k);
 		double total = (1.0 * n_tasks) * n_pairs / rate * (self->grid_size);
 		printf("Est. total computation time: %.2e h\n", total / 3600);

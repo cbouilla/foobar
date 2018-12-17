@@ -174,11 +174,11 @@ $M$ and $M^{-1}$. Advantage: this drops the "compute-time" dependency on M4RI.
 The $C$ hash file could be replaced by a sequence of :
 
 <<More stuff>>=
-struct C_record_t {
+struct slice_t {
 	u64 M[64];
 	u64 Minv[64];
-	u32 n;
-	u32 l;
+	u64 n;
+	u64 l;
 	u64 CM[];
 }  __attribute__((packed));
 
@@ -190,7 +190,8 @@ static inline u64 LEFT_MASK(u8 n)
 @ An important caveat is that for Joux's algorithm, the hash files \textbf{must not} be sorted.
 Otherwise, probabilistic reasonings based on Chernoff bounds fail badly.
 
-@ If the ``compute'' phase happens on the BGQ, then hash files should be byte-
-swapped in advance.
+If the ``compute'' phase happens on the BGQ, then hash files should be byte-
+swapped in advance. By the above type definition, a slice file is essentially
+a sequence of [[u64]], so it is easy to byte-swap.
 
 \end{document}

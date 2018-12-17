@@ -300,3 +300,9 @@ opkg
 /benchmarks/partition_p_zen2.pdf
 /benchmarks/partition_p_zen2_gemv.pdf
 /benchmarks/partitioning_size
+/preprocessing/slicer.log
+/preprocessing/slicer.out
+/preprocessing/slicer.pdf
+/preprocessing/slicer.tex
+/ijoux/joux_v0.c
+/ijoux/joux_v0.o

@@ -111,6 +111,7 @@ double wtime();
 #ifdef __i386__
 u64 ticks();
 #endif
+bool big_endian();
 
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -129,6 +130,8 @@ static inline u64 RIGHT_MASK(u32 n)
 #include <sys/time.h>
 #include <stdlib.h>
 #include <err.h>
+#include <arpa/inet.h>
+
 #include "common.h"
 <<Functions>>
 
@@ -141,7 +144,7 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
-#ifdef __i386__
+#ifdef __x86_64__
 u64 ticks()
 {
 	u64 low, high;
@@ -149,6 +152,12 @@ u64 ticks()
 	return (high << 32) | low;
 }
 #endif
+
+bool big_endian()
+{
+        return (htonl(47) == 47);
+}
+
 
 @ \section{Results}
 

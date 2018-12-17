@@ -52,7 +52,7 @@ sha256.o: sha256.c sha256.h
 	pdflatex $<
 
 clean:
-	rm -f *.o  *.pdf *.aux *.bbl *.blg *.log *.out *.tex
+	rm -f *.o *.pdf *.aux *.bbl *.blg *.log *.out *.tex 
 	rm -f splitter dict_checker sorter merger hash_checker indexer index_checker forger
 	rm -f splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf index_checker.pdf forger.pdf
-	rm -f hasher.c splitter.c dict_checker.c sorter.c merger.c hash_checker.c indexer.c index_checker.c forger.c
+	rm -f hasher.c splitter.c dict_checker.c sorter.c merger.c hash_checker.c indexer.c index_checker.c forger.c slicer.c preprocessing.h

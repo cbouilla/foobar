@@ -52,7 +52,7 @@ We use a \emph{partitioning} (hash) join. To compute $A \join B$, we divide
 $A$ and $B$ into partitions $(A_i)$ and $(B_j)$ such that
 $A_i \join B_j = \emptyset$ when $i \neq j$. Radix partitioning puts in $A_i$
 all entries from $A$ that begin with $i$ (the $\ell$ most-significant bits
-of each key in $A_i$ is $i$). If we divide $A$ using $\ell$ key bits, we end up
+of each key in $A_i$ is $i$). If we divide $A$ using $p$ key bits, we end up
 with $2^p$ partitions. The first partitionning step must be multi-threaded.
 Then all sub-joins can be processed in parallel, each inside a single thread.
 

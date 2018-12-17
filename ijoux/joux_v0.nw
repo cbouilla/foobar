@@ -14,9 +14,10 @@
 \setcounter{chapter}{2}
 \chapter{The Iterated Joux Algorithm}
 
-
 This file describes an implementation of the iterated Joux algorithm.  
 The main function described in this file ``solves'' a (fine) task. 
+
+
 
 <<*>>=
 #include <math.h>
@@ -26,6 +27,9 @@ The main function described in this file ``solves'' a (fine) task.
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <byteswap.h>
+
+#include <papi.h>
 
 #include "common.h"
 #include "../quadratic/datastructures.h"
@@ -42,7 +46,7 @@ The main function described in this file ``solves'' a (fine) task.
 <<The main function>>=
 struct task_result_t * iterated_joux_task(const char *hash_dir, const char *slice_dir, struct jtask_id_t *task)
 {
-	static const bool task_verbose = false;
+	static const bool task_verbose = true;
 	static const bool block_verbose = false;
 	struct task_result_t *result = result_init();
 	double start = wtime();
@@ -52,7 +56,7 @@ struct task_result_t * iterated_joux_task(const char *hash_dir, const char *slic
 	if (task_verbose) {
 		<<Display task info>>
 	}
-	struct C_record_t *slice = slices;
+	struct slice_t *slice = slices;
 	u32 i = 0;
 	while (1) {
 		process_block_v0(&self, slice, block_verbose);
@@ -79,7 +83,9 @@ Preparations include loading the data from disk. We expected a fair amount of
 data (say, 4Gb). Therefore this may take some time. In the future, we would
 use this time to do something useful (try to precompute some matrices ?).
 
-This utility function ought to be factored:
+This utility function loads a sequence of [[u64]]. The file is assumed to be
+in little-endian byte order. Therefore, the [[u64]] are byteswapped if the
+machine is big-endian.
 
 <<Forward declarations>>=
 void * load_file(const char *filename, u64 *size_);
@@ -91,7 +97,8 @@ void * load_file(const char *filename, u64 *size_)
 	if (stat(filename, &infos))
 		err(1, "fstat failed on %s", filename);
 	u64 size = infos.st_size;
-	void *content = aligned_alloc(64, size);
+	assert ((size % 8) == 0);
+	u64 *content = aligned_alloc(64, size);
 	if (content == NULL)
 		err(1, "failed to allocate memory");
 	FILE *f = fopen(filename, "r");
@@ -102,7 +109,15 @@ void * load_file(const char *filename, u64 *size_)
 		errx(1, "incomplete read %s", filename);
 	fclose(f);
 	*size_ = size;
+	<<if big-endian, byte-swap [[content]]>>
 	return content;
+}
+
+<<if big-endian, byte-swap [[content]]>>=
+if (big_endian()) {
+	#pragma omp parallel for schedule(static)
+	for (u32 i = 0; i < size; i++)
+		content[i] = bswap_64(content[i]);
 }
 
 @ Loading $A$ and $B$ is easy: we just load the whole hash file.
@@ -132,7 +147,7 @@ with is contained in a slice file.
 <<Load slices of $C$ from disk>>=
 char filename[255];
 sprintf(filename, "%s/%03x-%05x", slice_dir, task->idx[2], task->r);
-struct C_record_t * slices;
+struct slice_t * slices;
 u64 slices_size;
 slices = load_file(filename, &slices_size);
 
@@ -177,8 +192,8 @@ for (u32 i = 0; i < 2; i++) {
 <<Display task info>>=
 	/* task-level */
 printf("Task: |A|=%" PRId64 ",  |B|=%" PRId64 "\n", size[0], size[1]);
-double mbytes = (slices_size + 8 * (size[0] + size[1])) / 1048576.0;
-printf("Task volume : %.1fMbyte\n", mbytes);
+double mbytes =  8 * (size[0] + size[1]) / 1048576.0;
+printf("Volume. Hash = %.1fMbyte + Slice = %.1fMbyte\n", mbytes, slices_size / 1048576.0);
 double logsols = log2(1.5 * (size[0]) + log2(size[1]));
 printf("Est. #solutions : %g\n", pow(2, logsols - 64));
 
@@ -188,11 +203,12 @@ printf("Est. #solutions : %g\n", pow(2, logsols - 64));
 <<Advance to next slice; [[break]] when done>>=
 u32 n = slice->n;
 u8 *ptr = (u8 *) slice;
-ptr += sizeof(struct C_record_t) + sizeof(u64) * n;
+ptr += sizeof(struct slice_t) + sizeof(u64) * n;
 u8 *end = ((u8 *) slices) + slices_size;
 if (ptr >= end)
 	break;
-slice = (struct C_record_t *) ptr;
+slice = (struct slice_t *) ptr;
+
 
 @ \section{Processing Slices}
 
@@ -202,10 +218,10 @@ $CM$ is very small. For now we get away with using a simple hash table with
 linear probing.
 
 <<Forward declarations>>=
-void process_block_v0(struct context_t *self, const struct C_record_t *slice, bool verbose);
+void process_block_v0(struct context_t *self, const struct slice_t *slice, bool verbose);
 
 <<Auxiliary functions>>=
-void process_block_v0(struct context_t *self, const struct C_record_t *slice, bool verbose)
+void process_block_v0(struct context_t *self, const struct slice_t *slice, bool verbose)
 {
 	double start = wtime();
 	struct task_result_t * local_result = result_init();

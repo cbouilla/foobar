@@ -1,5 +1,5 @@
-CFLAGS = -std=c11 -g -Wall -mavx2 -Wextra -O3 -Werror -fopenmp -I$(HOME)/prison/m4ri/install/include
-LDFLAGS = -fopenmp -L$(HOME)/prison/m4ri/install/lib
+CFLAGS = -std=c11 -g -Wall -Wextra -O0 -Werror -fopenmp
+LDFLAGS = -fopenmp
 LDLIBS = -lm 
 all: programs doc.pdf
 
@@ -7,12 +7,13 @@ common.o: common.h
 #linalg.o: linalg.h
 joux_v0.o: common.h
 joux_v1.o: linalg.h common.h
+joux_v3.o: common.h
 
 programs: joux_standalone
-doc.pdf: common.pdf joux_v0.pdf joux_standalone.pdf
+doc.pdf: common.pdf joux_v3.pdf joux_standalone.pdf
 	pdftk $^ cat output $@
 
-joux_standalone: common.o ../quadratic/datastructures.o joux_v0.o
+joux_standalone: common.o ../quadratic/datastructures.o joux_v3.o
 
 test:
 

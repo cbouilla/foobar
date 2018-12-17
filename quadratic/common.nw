@@ -144,7 +144,7 @@ Some very common function, such as timing, are also here.
 <<Functions declarations>>=
 void *aligned_alloc(size_t alignment, size_t size);
 double wtime();
-#ifdef __i386__
+#ifdef __x86_64__
 u64 ticks();
 #endif
 bool big_endian();
@@ -174,7 +174,7 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
-#ifdef __i386__
+#ifdef __x86_64__
 u64 ticks()
 {
 	u64 low, high;

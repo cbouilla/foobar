@@ -571,6 +571,20 @@ printf("[tid=%d] PAPI_TOT_CYC = %lld\n", t,  counters[3]);
 \includegraphics[width=\textwidth]{partition_T_zen2}
 \includegraphics[width=\textwidth]{partition_T_zen2_gemv}
 
+\subsection{16-threads (+SMT4) PowerPC A2 @ 1.6Ghz (turing)}
+
+\includegraphics[width=\textwidth]{partition_p_BGQ}
+\includegraphics[width=\textwidth]{partition_p_BGQ_gemv}
+\includegraphics[width=\textwidth]{partition_T_BGQ}
+\includegraphics[width=\textwidth]{partition_T_BGQ_gemv}
+
+\subsection{16-threads (+SMT4) PowerPC A2 @ 1.6Ghz (turing) + GEMM before}
+
+\includegraphics[width=\textwidth]{partition_p_BGQ_gemv_sep}
+\includegraphics[width=\textwidth]{partition_T_BGQ_gemv_sep}
+
+
+
 \section{Conclusion}
 
 Using the STREAM benchmark we estimated the ``all threads'' copy bandwidth 
