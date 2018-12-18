@@ -13,7 +13,7 @@ quadratic_v2.o: common.h datastructures.h
 quadratic_v2.o: CFLAGS += -mavx2
 
 quad_standalone.o: quad_standalone.c common.h datastructures.h
-quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v2.o
+quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v1.o
 
 quad_few: quad_few.o common.o datastructures.o quadratic_v2.o
 

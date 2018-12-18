@@ -68,7 +68,7 @@ that $x \in A^{[i]}, y \in B^{[j]}$ and $x \oplus y \in C^{[i \oplus j]}$.
 <<The main function>>=
 struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task)
 {
-	static const bool verbose = true;
+	static const bool verbose = false;
 	<<Prepare [[result]]>>
 	printf("[%.1f] task launch\n", wtime());
 	<<Allocate memory and load data from disk>>

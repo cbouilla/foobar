@@ -486,26 +486,19 @@ void process_slice_v3(struct context_t *self, const struct slice_t *slice,
 {
 	double start = wtime();
 	<<Prepare slice context>>
-	ctx.result = result_init();
-	<<Compute $AM, BM$>>
 	u32 fan_out = 1 << self->p;
 	u64 probes = 0;
+	int events[2] = {PAPI_TOT_CYC, PAPI_TOT_INS};
+	long long counters[2] = {0, 0};
+	double volume = self->n[0] + self->n[1];
 	u32 T = self->T;
-	#pragma omp parallel reduction(+:probes)
-	{
-		assert(T == (u32) omp_get_num_threads());
-		if (verbose)
-			printf("partioning...\n");
-		for (u32 k = 0; k < 2; k++)
-			partition(self->p, &self->side[k]);
-		if (verbose)
-			printf("subjoins...\n");
-		#pragma omp for schedule(dynamic, 1)
-		for (u32 i = 0; i < fan_out; i++) {
-			<<Prepare subjoin input pointers for $i$-th partition>>
-			probes += subjoin(&ctx, T, scattered);
-		}
-	}
+	if (verbose)
+		printf("p = %d, l = %" PRId64 "\n", self->p, slice->l);
+	if (slice->l - self->p < 9)
+		printf("WARNING : l and p are too close (increase l)\n");
+	<<Compute $AM, BM$>>
+	<<Partitioning>>
+	<<Subjoins>>
 	<<Lift solutions>>
 	<<Destroy slice context>>
 	if (verbose) {
@@ -518,10 +511,92 @@ struct slice_ctx_t ctx = { .slice = slice };
 ctx.result = result_init();
 ctx.H = hashtable_build(slice->CM, 0, slice->n);
 
+<<Compute $AM, BM$>>=
+struct matmul_table_t M;
+matmul_init(slice->M, &M);
+counters[0] = counters[1] = 0;
+long long gemm_start = PAPI_get_real_usec();
+#pragma omp parallel reduction(+:counters[0:2])
+{
+	<<Start hardware performance counters>>
+	gemm(self->L[0], self->side[0].LM, self->side[0].n, &M);
+	gemm(self->L[1], self->side[1].LM, self->side[1].n, &M);
+	<<Stop performance counters>>
+}
+double gemm_rate = volume / (PAPI_get_real_usec() - gemm_start) * 1.048576;
+if (verbose)
+	printf("[GEMM/item] cycles = %.1f, instr = %.1f. Rate=%.1f Mgemv/s\n", 
+		counters[0] / volume, counters[1] / volume,  gemm_rate); 
+
+
+<<Partitioning>>=
+counters[0] = counters[1] = 0;
+long long part_start = PAPI_get_real_usec();
+#pragma omp parallel reduction(+:counters[0:2])
+{
+	<<Start hardware performance counters>>
+	for (u32 k = 0; k < 2; k++)
+		partition(self->p, &self->side[k]);
+	<<Stop performance counters>>
+}
+double part_rate = volume / (PAPI_get_real_usec() - part_start) * 1.048576;
+if (verbose)
+	printf("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n", 
+		counters[0] / volume, counters[1] / volume, part_rate); 
+
+<<Subjoins>>=
+counters[0] = counters[1] = 0;
+long long subjoin_start = PAPI_get_real_usec();
+#pragma omp parallel reduction(+:probes, counters[0:2])
+{
+	<<Start hardware performance counters>>
+	#pragma omp for schedule(dynamic, 1)
+	for (u32 i = 0; i < fan_out; i++) {
+		<<Prepare subjoin input pointers for $i$-th partition>>
+		probes += subjoin(&ctx, T, scattered);
+	}
+	<<Stop performance counters>>
+}
+double subjoin_rate = volume / (PAPI_get_real_usec() - subjoin_start) * 1.048576;
+if (verbose)
+	printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n", 
+		probes / volume, counters[0] / volume, counters[1] / volume, subjoin_rate); 
+
 
 <<Destroy slice context>>=
 hashtable_free(ctx.H);
 result_free(ctx.result);
+
+
+<<Lift solutions>>=
+struct solution_t *loc = ctx.result->solutions;
+u32 n_sols = ctx.result->size;
+for (u32 i = 0; i < n_sols; i++) {
+	u64 x = naive_gemv(loc[i].x, slice->Minv);
+	u64 y = naive_gemv(loc[i].y, slice->Minv);
+	u64 z = naive_gemv(loc[i].z, slice->Minv);
+	report_solution(self->result, x, y, z);
+}
+
+<<Display timing info>>=
+double duration = wtime() - start;
+// printf("Block, total time: %.1fs\n", duration);
+double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
+double rate = volume / duration;
+printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
+
+
+@ Performance monitoring ! We use PAPI medium-level interface.
+
+<<Start hardware performance counters>>=
+int rc = PAPI_start_counters(events, 2);
+if (rc != PAPI_OK)
+    	errx(1, "PAPI_start_counters : %s", PAPI_strerror(rc));
+
+<<Stop performance counters>>=
+rc = PAPI_stop_counters(counters, 2);
+if (rc != PAPI_OK)
+    	errx(1, "PAPI_stop_counters: %s", PAPI_strerror(rc));
 
 @ The technical part consists in computing $AM \join_\ell BM$. Several methods
 are possible. We explore the complications below, incrementally. For now, let
@@ -549,24 +624,6 @@ u64 naive_gemv(u64 x, const u64 *M)
 	}
 	return y;
 }
-
-
-<<Lift solutions>>=
-struct solution_t *loc = ctx.result->solutions;
-u32 n_sols = ctx.result->size;
-for (u32 i = 0; i < n_sols; i++) {
-	u64 x = naive_gemv(loc[i].x, slice->Minv);
-	u64 y = naive_gemv(loc[i].y, slice->Minv);
-	u64 z = naive_gemv(loc[i].z, slice->Minv);
-	report_solution(self->result, x, y, z);
-}
-
-<<Display timing info>>=
-double duration = wtime() - start;
-printf("Block, total time: %.1fs\n", duration);
-double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
-double rate = volume / duration;
-printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
 
 @ \section{Matrix product}
 
@@ -631,11 +688,6 @@ static inline void gemm(const u64 *IN, u64 *OUT, u32 n, const struct matmul_tabl
 
 @ Now we have everything we need to do the linear algebra.
 
-<<Compute $AM, BM$>>=
-struct matmul_table_t M;
-matmul_init(slice->M, &M);
-gemm(self->L[0], self->side[0].LM, self->side[0].n, &M);
-gemm(self->L[1], self->side[1].LM, self->side[1].n, &M);
 
 @ \section{Partitioning}
 
@@ -710,7 +762,7 @@ u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions);
 u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
 {
 	static const u32 HASH_SIZE = 16384  / 4 / sizeof(u64);
-	static const u64 HASH_MASK = 16384 / 4 / 8 - 1;
+	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
 	u8 l = ctx->slice->l;
 	u8 shift = 64 - l;
 	<<Prepare hash table [[T]]>>

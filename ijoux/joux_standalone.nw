@@ -26,6 +26,9 @@ This file describes a standalone program that solves whole instances using the i
 
 #include "common.h"
 
+#include <pthread.h>
+#include <papi.h>
+
 /* in joux.c */
 struct task_result_t * iterated_joux_task_v3(const char *hash_dir, const char *slice_dir, struct jtask_id_t *task, u32 p);
 
@@ -36,10 +39,19 @@ struct task_result_t * iterated_joux_task_v3(const char *hash_dir, const char *s
 <<The main function>>=
 int main(int argc, char **argv)
 {
+	<<setup PAPI>>
 	<<Process the command line>>
 	<<Process all the tasks>>
-	
 }
+
+
+<<setup PAPI>>=
+int rc = PAPI_library_init(PAPI_VER_CURRENT);
+if (rc != PAPI_VER_CURRENT) 
+	errx(1, "PAPI version mismatch");
+rc = PAPI_thread_init(pthread_self);
+if (rc != PAPI_OK)
+	errx(1, "PAPI_thread_init: %d (%s)\n", rc, PAPI_strerror(rc));
 
 
 <<Process the command line>>=
@@ -110,13 +122,14 @@ for (u32 i = 0; i < problem_size; i++)
 			task.r = r;
 			printf("task (%d, %d, %d) : ", i, j, r);
 			fflush(stdout);
-			struct task_result_t *solutions = iterated_joux_task_v3(hash_dir, slice_dir, &task, 10);
+			struct task_result_t *solutions = 
+			  iterated_joux_task_v3(hash_dir, slice_dir, &task, 10);
 			printf("%d solutions\n", solutions->size);
 			for (u32 u = 0; u < solutions->size; u++)
 				printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-								solutions->solutions[u].x, 
-								solutions->solutions[u].y, 
-								solutions->solutions[u].z);
+						solutions->solutions[u].x, 
+						solutions->solutions[u].y, 
+						solutions->solutions[u].z);
 			result_free(solutions);
 		}
 

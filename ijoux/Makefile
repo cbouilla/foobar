@@ -1,6 +1,6 @@
-CFLAGS = -std=c11 -g -Wall -Wextra -O0 -Werror -fopenmp
+CFLAGS = -std=c11 -g -Wall -Wextra -O3 -Werror -fopenmp
 LDFLAGS = -fopenmp
-LDLIBS = -lm 
+LDLIBS = -lm -lpapi
 all: programs doc.pdf
 
 common.o: common.h
