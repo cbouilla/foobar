@@ -34,7 +34,7 @@ This is akin to a bloom filter, but bloom filters are too slow for our purposes.
 <<Public functions>>
 
 <<datastructures.h>>=
-#include "types.h"
+#include "../types.h"
 #include <assert.h>
 
 <<Type definitions>>

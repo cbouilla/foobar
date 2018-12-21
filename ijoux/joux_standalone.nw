@@ -26,6 +26,7 @@ This file describes a standalone program that solves whole instances using the i
 
 #include "common.h"
 
+#include <omp.h>
 #include <pthread.h>
 #include <papi.h>
 
@@ -39,20 +40,28 @@ struct task_result_t * iterated_joux_task_v3(const char *hash_dir, const char *s
 <<The main function>>=
 int main(int argc, char **argv)
 {
-	<<setup PAPI>>
+	<<setup PAPI and start counters>>
 	<<Process the command line>>
 	<<Process all the tasks>>
 }
 
 
-<<setup PAPI>>=
+<<setup PAPI and start counters>>=
 int rc = PAPI_library_init(PAPI_VER_CURRENT);
 if (rc != PAPI_VER_CURRENT) 
 	errx(1, "PAPI version mismatch");
 rc = PAPI_thread_init(pthread_self);
 if (rc != PAPI_OK)
 	errx(1, "PAPI_thread_init: %d (%s)\n", rc, PAPI_strerror(rc));
-
+#pragma omp parallel
+{
+	int events[2] = {PAPI_TOT_CYC, PAPI_TOT_INS};
+	rc = PAPI_start_counters(events, 2);
+	if (rc < PAPI_OK)
+   			errx(1, "PAPI_start_counters : tid=%d, rc = %d, %s", 
+   				omp_get_thread_num(), rc, PAPI_strerror(rc));
+   	printf("started on tid=%d\n", omp_get_thread_num());
+}
 
 <<Process the command line>>=
 struct option longopts[7] = {
@@ -69,7 +78,7 @@ u32 k2 = 0;
 // u32 q = 0;
 char *hash_dir = NULL;
 char *slice_dir = NULL;
-char ch;
+signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
     	switch (ch) {
 	case 'k':

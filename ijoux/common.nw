@@ -112,6 +112,7 @@ double wtime();
 u64 ticks();
 #endif
 bool big_endian();
+void *aligned_alloc(size_t alignment, size_t size);
 
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
@@ -127,6 +128,7 @@ static inline u64 RIGHT_MASK(u32 n)
 }
 
 <<*>>=
+#define _POSIX_C_SOURCE 200112L
 #include <sys/time.h>
 #include <stdlib.h>
 #include <err.h>
@@ -158,6 +160,13 @@ bool big_endian()
         return (htonl(47) == 47);
 }
 
+void *aligned_alloc(size_t alignment, size_t size)
+{
+        void *p;
+        if (posix_memalign(&p, alignment, size) != 0)
+                return NULL;
+        return p;
+}
 
 @ \section{Results}
 
