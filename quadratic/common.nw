@@ -111,7 +111,7 @@ components are mandatory, but it is slighlty easier this way.
 
 <<common.h>>=
 #include <stddef.h>
-#include "types.h"
+#include "../types.h"
 
 
 <<Type definitions>>

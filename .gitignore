@@ -311,3 +311,7 @@ opkg
 /ijoux/joux_v3.out
 /ijoux/joux_v3.pdf
 /quadratic/quadratic_v2.o
+/quadratic/quadratic_v2.c
+/ijoux/joux_standalone.c
+/ijoux/joux_v3.c
+/ijoux/joux_v3.tex

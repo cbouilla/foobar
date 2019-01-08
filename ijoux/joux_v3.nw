@@ -958,6 +958,7 @@ thread pour le build et 2 threads pour le probe ? matérialiser le join
  Breakdown:
 stdout[12]: * GEMM:      	T = 4, 	time = 9.79s	rate = 47.02Mitem/s
 stdout[12]: * partition: 	T = 2, 	time = 6.14s	rate = 74.91Mitem/s
+  ------> bw = 13 Gb/s read + as much write.
 stdout[12]: * subjoin:   	T = 3, 	time = 9.23s	rate = 49.85Mitem/s
 
 stdout[14]: * GEMM:      	T = 4, 	time = 9.95s	rate = 46.24Mitem/s
@@ -966,5 +967,9 @@ stdout[14]: * subjoin:   	T = 4, 	time = 9.81s	rate = 46.90Mitem/s
 
 En l'état, un peu moins de 8 millions d'heures sur turing.
 
+partition = existee-t-il compare-and-swap ? atomic increment ? Ceci permettrait
+de faire marcher 4 threads de partitionnement sur les mêmes buckets de sortie.
+
+thread speculation ?
 
 @ \end{document}
