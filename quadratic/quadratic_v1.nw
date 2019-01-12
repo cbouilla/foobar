@@ -68,7 +68,7 @@ that $x \in A^{[i]}, y \in B^{[j]}$ and $x \oplus y \in C^{[i \oplus j]}$.
 <<The main function>>=
 struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task)
 {
-	static const bool verbose = false;
+	static const bool verbose = true;
 	<<Prepare [[result]]>>
 	printf("[%.1f] task launch\n", wtime());
 	<<Allocate memory and load data from disk>>
@@ -185,7 +185,7 @@ we use a heuristic: we make sure that the subslice of $A$ has less
 than 512 hashes (this corresponds to a hash table fill of $0.25$).
 
 <<Determine the block size ($\ell$)>>=
-u32 l = ceil(log2(size[0] / 512)) + 1;
+u32 l = floor(log2(size[0] / 1024));
 u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
@@ -342,8 +342,8 @@ void process_block(struct context_t *self, u32 u, bool verbose)
 		int rc = PAPI_ipc(&rtime, &ptime, &ins, &ipc);
 		if (rc < PAPI_OK)
     			errx(1, "PAPI_ipc : %d", rc);
-    		printf("IPC:    %.1f\n", ipc);
-    		printf("I/pair: %.1f\n", (1.0 * ins) / n_pairs);
+    		// printf("IPC:    %.1f\n", ipc);
+    		// printf("I/pair: %.1f\n", (1.0 * ins) / n_pairs);
 
     		//int Events[2] = { PAPI_TOT_CYC, PAPI_TOT_INS };
 		long long values[2];

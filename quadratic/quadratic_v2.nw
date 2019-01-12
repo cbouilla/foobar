@@ -164,13 +164,14 @@ for (u32 kind = 0;  kind < 3; kind++) {
 	free(slice[kind]);
 }
 
-@ At this stage, the hashes needed to perform the task are loaded.
-We now determine the $\ell$ parameter, i.e. the grid size. For now, 
-we use a heuristic: we make sure that the subslice of $A$ has less 
-than 512 hashes (this corresponds to a hash table fill of $0.25$).
+@ At this stage, the hashes needed to perform the task are loaded. We now
+determine the $\ell$ parameter, i.e. the grid size. For now,  we use a
+heuristic: we make sure that the subslice of $A$ has less  than 1024 hashes
+(this corresponds to a hash table fill of $0.25$ if the hash table is 16Kbyte
+and if it uses [[u32]]).
 
 <<Determine the block size ($\ell$)>>=
-u32 l = floor(log2(size[0] / 512));
+u32 l = floor(log2(size[0] / 1024));
 u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
@@ -229,7 +230,7 @@ double shared_slice = size[0] / grid_size;
 int hash_size = hashtable_size(shared_slice);
 printf("Using l = %d\n", l);
 printf("Average block slice volume : %.0f bytes (%.0f hashes). |hash| = %d entries (%d bytes)\n", 
-	8 * shared_slice, shared_slice, hash_size, 8 * hash_size);
+	8 * shared_slice, shared_slice, hash_size, 4 * hash_size);
 	/* chunk-level */
 double kbytes = 8 * (size[0] + size[1] + size[2]) / grid_size / 1024.;
 mpairs = (size[1] / grid_size) * (size[2] / grid_size) / 1048576.; 
@@ -285,12 +286,12 @@ void process_block(struct context_t *self, u32 u, bool verbose)
 	double start = wtime();
 	u64 clock = ticks();
 	u32 grid_size = self->grid_size;
-	if (verbose)
-		printf("Doing block %d/%d...", u, grid_size - 1);
 	u64 *A = self->slice[0];
 	u32 *A_idx = self->index[0];
 	u32 *idx_B = self->index[1];
 	u32 *idx_C = self->index[2];
+	if (verbose)
+		printf("Doing block %d/%d...(|slice|=%d) ", u, grid_size - 1, A_idx[u + 1] - A_idx[u]);
 	struct hash_table_t *D = hashtable_build(A, A_idx[u], A_idx[u + 1]);
 	u32 *H = cuckoo_build(A, A_idx[u], A_idx[u + 1]);
 	u64 n_pairs = 1;

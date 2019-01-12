@@ -2,8 +2,8 @@ CFLAGS = -std=c11 -g -Wall -Wextra -O3 -I/usr/local/include -Werror
 LDLIBS = -lm -lpapi
 all: programs # doc.pdf
 
-programs: quad_standalone server quad_client peek quad_few
-doc.pdf: common.pdf datastructures.pdf quadratic_v1.pdf quad_standalone.pdf server.pdf quad_client.pdf peek.pdf quad_few.pdf
+programs: quad_standalone server quad_client peek
+doc.pdf: common.pdf datastructures.pdf quadratic_v1.pdf quad_standalone.pdf server.pdf quad_client.pdf peek.pdf
 	pdftk $^ cat output $@
 
 
