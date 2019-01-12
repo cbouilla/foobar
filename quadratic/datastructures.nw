@@ -175,11 +175,22 @@ u32 * cuckoo_build(u64 * const L, u32 lo, u32 hi);
 This makes it vectorizable.
 
 <<Function declarations>>=
+static inline u32 H0(u64 x)
+{
+	return x & CUCKOO_MASK;
+}
+
+static inline u32 H1(u64 x)
+{
+	return (x >> 16) & CUCKOO_MASK;
+}
+
+
 static inline bool cuckoo_lookup(const u32 *H, const u64 x)
 {
 	const u32 x_low = x;
-	const u32 h1 = x & CUCKOO_MASK;
-	const u32 h2 = (x >> 16) & CUCKOO_MASK;
+	const u32 h1 = H0(x);
+	const u32 h2 = H1(x);
 	const u32 probe1 = H[h1];
 	const u32 probe2 = H[h2];
 	return (probe1 == x_low) || (probe2 == x_low);
@@ -224,7 +235,7 @@ if (!ok) {
 }
 
 <<Try to insert $x$ in side 0; in case of success, [[break]]>>=
-u32 h0 = x & CUCKOO_MASK;
+u32 h0 = H0(x);
 if (H[h0] == 0 || H[h0] == x) {
 	H[h0] = x;
 	ok = true;
@@ -232,7 +243,7 @@ if (H[h0] == 0 || H[h0] == x) {
 }
 
 <<Try to insert $x$ in side 1; in case of success, [[break]]>>=
-u32 h1 = (x >> 16) & CUCKOO_MASK;
+u32 h1 = H1(x);
 if (H[h1] == 0 || H[h1] == x) {
 	H[h1] = x;
 	ok = true;
