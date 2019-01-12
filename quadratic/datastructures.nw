@@ -220,41 +220,25 @@ u32 * cuckoo_build(u64 * const L, u32 lo, u32 hi)
 
 <<insert [[L[i]]] into the cuckoo table; return [[NULL]] in case of failure>>=
 u32 x = L[i];
-u32 loops = 0;
-bool ok = false;
-while (!ok && loops < 1000) {
-	<<Try to insert $x$ in side 0; in case of success, [[break]]>>
-	<<Try to insert $x$ in side 1; in case of success, [[break]]>>
-	<<Choose a side at random, swap current value with $x$>>
-	ok = false;
-	loops++;
+u32 h = H0(x);
+<<Exchange $x$ and $H[h]$>>
+for (u32 loops = 0; loops < 1000; loops++) {
+	u32 h0 = H0(x);
+	u32 h1 = H1(x);
+	if (x == 0)
+		break;
+	h = (h0 == h) ? h1 : h0;
+	<<Exchange $x$ and $H[h]$>>
 }
-if (!ok) {
+if (x != 0) {
 	free(H);
 	return NULL;
 }
 
-<<Try to insert $x$ in side 0; in case of success, [[break]]>>=
-u32 h0 = H0(x);
-if (H[h0] == 0 || H[h0] == x) {
-	H[h0] = x;
-	ok = true;
-	break;
-}
-
-<<Try to insert $x$ in side 1; in case of success, [[break]]>>=
-u32 h1 = H1(x);
-if (H[h1] == 0 || H[h1] == x) {
-	H[h1] = x;
-	ok = true;
-	break;
-}
-
-<<Choose a side at random, swap current value with $x$>>=
-u32 h = (mrand48() & 1) ? h0 : h1;
-u32 y = H[h];
-H[h] = x;
-x = y;
+<<Exchange $x$ and $H[h]$>>=
+u32 y = x;
+x = H[h];
+H[h] = y;
 
 @ \section{Multiple Cuckoo Probing}
 
