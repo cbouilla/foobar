@@ -171,7 +171,7 @@ heuristic: we make sure that the subslice of $A$ has less  than 1024 hashes
 and if it uses [[u32]]).
 
 <<Determine the block size ($\ell$)>>=
-u32 l = floor(log2(size[0] / 1024));
+u32 l = ceil(log2(size[0] / 1738));
 u32 grid_size = 1 << l;
 
 @ To split the task into a grid, we compute sub-slices boundaries. On $A$, this 
