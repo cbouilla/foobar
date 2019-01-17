@@ -22,20 +22,15 @@
 \setcounter{chapter}{7}
 \chapter{Slicer}
 
-This program reads the $C$ hash file, partition it in \emph{slices}. 
-A slice is a sequence of [[u64]] such that their rank less than (or equal) 
-to a given threshold, which is approximately $\log_2 [[file size]]$. Then 
-for each slice, we computes the changes of bases and writes down a matrix file. 
-It uses \MaRI to perform the linear algebra.
+This program reads a $C$ hash file and partition it in \emph{slices}. A slice
+is a sequence of [[u64]] such that their rank less than (or equal) to a given
+threshold, which is approximately $\log_2 [[file size]]$. Then for each slice,
+we computes the changes of bases and writes down a matrix file. We use \MaRI
+to perform the linear algebra.
 
-Each slice is represented by a [[struct slice_t]]. 
-Slices are concatenated in a \textbf{slice file}. 
-Because the size of a slice is not fixed, and slice files have no index, 
-\emph{one} hash file leads to the creation of \emph{several} 
-(exactly $k'$) slice files.
-
-Each fine task thus requires a single slice file. Slice files are named 
-[[slice/<key>-<index>]].
+Each slice is represented by a [[struct slice_t]]. Slices are concatenated in
+a \textbf{slice file}. Each fine task thus requires a single slice file. Slice
+files are named [[slice/<key>]].
 
 
 <<*>>=
@@ -64,27 +59,23 @@ int main(int argc, char **argv)
 	exit(EXIT_SUCCESS);
 }
 
-@ The only accepted command-line arguments is the name of file to process, the number of slice files to produce ([[--k]]) and the number of bits to cancel in each slice [[--l]].
+@ The only accepted command-line arguments is the name of file to process and
+the number of bits to cancel in each slice [[--l]].
 
 <<Process the command line>>=
-struct option longopts[4] = {
+struct option longopts[3] = {
 	{"target-dir", required_argument, NULL, 't'},
-	{"k", required_argument, NULL, 'k'},
 	{"l", required_argument, NULL, 'l'},
 	{NULL, 0, NULL, 0}
 };
 char *target_dir = NULL;
 char *in_filename = NULL;
 signed char ch;
-u32 k2 = 0;
-u32 l =0;
+u32 l = 0;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
 	case 't':
 		target_dir = optarg;
-		break;
-	case 'k':
-		k2 = atoi(optarg);
 		break;
 	case 'l':
 		l = atoi(optarg);
@@ -95,14 +86,14 @@ while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 }
 if (optind >= argc)
 	errx(1, "missing input file");
-if (k2 <= 0)
-	errx(1, "missing --k");
 if (target_dir == NULL)
 	errx(1, "missing --target-dir");
 in_filename = argv[optind];
 
 @ To read the hash file in memory, we first query its size, then
 allocate memory accordingly, then finally read it in the allocated space.
+
+FIXME : use the common function.
 
 <<Load the hash file; set up [[L]] and [[n]]>>=
 struct stat infos;
@@ -123,12 +114,10 @@ u32 n = infos.st_size / sizeof(*L);
 
 @ Once the hashes have been loaded, we process each slice one-by-one. In this
 code,  this is not very complicated and we do not seriously attempt to
-increase the size of slices. By default, a slice has size $\log_2 |C|$, and
-each slice file will have size $m$.
+increase the size of slices. By default, a slice has size $\log_2 |C|$.
 
 To open the output slice files, we need to extract the [[<key>]] from the name
 of the input hash file.
-
 
 <<Process all slices>>=
 assert(m4ri_radix == 64);
@@ -137,25 +126,20 @@ if (l == 0) {
 	printf("using default l = %d\n", l);
 }
 u32 n_slices = ceil(n / (64. - l));
-u32 m = n_slices / k2;
 u32 height = 64 - l;
 char * key = strrchr(in_filename, '.');
 if (key == NULL)
 	errx(1, "ill-formated input filename");
 key++;
-char slice_filename[255];
-FILE *f_out = NULL;
-i32 r = 0;
 struct slice_t *out = malloc(sizeof(*out) + 1000 * sizeof(u64));
 
 @ Once all preparations are done, we can simply iterate over all slices.
 
 <<Process all slices>>=
+<<Open the output slice file>>
 for (u32 u = 0; u < n_slices; u++) {
-	r--;
-	if (r < 0) {
-		<<Open the next slice file>>
-	}
+	printf("\r%d / %d", u, n_slices);
+	fflush(stdout);
 	u32 lo = u * height;
 	u32 hi = MIN((u + 1) * height, n);
 	u32 height = hi - lo;
@@ -166,22 +150,19 @@ for (u32 u = 0; u < n_slices; u++) {
 	<<Compute $L^{T}, (L^{T})^{-1}$ and $CM$>>
 	<<Set output>>
 	<<Check $CM$>>
-	<<Write output to the current slice file>>
+	<<Write output to the slice file>>
 	<<Free memory>>
 }
+fclose(f_out);
 printf("\n");
 
 
-<<Open the next slice file>>=
-if (f_out)
-	fclose(f_out);
-sprintf(slice_filename, "%s/%s-%05x", target_dir, key, u / m);
-f_out = fopen(slice_filename, "w");
+<<Open the output slice file>>=
+char slice_filename[255];
+sprintf(slice_filename, "%s/%s", target_dir, key);
+FILE *f_out = fopen(slice_filename, "w");
 if (f_out == NULL)
 	err(1, "cannot open %s\n", slice_filename);
-r = m;
-printf("\r%s", slice_filename);
-fflush(stdout);
 
 <<Load slice into [[A]]>>=
 mzd_t *A = mzd_init(height, 64);
@@ -242,7 +223,7 @@ FILE *f_out = fopen(out_filename, "w");
 if (f_out == NULL)
 	err(1, "cannot create output file %s", out_filename);
 
-<<Write output to the current slice file>>=
+<<Write output to the slice file>>=
 u32 size = sizeof(*out) + height * sizeof(u64);
 check = fwrite(out, 1, size, f_out);
 if (check != size)

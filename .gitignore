@@ -315,3 +315,4 @@ opkg
 /ijoux/joux_standalone.c
 /ijoux/joux_v3.c
 /ijoux/joux_v3.tex
+/ijoux/common.c

@@ -20,100 +20,53 @@ As in the quadratic algorithm, for a given instance $(A, B, C)$ of the problem,
 we may split it into a 2D array of size $2^k \times 2^k$, where the 
 sub-instance of coordinates $(i, j)$ is $(A^{[i]}, B^{[j]}, C^{[i \oplus j]})$.
 
-This partition of the problem is necessary to create sub-instances where $A_i$ 
-and $B_j$ simultaneously fit in the RAM of the worker nodes.
+This partition create sub-instances where $A_i$ and $B_j$ simultaneously have
+the optimal size (roughly 1 Mbyte)  to be processed by a single core of
+\texttt{turing}.
 
-The computation is in organised along a 3D partition of the original instance. 
-
-\begin{description} \item[Coarse tasks] The original instance is split into a
-2D array of  \textbf{coarse tasks} of size $2^k \times 2^k$ during
-preprocessing, according  to the partitioning key, just as in the quadratic
-algorithm. We have interest to create the biggest possible coarse task that
-actually fit in RAM. The slices of the  input lists corresponding to coarse
-tasks should be small enough to fit in RAM. $k = 3, 4, 5$ seems reasonable.
-
-\item[Fine tasks] The processing time of a coarse task is likely too large for 
-practical purposes. Coarse tasks are then partitioned into a 1D array of \textbf{fine tasks}
-by partitioning $C_{i \oplus j}$ into $k'$ equal-sized chunks. The 
-``unit of computation'' is the fine task (i.e. the task server dispatches fine 
-tasks). In the sequel, ``tasks'' are \emph{fine} tasks.
-
-\item[Blocks] On a single machine, fine tasks $(A', B', C')$ are split into a 
-1D array by splitting $C'$ in very small \textbf{slices} $C'_i$ (of size $\leq 64$). 
-A \textbf{block} corresponds to one slice $C_i$ (and the full $A', B'$). 
-The work to do inside a block can be parallelized, but this is non-trivial.
-\end{description}
-
-
-
-\begin{center}
-  \begin{tikzpicture}[scale=0.9]
-    \draw[<->] (-1, 0) -- node[above,sloped] {List $A$} +(0, 8);
-    \draw[<->] (0, -1) -- node[below] {List $B$} +(8, 0);
-
-    \node[anchor=south] at (4, 8) {Full instance};
-    \draw[step=4cm, dashed] (0, 0) grid (8, 8);
-    \draw[ultra thick] (0, 0) rectangle (8, 8);
-    
-    \node[anchor=south] at (6, 4) {Coarse Task $(1, 1)$};
-    \draw[very thick] (4, 0) rectangle +(4, 4);
-    %%%%%%
-
-    \begin{scope}[xshift=5cm]
-	\node[anchor=south] at (6, 4) {Coarse Task $(1, 1)$};
-	\draw[very thick] (4, 0) rectangle +(4, 4);
-	\draw[thick,xstep=1cm,ystep=4cm] (4, 0) grid +(4, 4);
-	\path (6, 0) rectangle node[rotate=90,font=\scriptsize] {Fine task $(1,1,2)$} +(1, 4);
-
-	\draw[xstep=0.1cm,ystep=4cm] (5, 0) grid +(1, 4);
-
-	\draw[<->] (4, -1) -- node[below] {List $C$} +(4, 0);
-    \end{scope}
-
-  \end{tikzpicture}
-\end{center}
-
-Splitting the computation in fine tasks enables the use of several machines. 
-
-\section{Work Distribution}
-
-A \textbf{task description} is thus a sextuplet $(k, k', i, j, i \oplus j, r)$ with $0 \leq i,j < 2^k$. 
-Let $m := \lfloor |C^{[i \oplus j]}| / k'\rfloor$. A \textbf{task result} is the list of all pairs $(x, y)$ such that $x \in A^{[i]}, y \in B^{[j]}$ and  $x \oplus y \in C^{[i \oplus j]}[rm:(r+1)m]$.
+The \emph{task processing function} (described later) deals with such tasks.
+They take as input two slices of $A$ and $B$ (along with their sizes) and a
+preprocessed slice of $C$. A [[struct jtask_t]] contains all the necessary data.
 
 <<Type definitions>>=
-struct jtask_id_t {
-	u32 k;
-	u32 idx[3];
-	u32 k2;
-	u32 r;
+struct jtask_t {
+	u64 *L[2];
+	u64 n[2];
+	struct slice_t *slices;
+	u64 slices_size;
 };
 
-@ \section{Processing Tasks}
-
-A task-processing function takes a task description and find all the solution triplets. A 
-[[struct task_t]] contains the prefix length $k$ and a three-dimensional index,
-with the constraint that [[idx[0] ^ idx[1] ^ idx[1] == 0]]). In fact, only the first two 
-components are mandatory, but it is slighlty easier this way.
+@ This header file is meant to be used by most code in here.
 
 <<common.h>>=
 #include <stdio.h>
 #include "../types.h"
+
 <<Type definitions>>
 <<Function declarations>>
 
+@ \section{Utilities}
 
-@ \section{Utilities (NOT DRY)}
+We have the usual boilerplate.
 
-Some very common function, such as timing, are also here.
+<<*>>=
+#define _POSIX_C_SOURCE 200112L
+#include <stdlib.h>
+#include <err.h>
+#include <arpa/inet.h>
+#include <byteswap.h>
+#include <sys/stat.h>
+#include <assert.h>
+
+#include "common.h"
+#include "papi.h"
+
+<<Functions>>
+
+
+@ Now, with the actual content. Let's begin with useful macros.
 
 <<Function declarations>>=
-double wtime();
-#ifdef __i386__
-u64 ticks();
-#endif
-bool big_endian();
-void *aligned_alloc(size_t alignment, size_t size);
-
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -127,40 +80,46 @@ static inline u64 RIGHT_MASK(u32 n)
 	return (1ull << n) - 1;
 }
 
-<<*>>=
-#define _POSIX_C_SOURCE 200112L
-#include <sys/time.h>
-#include <stdlib.h>
-#include <err.h>
-#include <arpa/inet.h>
+@ At the begining, there was time (and CPU cycles). Note that CPU cycles are
+unreliable on x86 CPUs with ``turbo boost''.
 
-#include "common.h"
-<<Functions>>
-
+<<Function declarations>>=
+double wtime();
+u64 cycles();
 
 <<Functions>>=
 double wtime()
 {
-	struct timeval ts;
-	gettimeofday(&ts, NULL);
-	return (double)ts.tv_sec + ts.tv_usec / 1E6;
+	return PAPI_get_real_usec() / 1e6;
 }
 
-#ifdef __x86_64__
-u64 ticks()
+u64 cycles()
 {
-	u64 low, high;
-	__asm__ volatile ("rdtsc" : "=a" (low), "=d" (high));
-	return (high << 32) | low;
+	return PAPI_get_real_cyc();
 }
-#endif
 
+@ We need to know if we run on a little-endian machine (x86, etc.)  or a big-
+endian machine (PowerPC). The test is simple: the network function converts to
+network order(big-endian). If the result is different from the input, then we
+are on a little-endian machine.
+
+<<Function declarations>>=
+bool big_endian();
+
+<<Functions>>=
 bool big_endian()
 {
-        return (htonl(47) == 47);
+        return (htonl(0x47) == 0x47);
 }
 
-void *aligned_alloc(size_t alignment, size_t size)
+@ The IBM \texttt{xlc} compilers are not \textsf{C11}-compliant, therefore we
+implement [[aligned_alloc]] ourselves...
+
+<<Function declarations>>=
+void * aligned_alloc(size_t alignment, size_t size);
+
+<<Functions>>=
+void * aligned_alloc(size_t alignment, size_t size)
 {
         void *p;
         if (posix_memalign(&p, alignment, size) != 0)
@@ -168,14 +127,51 @@ void *aligned_alloc(size_t alignment, size_t size)
         return p;
 }
 
-@ \section{Results}
+@ The next utility function loads a sequence of [[u64]] from a file. The file
+is assumed to be in \emph{little-endian} byte order. Therefore, the [[u64]]
+are byteswapped if the machine is big-endian.
 
-Results are returned in a dynamic array. The type is NOT DRY wrt quadratic. 
-The code in quadratic in NOT DRY wrt here.
+<<Function declarations>>=
+void * load_file(const char *filename, u64 *size_);
+
+<<Functions>>=
+void * load_file(const char *filename, u64 *size_)
+{
+	struct stat infos;
+	if (stat(filename, &infos))
+		err(1, "fstat failed on %s", filename);
+	u64 size = infos.st_size;
+	assert ((size % 8) == 0);
+	u64 *content = aligned_alloc(64, size);
+	if (content == NULL)
+		err(1, "failed to allocate memory");
+	FILE *f = fopen(filename, "r");
+	if (f == NULL)
+		err(1, "fopen failed (%s)", filename);
+	u64 check = fread(content, 1, size, f);
+	if (check != size)
+		errx(1, "incomplete read %s", filename);
+	fclose(f);
+	*size_ = size;
+	<<if big-endian, byte-swap [[content]]>>
+	return content;
+}
+
+<<if big-endian, byte-swap [[content]]>>=
+if (big_endian()) {
+	#pragma omp parallel for
+	for (u32 i = 0; i < size / 8; i++)
+		content[i] = bswap_64(content[i]);
+}
+
+
+@ \section{Handling Task Results}
+
+Results are returned in a dynamic array. It grows automatically when necessary.
 
 <<Type definitions>>=
 struct solution_t {
-	u64 x, y, z;   /* triplet in A x B x C */
+	u64 x, y, z;           /* triplet in A x B x C */
 };
 
 struct task_result_t {
@@ -208,14 +204,13 @@ void result_free(struct task_result_t *result)
 	free(result);
 }
 
-@ Reporting solutions always works the same.
+@ Note that this function is not thread-safe.
 
 <<Functions>>=
 void report_solution(struct task_result_t *result, u64 x, u64 y, u64 z)
 {
     if ((x ^ y ^ z) != 0)
 	warnx("Fake solution reported");
-    // printf("solution %016" PRIx64 " ^ %016" PRIx64 " in A\n", x, y);
     if (result->size == result->capacity) {
 	result->solutions = realloc(result->solutions, 2 * result->capacity);
 	if (result->solutions == NULL)
