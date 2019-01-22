@@ -20,7 +20,7 @@ test:
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle  $^ > $@
 
 %.h : %.nw
 	notangle -L -R$@ $^ > $@
@@ -37,5 +37,5 @@ test:
 	pdflatex $<
 
 clean:
-	rm -rf *.o *.c *.h *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
+	rm -rf *.o  *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
 	rm -rf joux_standalone
