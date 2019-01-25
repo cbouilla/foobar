@@ -1,8 +1,9 @@
 CC = mpicc
-CFLAGS = -std=c11 -g -Wall -Wextra -O3 -Werror -fopenmp
+CFLAGS = -std=c11 -g -Wall -Wextra -O3 -fopenmp
 LDFLAGS = -fopenmp
 LDLIBS = -lm -lpapi
-all: programs doc.pdf
+
+all: programs
 
 common.o: common.h
 joux_v3.o: common.h
