@@ -24,19 +24,19 @@ struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
 
 void v_0(int u, int v)
 {
-	int rank, size, i, j;
+	int rank, world_size, i, j;
 
 	//Récuperer le rang du processus
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-	assert(size == u*u);
+	assert(world_size == u*u);
 	assert(u * v <= 1024);
 
 	i = rank / u;
 	j = rank % u;
 
-	printf("rank:%d\n size:%d\n i:%d\n j:%d\n",rank,size,i,j);
+	printf("rank:%d\n size:%d\n i:%d\n j:%d\n",rank,world_size,i,j);
 
         struct jtask_t all_tasks[v];
 	// Charger les données dans "task"
@@ -106,18 +106,53 @@ void v_0(int u, int v)
                                                 solutions->solutions[u].x,
                                                 solutions->solutions[u].y,
                                                 solutions->solutions[u].z);
-				result_report_solution(all_solutions,
+				report_solution(all_solutions,
 						solutions->solutions[u].x,
                                                 solutions->solutions[u].y,
                                                 solutions->solutions[u].z);
 			}
                         result_free(solutions);
 		}
+	u32 *solutions_sizes = NULL;
+	u32 *displacements = NULL;
+	struct solution_t *solutions_recv;
+	u32 total_solutions = 0;
 
 	// MPI_Gather sur un tableau de taille 1 : all_solutions->size;  [1 x MPI_UINT32_T]
-	// MPI_Gatherv sur un tableau de taille 3 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
+	if(rank == 0)
+	{
+		solutions_sizes = malloc( sizeof(u32) * world_size);
+	}
+	MPI_Gather(&all_solutions->size, 1, MPI_UINT32_T, solutions_sizes, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
 
+	// MPI_Gatherv sur un tableau de taille 3 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
+	if(rank == 0)
+	{	
+		//printf(" Nombre de solutions du processus 1 : %ld", solutions_sizes[1]);
+		u32 d = 0;					
+		displacements = malloc( sizeof(u32) * world_size);
+		for (u32 i = 0; i < world_size; i++)
+		{
+			displacements[i] = d;
+			d += solutions_sizes[d];
+			//total_solutions += solutions_sizes[i];
+		}
+		total_solutions = displacements[world_size - 1] + solutions_sizes[world_size - 1];
+		solutions_recv = malloc( 3 * sizeof(u64) * total_solutions);
+	}
+	MPI_Gatherv(&all_solutions->solutions, all_solutions->size, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 	// si je suis de rang zéro, je réaffiche tout. et j'enregistre dans un fichier !
+	if(rank == 0)
+	{
+		printf("Le nombre de solutions est : %d\n", total_solutions);
+		for (u32 i = 0; i < total_solutions; i++)
+		{
+			 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
+                                                solutions_recv[i].x,
+                                                solutions_recv[i].y,
+                                                solutions_recv[i].z);
+		}
+	}
 
 	printf("J'ai fini\n");
 	for (u32 r = 0; r < v; r++) {
