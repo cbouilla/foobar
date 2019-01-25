@@ -48,16 +48,12 @@ void v_0(int u, int v)
 
 	// A & B
         char filename[255];
-	MPI_Comm comm_I, comm_J, comm_IJ;
-	MPI_Comm_split(MPI_COMM_WORLD, i, 0, &comm_I);
-	MPI_Comm_split(MPI_COMM_WORLD, j, 0, &comm_J);
-	MPI_Comm_split(MPI_COMM_WORLD, i ^ j, 0, &comm_IJ);
 	for (u32 k = 0;  k < 2; k++) {
                 char *kind_name[2] = {"foo", "bar"};
                 for (u32 r = 0; r < v; r++) {
 			sprintf(filename, "%s/%s.%03x", hash_dir, kind_name[k], idx[k] * v + r);
-			printf("Je charge %s\n",filename);
-	                all_tasks[r].L[k] = load_file(filename, &all_tasks[r].n[k], MPI_COMM_WORLD);
+			printf("Je charge %s\n", filename);
+	                all_tasks[r].L[k] = load_file(filename, &all_tasks[r].n[k]);
 	                all_tasks[r].n[k] /= 8;
 		}
         }
@@ -65,7 +61,7 @@ void v_0(int u, int v)
         for (u32 r = 0; r < v; r++) {
         	sprintf(filename, "%s/%03x", slice_dir, idx[2] * v + r);
 		printf("Je charge %s\n", filename);
-	        all_tasks[r].slices = load_file(filename, &all_tasks[r].slices_size, MPI_COMM_WORLD);
+	        all_tasks[r].slices = load_file(filename, &all_tasks[r].slices_size);
 	}
 
 	for (u32 r = 0; r < v; r++)
