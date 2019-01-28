@@ -452,7 +452,7 @@ u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
 
 struct task_result_t * iterated_joux_task_v3(struct jtask_t *task)
 {
-        static const bool task_verbose = true;
+        static const bool task_verbose = false;
         static const bool slice_verbose = false;
         static const u32 p = 10;                             // hardcodé !
         struct task_result_t *result = result_init();

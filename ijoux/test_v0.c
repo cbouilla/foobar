@@ -10,10 +10,15 @@
 
 #include <mpi.h>
 
+//MPI_Wtime();
+
 #include "common.h"
 
-const char * hash_dir = "/home/mellila/foobar/data/hashes";
-const char * slice_dir = "/home/mellila/foobar/data/slice";
+//const char * hash_dir = "/home/mellila/foobar/data/hashes";
+//const char * slice_dir = "/home/mellila/foobar/data/slice";
+
+const char * hash_dir = "/home/mellila/foobar/testdata";
+const char * slice_dir = "/home/mellila/foobar/testdata";
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -24,7 +29,7 @@ struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
 
 void v_0(int u, int v)
 {
-	int rank, world_size, i, j;
+	int rank, world_size;
 
 	//Récuperer le rang du processus
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -33,10 +38,8 @@ void v_0(int u, int v)
 	assert(world_size == u*u);
 	assert(u * v <= 1024);
 
-	i = rank / u;
-	j = rank % u;
-
-	printf("rank:%d\n size:%d\n i:%d\n j:%d\n",rank,world_size,i,j);
+	int i = rank / u;
+	int j = rank % u;
 
         struct jtask_t all_tasks[v];
 	// Charger les données dans "task"
@@ -51,32 +54,34 @@ void v_0(int u, int v)
 	MPI_Comm_split(MPI_COMM_WORLD, j, 0, &comm_J);
 	MPI_Comm_split(MPI_COMM_WORLD, i ^ j, 0, &comm_IJ);
 
+	double start = MPI_Wtime();
+
 	// A
-        for (u32 r = 0; r < v; r++) {
-			sprintf(filename, "%s/foo.%03x", hash_dir, i * v + r);
-			printf("Je charge %s\n", filename);
-	                all_tasks[r].L[0] = load_file(filename, &all_tasks[r].n[0], comm_I);
-	                all_tasks[r].n[0] /= 8;
+        for (int r = 0; r < v; r++) {
+		sprintf(filename, "%s/foo.%03x", hash_dir, i * v + r);
+	        all_tasks[r].L[0] = load_file(filename, &all_tasks[r].n[0], comm_I);
+	        all_tasks[r].n[0] /= 8;
 	}
 
 	// B
- 	for (u32 r = 0; r < v; r++) {
-                        sprintf(filename, "%s/bar.%03x", hash_dir, j * v + r);
-                        printf("Je charge %s\n", filename);
-                        all_tasks[r].L[1] = load_file(filename, &all_tasks[r].n[1], comm_J);
-                        all_tasks[r].n[1] /= 8;
+ 	for (int r = 0; r < v; r++) {
+                sprintf(filename, "%s/bar.%03x", hash_dir, j * v + r);
+                all_tasks[r].L[1] = load_file(filename, &all_tasks[r].n[1], comm_J);
+                all_tasks[r].n[1] /= 8;
         }
 
 
 	// C
-        for (u32 r = 0; r < v; r++) {
+        for (int r = 0; r < v; r++) {
         	sprintf(filename, "%s/%03x", slice_dir, (i ^ j) * v + r);
-		printf("Je charge %s\n", filename);
 	        all_tasks[r].slices = load_file(filename, &all_tasks[r].slices_size, comm_IJ);
 	}
+	
+	double end_load = MPI_Wtime();
+	printf("Temps de chargement (total) %.fs\n", end_load - start);
 
-	for (u32 r = 0; r < v; r++)
-	        for (u32 k = 0; k < 2; k++)
+	for (int r = 0; r < v; r++)
+	        for (int k = 0; k < 2; k++)
 			for (u32 i = 0; i < all_tasks[r].n[k] - 1; i++) {
                 		u32 j = i + (all_tasks[r].L[k][i] % (all_tasks[r].n[k] - i));
 	                        u64 x = all_tasks[r].L[k][i];
@@ -85,9 +90,10 @@ void v_0(int u, int v)
         		}
 
 	// GO !
+	double all_tasks_start = MPI_Wtime();
 	struct task_result_t *all_solutions = result_init();
-        for (u32 r = 0; r < v; r++)
-	        for (u32 s = 0; s < v; s++) {
+        for (int r = 0; r < v; r++)
+	        for (int s = 0; s < v; s++) {
 			// fabrique la "tâche"
 			struct jtask_t task;
 			task.L[0] = all_tasks[r].L[0];
@@ -97,56 +103,55 @@ void v_0(int u, int v)
 			task.slices = all_tasks[r ^ s].slices;
 			task.slices_size = all_tasks[r ^ s].slices_size;
 
-			printf("Je lance ma tâche (%d, %d)\n", r, s);
+			double task_start = MPI_Wtime();
 			struct task_result_t *solutions = iterated_joux_task_v3(&task);
+			printf("Tache (%d, %d): %.1fs\n", i * v + r, j * v + s, MPI_Wtime() - task_start);
 
-                        printf("%d solutions\n", solutions->size);
-                        for (u32 u = 0; u < solutions->size; u++) {
-                                printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-                                                solutions->solutions[u].x,
-                                                solutions->solutions[u].y,
-                                                solutions->solutions[u].z);
-				report_solution(all_solutions,
-						solutions->solutions[u].x,
-                                                solutions->solutions[u].y,
-                                                solutions->solutions[u].z);
-			}
+                        for (u32 u = 0; u < solutions->size; u++)
+				report_solution(all_solutions, solutions->solutions[u].x, solutions->solutions[u].y, solutions->solutions[u].z);
                         result_free(solutions);
 		}
-	u32 *solutions_sizes = NULL;
-	u32 *displacements = NULL;
-	struct solution_t *solutions_recv;
-	u32 total_solutions = 0;
+	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
+
+	double transmission_start = MPI_Wtime();
+	int *solutions_sizes = NULL;
+	int *displacements = NULL;
+	struct solution_t *solutions_recv = NULL;
 
 	// MPI_Gather sur un tableau de taille 1 : all_solutions->size;  [1 x MPI_UINT32_T]
-	if(rank == 0)
-	{
+	if (rank == 0) 
 		solutions_sizes = malloc( sizeof(u32) * world_size);
-	}
-	MPI_Gather(&all_solutions->size, 1, MPI_UINT32_T, solutions_sizes, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
+	u32 u64_to_send = 3 * all_solutions->size;
+	MPI_Gather(&u64_to_send, 1, MPI_UINT32_T, solutions_sizes, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
 
 	// MPI_Gatherv sur un tableau de taille 3 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
-	if(rank == 0)
-	{	
+	int d = 0;
+	if (rank == 0) {
 		//printf(" Nombre de solutions du processus 1 : %ld", solutions_sizes[1]);
-		u32 d = 0;					
-		displacements = malloc( sizeof(u32) * world_size);
-		for (u32 i = 0; i < world_size; i++)
-		{
+		displacements = malloc( sizeof(int) * world_size);
+		for (int i = 0; i < world_size; i++) {
 			displacements[i] = d;
-			d += solutions_sizes[d];
-			//total_solutions += solutions_sizes[i];
+			d += solutions_sizes[i];
 		}
-		total_solutions = displacements[world_size - 1] + solutions_sizes[world_size - 1];
-		solutions_recv = malloc( 3 * sizeof(u64) * total_solutions);
+		solutions_recv = malloc(sizeof(u64) * d);
 	}
-	MPI_Gatherv(&all_solutions->solutions, all_solutions->size, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+	printf("Le nombre de solutions est : %d\n", d / 3);	
+	MPI_Gatherv(all_solutions->solutions, u64_to_send, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+
 	// si je suis de rang zéro, je réaffiche tout. et j'enregistre dans un fichier !
-	if(rank == 0)
-	{
-		printf("Le nombre de solutions est : %d\n", total_solutions);
-		for (u32 i = 0; i < total_solutions; i++)
-		{
+	if(rank == 0) {
+		
+		char *filename = "solutions.bin";
+		FILE *f_solutions = fopen(filename, "w");
+       		if (f_solutions == NULL)
+                	err(1, "fopen failed (%s)", filename);
+		int check = fwrite(solutions_recv, 8, d, f_solutions);
+		if (check != d)
+	                errx(1, "incomplete write %s", filename);
+        	fclose(f_solutions);
+
+		printf("Récupération et stockage: %.1fs\n", MPI_Wtime() - transmission_start);
+		for (int i = 0; i < d / 3; i++) {
 			 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
                                                 solutions_recv[i].x,
                                                 solutions_recv[i].y,
@@ -154,8 +159,7 @@ void v_0(int u, int v)
 		}
 	}
 
-	printf("J'ai fini\n");
-	for (u32 r = 0; r < v; r++) {
+	for (int r = 0; r < v; r++) {
 		free(all_tasks[r].L[0]);
 		free(all_tasks[r].L[1]);
 		free(all_tasks[r].slices);
@@ -167,7 +171,7 @@ void v_0(int u, int v)
 int main(int argc, char *argv[])
 {
 	int u = 2;
-	int v = 2;
+	int v = 1;
 
 	MPI_Init(&argc,&argv);
 
