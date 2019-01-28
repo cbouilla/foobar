@@ -46,6 +46,8 @@ files are named [[slice/<key>]].
 #include <m4ri/m4ri.h>
 #include "preprocessing.h"
 
+<<Type definitions>>
+<<Functions>>
 <<The main program>>
 
 @ We need the usual standard headers.
@@ -90,6 +92,7 @@ if (target_dir == NULL)
 	errx(1, "missing --target-dir");
 in_filename = argv[optind];
 
+
 @ To read the hash file in memory, we first query its size, then
 allocate memory accordingly, then finally read it in the allocated space.
 
@@ -111,96 +114,342 @@ if ((check != (size_t) infos.st_size) || ferror(f_in))
 if (fclose(f_in))
 	err(1, "fclose %s", in_filename);
 u32 n = infos.st_size / sizeof(*L);
-
-@ Once the hashes have been loaded, we process each slice one-by-one. In this
-code,  this is not very complicated and we do not seriously attempt to
-increase the size of slices. By default, a slice has size $\log_2 |C|$.
-
-To open the output slice files, we need to extract the [[<key>]] from the name
-of the input hash file.
-
-<<Process all slices>>=
-assert(m4ri_radix == 64);
 if (l == 0) {
 	l = ceil(log2(n));
 	printf("using default l = %d\n", l);
 }
-u32 n_slices = ceil(n / (64. - l));
-u32 height = 64 - l;
-char * key = strrchr(in_filename, '.');
-if (key == NULL)
-	errx(1, "ill-formated input filename");
-key++;
-struct slice_t *out = malloc(sizeof(*out) + 1000 * sizeof(u64));
 
-@ Once all preparations are done, we can simply iterate over all slices.
+
+@ \section{Processing the slices}
+
+We install the input vectors in one of several a linked list: the [[active]]
+and [[inactive]] ones. The lists have size $n + 1$ (we include an extra dummy
+item at the begining so that they are never empty). At all times, [[n]] counts
+the number of non-emited vectors, while [[m]] counts the number of active
+vectors. [[k]] denotes the number of equations found for the current slice.
+
+Here is the high-level structure of the algorithm:
 
 <<Process all slices>>=
-<<Open the output slice file>>
-for (u32 u = 0; u < n_slices; u++) {
-	printf("\r%d / %d", u, n_slices);
-	fflush(stdout);
-	u32 lo = u * height;
-	u32 hi = MIN((u + 1) * height, n);
-	u32 height = hi - lo;
-	<<Load slice into [[A]]>>
-	<<Compute the PLUQ factorization of $A^{T}$>>
-	<<Extract $L$ from the factorization>>
-	<<Do $L \gets P\times L$>>
-	<<Compute $L^{T}, (L^{T})^{-1}$ and $CM$>>
-	<<Set output>>
-	<<Check $CM$>>
-	<<Write output to the slice file>>
-	<<Free memory>>
+<<Setup linked lists>>
+<<Mark all input vectors as ``active''>>
+while (n > 0) {
+	printf("Starting slice with %d active vectors\n", m);
+	u64 equations[64];
+	u32 k = 0; /* #equations */
+	while (m < 1000) {
+		<<Choose an index [[j]]>>
+		<<Reject active vectors such $x_j = 1$>>
+		k++;
+	}
+	printf("Picked %d cheap equations, now %d active vectors remain\n", k, m);
+	while (k < l) {
+		<<Find an equation satisfied by a large number of active vectors>>
+		<<Reject active vectors not satisfying the equation>>
+		k++;
+		printf("Done an ISD pass. I now have %d equations and %d active vectors\n", k, m);
+	}
+	printf("Finished: I now have %d equations and %d active vectors\n", l, m);
+	<<Output the slice>>
+	<<Permute [[active]] and [[reject]]>>
 }
-fclose(f_out);
-printf("\n");
+
+@ Let's start with the easy stuff, the linked lists.
+
+<<Type definitions>>=
+struct list_t {
+	u64 x;
+	struct list_t *next, *prev;
+}
+
+<<Functions>>=
+void list_insert(struct list_t *list, struct list_t *item)
+{
+	item->next = list;
+	item->prev = list->prev;
+	item->next->prev = item;
+	item->prev->next = item;	
+}
+
+void list_remove(struct list_t *item)
+{
+	item->next->prev = item->prev;
+	item->prev->next = item->next;
+}
+
+
+<<Setup linked lists>>=
+struct list_t *items = malloc(n * sizeof(*items));
+if ((items == NULL))
+	err(1, "cannot allocate linked lists");
+struct list_t active_header, reject_header;
+struct list_t *active = &active_header;
+struct list_t *reject = &reject_header;
+active->bext = active;
+active->prev = active;
+active->x = 0x00000000;
+reject->next = reject;
+reject->prev = reject;
+reject->x = 0x00000000;
+
+
+
+<<Mark all input vectors as ``active''>>=
+for (u32 i = 0; i < n; i++) {
+	items[i].x = L[x]
+	list_insert(active, &items[i]);
+}
+u32 m = n;         // count of active vectors
+
+@ Now, the ``cheap filtering'' step. Of course, we must not choose twice the
+same index $j$, so we do a naive check.
+
+<<Choose an index [[j]]>>=
+j_start:
+u32 j = mrand48() & 63;
+u64 e = 1ull << j;
+for (u32 i = 0; i < k; i++)
+	if (e == equations[i])
+		goto j_start;
+equations[k++] = e;
+
+@ The filtering step is easy. It demonstrates an iteration over the list.
+
+<<Reject active vectors such $x_j = 1$>>=
+struct list_t *item = active->next;
+while (item != active) {
+	struct list_t *next = item->next;   /* we have to save this before modifying it */
+	if ((item->x & e) != 0) {
+		list_remove(item);
+		list_insert(reject, item);
+		m--;
+	}
+	item = next;	
+}
+
+@ Now comes the hard part. The active list has been reduced to a small number
+of elements, and we are going to find a low-weight word in the code they
+define. The current proposed strategy is to do a fixed number of iterations of
+the Lee-Brickel algorithm, instead of iterating it until we get close enough
+to the Gilbert-Varshamov bound. To avoid inifnite loops, a threshold would
+eventually have had to be set.
+
+<<Find an equation satisfied by a large number of active vectors>>=
+<<Assemble the matrix [[M]]>>
+u32 best_weight = 64 * n;
+u64 best_equation = 0;
+for (u32 it = 0; it < ISD_ITERATIONS; it++) {
+	bool information_set_ok = false;
+	while (!information_set_ok) {
+		<<Randomly permute 64 rows to the top>>
+		<<Transpose [[M]] into [[T]]>>
+		<<Echelonize [[T]]>>
+	}
+	<<Check for low-weight vectors>>
+}
+
+@ The matrix is $n \times 64$, but we pad it with zero rows until its size is
+a multiple of 64. This way, the transpose of $M$ has 64 rows, each made of [[w]] columns.
+
+<<Assemble the matrix [[M]]>>=
+u32 w = ceil(n / 64.);
+u32 rows = 64 * w;
+u64 M[rows];
+u32 i = 0;
+for (struct list_t *item = active->next; item != active; item = item->next)
+	M[i++] = item->x;	
+while (i < rows)
+	M[i++] = 0x0000000;
+
+@ It is easier to permute the rows then transpose than to permute the columns
+of the transposed matrix.
+
+<<Randomly permute 64 rows to the top>>=
+for (u32 i = 0; i < 64; i++) {
+	u32 j = i + (mrand48() % (n - i));
+	u64 tmp = M[i];
+	M[i] = M[j];
+	M[j] = tmp;
+}
+
+@ To transpose, we start with an efficient $64 \ times 64$ transpose routine
+(using bitslice and ``magic masks'').
+
+<<Functions>>=
+static const uint64_t M1_HI = 0xffffffff00000000;
+static const uint64_t M1_LO = 0x00000000ffffffff;
+static const uint64_t M2_HI = 0xffff0000ffff0000;
+static const uint64_t M2_LO = 0x0000ffff0000ffff;
+static const uint64_t M3_HI = 0xff00ff00ff00ff00;
+static const uint64_t M3_LO = 0x00ff00ff00ff00ff;
+static const uint64_t M4_HI = 0xf0f0f0f0f0f0f0f0;
+static const uint64_t M4_LO = 0x0f0f0f0f0f0f0f0f;
+static const uint64_t M5_HI = 0xcccccccccccccccc;
+static const uint64_t M5_LO = 0x3333333333333333;
+static const uint64_t M6_HI = 0xaaaaaaaaaaaaaaaa;
+static const uint64_t M6_LO = 0x5555555555555555;
+
+<<Functions>>=
+/* this code was written by Antoine Joux for his book 
+  "algorithmic cryptanalysis" (cf. http://www.joux.biz). It
+  was slighlty modified by C. Bouillaguet. Just like the original, it is licensed 
+  under a Creative Commons Attribution-Noncommercial-Share Alike 3.0 Unported License. */
+
+void transpose_64(u64 *M, u64 *T)
+{
+	<<Transpose 32-bit blocks>>
+	<<Transpose 16-bit blocks>>
+	<<Transpose 8-bit blocks>>
+	<<Transpose 4-bit blocks>>
+	<<Transpose 2-bit blocks>>
+	<<Transpose 1-bit blocks>>
+}
+
+<<Transpose 32-bit blocks>>=
+/* to unroll manually */
+for (int l = 0; l < 32; l++) {
+	T[l] = (M[l] & M1_LO) | ((M[l + 32] & M1_LO) << 32);
+	T[l + 32] = ((M[l] & M1_HI) >> 32) | (M[l + 32] & M1_HI);
+}
+
+<<Transpose 16-bit blocks>>=
+for (int l0 = 0; l0 < 64; l0 += 32)
+	for (int l = l0; l < l0 + 16; l++) {
+		uint64_t val1 = (T[l] & M2_LO) | ((T[l + 16] & M2_LO) << 16);
+		uint64_t val2 = ((T[l] & M2_HI) >> 16) | (T[l + 16] & M2_HI);
+		T[l] = val1;
+		T[l + 16] = val2;
+	}
+
+<<Transpose 8-bit blocks>>=
+for (int l0 = 0; l0 < 64; l0 += 16)
+	for (int l = l0; l < l0 + 8; l++) {
+		uint64_t val1 = (T[l] & M3_LO) | ((T[l + 8] & M3_LO) << 8);
+		uint64_t val2 = ((T[l] & M3_HI) >> 8) | (T[l + 8] & M3_HI);
+		T[l] = val1;
+		T[l + 8] = val2;
+	}
+
+<<Transpose 4-bit blocks>>=
+for (int l0 = 0; l0 < 64; l0 += 8)
+	for (int l = l0; l < l0 + 4; l++) {
+		uint64_t val1 = (T[l] & M4_LO) | ((T[l + 4] & M4_LO) << 4);
+		uint64_t val2 = ((T[l] & M4_HI) >> 4) | (T[l + 4] & M4_HI);
+		T[l] = val1;
+		T[l + 4] = val2;
+	}
+
+<<Transpose 2-bit blocks>>=
+for (int l0 = 0; l0 < 64; l0 += 4)
+	for (int l = l0; l < l0 + 2; l++) {
+		uint64_t val1 = (T[l] & M5_LO) | ((T[l + 2] & M5_LO) << 2);
+		uint64_t val2 = ((T[l] & M5_HI) >> 2) | (T[l + 2] & M5_HI);
+		T[l] = val1;
+		T[l + 2] = val2;
+	}
+
+<<Transpose 1-bit blocks>>=
+for (int l = 0; l < 64; l += 2) {
+	uint64_t val1 = (T[l] & M6_LO) | ((T[l + 1] & M6_LO) << 1);
+	uint64_t val2 = ((T[l] & M6_HI) >> 1) | (T[l + 1] & M6_HI);
+	T[l] = val1;
+	T[l + 1] = val2;
+}
+
+@ Now, to transpose the $n \times 64$ matrix, we transpose each slice of 64
+rows. It may have been smarter to add a ``row stride'' argument to the core
+transpose function.
+
+<<Transpose [[M]] into [[T]]>>=
+u64 T[rows];
+for (u32 i = 0; i < w; i++) {
+	u64 S[64];
+	transpose_64(M + i*64, S);
+	for (u32 j = 0; j 64; j++)
+		T[i + j * words] = S[j];
+}
+
+@ OK, the matrix is transposed, so now we echelonize it. If all pivots cannot
+be found in the first 64 columns, we abort. We keep an array indicating which
+rows are pivotal (this dispenses us with pivoting the rows; it's a choice, not
+sure it is the best one). In the end, we need to know how each resulting row
+can be expressed as a linear combination of the input rows.
+
+<<Echelonize [[T]]>>=
+i32 pivots[64];
+u64 E[64];
+for (u32 i = 0; i < 64; i++) {
+	pivots[i] = -1;  /* no row is pivotal yet */
+	E[i] = 1ull << i;
+}
+
+information_set_ok = true;
+for (u32 j = 0; j < 64; j++) {
+	<<Find pivot on column [[j]]; if impossible, abort>>
+	<<Eliminate everything on column [[j]]>>
+}
+
+<<Find pivot on column [[j]]; if impossible, abort>>=
+i32 i = -1;
+u64 mask = 1ull << j;
+for (i32 p = 0; p < 64; p++)
+	if ((pivots[p] < 0) & ((T[p * w] & mask) != 0)) {
+		i = p;
+		pivots[p] = j;
+		break;
+	}
+if (i < 0) {
+	information_set_ok = false;
+	break;
+}
+
+<<Eliminate everything on column [[j]]>>=
+for (u32 p = 0; p < 64; p++) 
+	if ((p != i) & ((T[p * w] & mask) != 0)) {
+		for (u32 j = 0; j < w; j++)
+			T[p * w + j] ^= T[i * w + j]
+		E[p] ^= E[i];         /* record the operation */
+	}
+
+
+<<Check for low-weight vectors>>=
+for (u32 i = 0; i < 64; i++) {
+	u32 w = 0;
+	for (u32 j = 0; j < w; j++)
+		w += __builtin_popcountll(T[i * w + j]);
+	if (w < best_w) {
+		best_w = w;
+		best_equation = E[i];
+	}
+}
+
+@ Once an equation has been found, we reject vectors that do not satisfy it.
+This is similar to what has been done before. 
+
+<<Reject active vectors not satisfying the equation>>=
+struct list_t *item = active->next;
+while (item != active) {
+	struct list_t *next = item->next;   /* we have to save this before modifying it */
+	u64 x = item->x & best_equation;
+	if ((__builtin_popcountll(x) & 1) == 1) {
+		list_remove(item);
+		list_insert(reject, item);
+		m--;
+	}
+	item = next;	
+}
 
 
 <<Open the output slice file>>=
+char * key = strrchr(in_filename, '.');
+if (key == NULL)
+	errx(1, "ill-formated input filename");
 char slice_filename[255];
 sprintf(slice_filename, "%s/%s", target_dir, key);
 FILE *f_out = fopen(slice_filename, "w");
 if (f_out == NULL)
 	err(1, "cannot open %s\n", slice_filename);
 
-<<Load slice into [[A]]>>=
-mzd_t *A = mzd_init(height, 64);
-for (u32 i = 0; i < height; i++)
-	mzd_row(A, i)[0] = L[lo + i];
-
-@ Let's go step-by-step. \MaRI computes the PLUQ factorization \emph{in-place}, 
-with both $L$ and $U$ stacked into the matrix on output. The two permutation 
-matrices $P$ and $Q$ are represented in [[mzp_t]] objects (in a bizarre way that
-we don't want to ever have to understand).
-
-<<Compute the PLUQ factorization of $A^{T}$>>=
-mzd_t *At = mzd_transpose(NULL, A);
-mzp_t* P = mzp_init(At->nrows);
-mzp_t* Q = mzp_init(At->ncols);
-u32 rank = mzd_pluq(At, P, Q, 0);
-
-@ Once the factorization completes, both $L$ and $U$ are in $A^{T}$. 
-$L$ is what is strictly below the diagonal, and $U$ is what is above the diagonal (included).
-To extract $L$, we use bitmasks to extract the first $i$ columns on the $i$-th row, and
-we restore the implicit 1 on the diagonal.
-
-<<Extract $L$ from the factorization>>=
-mzd_t *L = mzd_init(64, 64);
-for (u32 i = 0; i < (u32) At->nrows; i++)
-	mzd_row(L, i)[0] = (mzd_row(At, i)[0] & ((1ll << i) - 1)) | (1ll << i);
-for (u32 i = At->nrows; i < 64; i++)
-	mzd_row(L, i)[0] = 1ll << i;
-
-@ Fortunately, \MaRI provides a function to left-multiply by a [[mzp_t]] permutation matrix.
-
-<<Do $L \gets P\times L$>>=
-mzd_apply_p_left_trans(L, P);
-
-<<Compute $L^{T}, (L^{T})^{-1}$ and $CM$>>=
-mzd_t *Lt = mzd_transpose(NULL, L);           /* Minv */
-mzd_t *Ltinv = mzd_inv_m4ri(NULL, Lt, 0);     /* M */
-mzd_t *CM = mzd_mul_naive(NULL, A, Ltinv);
 
 <<Set output>>=
 out->n = height;
