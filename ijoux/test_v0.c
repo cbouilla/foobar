@@ -10,15 +10,13 @@
 
 #include <mpi.h>
 
-//MPI_Wtime();
-
 #include "common.h"
 
 //const char * hash_dir = "/home/mellila/foobar/data/hashes";
 //const char * slice_dir = "/home/mellila/foobar/data/slice";
 
-const char * hash_dir = "/home/mellila/foobar/testdata";
-const char * slice_dir = "/home/mellila/foobar/testdata";
+const char * hash_dir = "data/hash";
+const char * slice_dir = "data/slices";
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -170,7 +168,7 @@ void v_0(int u, int v)
 
 int main(int argc, char *argv[])
 {
-	int u = 2;
+	int u = 8;
 	int v = 1;
 
 	MPI_Init(&argc,&argv);
