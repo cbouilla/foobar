@@ -125,15 +125,15 @@ void v_0(int u, int v)
 	// MPI_Gatherv sur un tableau de taille 3 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
 	int d = 0;
 	if (rank == 0) {
-		//printf(" Nombre de solutions du processus 1 : %ld", solutions_sizes[1]);
 		displacements = malloc( sizeof(int) * world_size);
 		for (int i = 0; i < world_size; i++) {
 			displacements[i] = d;
 			d += solutions_sizes[i];
 		}
 		solutions_recv = malloc(sizeof(u64) * d);
+		printf("Le nombre de solutions est : %d\n", d / 3);	
 	}
-	printf("Le nombre de solutions est : %d\n", d / 3);	
+
 	MPI_Gatherv(all_solutions->solutions, u64_to_send, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
 	// si je suis de rang zéro, je réaffiche tout. et j'enregistre dans un fichier !
@@ -169,7 +169,7 @@ void v_0(int u, int v)
 int main(int argc, char *argv[])
 {
 	int u = 8;
-	int v = 1;
+	int v = 4;
 
 	MPI_Init(&argc,&argv);
 
