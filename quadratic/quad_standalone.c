@@ -1,21 +1,4 @@
-\documentclass{book}
-
-\usepackage[a4paper,vmargin=1in]{geometry}
-\usepackage{noweb}
-\usepackage{amsmath,amsfonts,amssymb}
-\usepackage{parskip}
-\usepackage{xspace}
-\usepackage{hyperref}
-
-\begin{document}
-
-\setcounter{chapter}{3}
-\chapter{A Standalone Driver for the Quadratic Algorithm}
-
-
-This file describes a standalone program that solves whole instances using the quadratic algorithm on a single core.
-
-<<*>>=
+#line 19 "quad_standalone.nw"
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -30,20 +13,11 @@ This file describes a standalone program that solves whole instances using the q
 /* in quadratic.c */
 struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task);
 
-<<The main function>>
-
-@
-
-<<The main function>>=
+#line 38 "quad_standalone.nw"
 int main(int argc, char **argv)
 {
-	<<Process the command line>>
-	<<Process all the tasks>>
 	
-}
-
-
-<<Process the command line>>=
+#line 47 "quad_standalone.nw"
 struct option longopts[3] = {
 	{"partitioning-bits", required_argument, NULL, 'k'},
 	{"hash-dir", required_argument, NULL, 'h'},
@@ -70,7 +44,9 @@ if (hash_dir == NULL)
 	errx(1, "missing option --hash-dir");
 
 
-<<Process all the tasks>>=
+#line 41 "quad_standalone.nw"
+	
+#line 74 "quad_standalone.nw"
 u32 problem_size = 1 << k;
 for (u32 i = 0; i < problem_size; i++)
 	for (u32 j = 0; j < problem_size; j++) {
@@ -94,5 +70,9 @@ for (u32 i = 0; i < problem_size; i++)
 
 
 
-@ 
-\end{document}
+#line 42 "quad_standalone.nw"
+	
+}
+
+
+

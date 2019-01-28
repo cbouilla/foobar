@@ -1,41 +1,17 @@
-CFLAGS = -std=c11 -g -Wall -Wextra -O3 -Werror -fopenmp
+CC = mpicc
+CFLAGS = -std=c11 -g -Wall -Wextra -O3 -fopenmp
 LDFLAGS = -fopenmp
 LDLIBS = -lm -lpapi
-all: programs doc.pdf
+
+all: programs
 
 common.o: common.h
-#linalg.o: linalg.h
-joux_v0.o: common.h
-joux_v1.o: linalg.h common.h
 joux_v3.o: common.h
 
-programs: joux_standalone
-doc.pdf: common.pdf joux_v3.pdf joux_standalone.pdf
-	pdftk $^ cat output $@
-
+programs: test_v0 #joux_standalone
 joux_standalone: common.o ../quadratic/datastructures.o joux_v3.o
-
-test:
-
-
-## NOWEB IMPLICIT RULES
-%.c : %.nw
-	notangle -L $^ > $@
-
-%.h : %.nw
-	notangle -L -R$@ $^ > $@
-
-%.tex : %.nw
-	noweave -x -delay $^ > $@
-
-### PDFLATEX IMPLICIT RULES
-
-%.aux: %.tex
-	pdflatex $<
-
-%.pdf: %.tex %.aux
-	pdflatex $<
+test_v0: common.o ../quadratic/datastructures.o joux_v3.o test_v0.o
 
 clean:
-	rm -rf *.o *.c *.h *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
-	rm -rf joux_standalone
+	rm -rf *.o  *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
+	rm -rf joux_standalone test_v0
