@@ -15,8 +15,8 @@
 //const char * hash_dir = "/home/mellila/foobar/data/hashes";
 //const char * slice_dir = "/home/mellila/foobar/data/slice";
 
-const char * hash_dir = "data/hash";
-const char * slice_dir = "data/slices";
+const char * hash_dir = "/workgpfs/rech/llv/rllv001/data/hash";
+const char * slice_dir = "/workgpfs/rech/llv/rllv001/data/slices";
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -111,6 +111,11 @@ void v_0(int u, int v)
 		}
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
 
+	double barrier_start = MPI_Wtime(),
+	MPI_Barrier();
+	if (rank == 0)
+		printf("Barrier: %.1fs\n", MPI_Wtime() - barrier_start);
+
 	double transmission_start = MPI_Wtime();
 	int *solutions_sizes = NULL;
 	int *displacements = NULL;
@@ -168,8 +173,8 @@ void v_0(int u, int v)
 
 int main(int argc, char *argv[])
 {
-	int u = 8;
-	int v = 4;
+	int u = 128;
+	int v = 8;
 
 	MPI_Init(&argc,&argv);
 
