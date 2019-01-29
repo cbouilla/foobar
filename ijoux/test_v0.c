@@ -7,16 +7,17 @@
 #include <err.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <getopt.h>
 
 #include <mpi.h>
 
 #include "common.h"
 
-//const char * hash_dir = "/home/mellila/foobar/data/hashes";
-//const char * slice_dir = "/home/mellila/foobar/data/slice";
+const char * hash_dir = "/home/mellila/foobar/data/hashes";
+const char * slice_dir = "/home/mellila/foobar/data/slice";
 
-const char * hash_dir = "data/hash";
-const char * slice_dir = "data/slices";
+//const char * hash_dir = "data/hash";
+//const char * slice_dir = "data/slices";
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -27,6 +28,7 @@ struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
 
 void v_0(int u, int v)
 {
+	
 	int rank, world_size;
 
 	//Récuperer le rang du processus
@@ -53,7 +55,7 @@ void v_0(int u, int v)
 	MPI_Comm_split(MPI_COMM_WORLD, i ^ j, 0, &comm_IJ);
 
 	double start = MPI_Wtime();
-
+	
 	// A
         for (int r = 0; r < v; r++) {
 		sprintf(filename, "%s/foo.%03x", hash_dir, i * v + r);
@@ -168,9 +170,28 @@ void v_0(int u, int v)
 
 int main(int argc, char *argv[])
 {
-	int u = 8;
-	int v = 4;
-
+	int u = 0;
+	int v = 0;
+	struct option longopts[3] = {
+                {"u", required_argument, NULL, 'u'},
+                {"v", required_argument, NULL, 'v'},
+                {NULL, 0, NULL, 0}
+	};
+	
+        signed char ch;
+        while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
+                switch (ch) {
+                case 'u':
+                        u = atol(optarg);
+                        break;
+                case 'v':
+                        v = atol(optarg);
+                        break;
+                default:
+                        errx(1, "Unknown option\n");
+                }
+	}
+	
 	MPI_Init(&argc,&argv);
 
 	v_0(u, v);
