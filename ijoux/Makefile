@@ -1,6 +1,7 @@
 CFLAGS = -std=c11 -g -Wall -Wextra -O3 -Werror -fopenmp
 LDFLAGS = -fopenmp
 LDLIBS = -lm -lpapi
+#TANGLEFLAGS = -L
 all: programs doc.pdf
 
 common.o: common.h
@@ -9,6 +10,7 @@ joux_v0.o: common.h
 joux_v1.o: linalg.h common.h
 joux_v3.o: common.h
 
+sources: common.c common.h joux_v3.c joux_standalone.c
 programs: joux_standalone
 doc.pdf: common.pdf joux_v3.pdf joux_standalone.pdf
 	pdftk $^ cat output $@
@@ -20,10 +22,10 @@ test:
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle $(TANGLEFLAGS) $^ > $@
 
 %.h : %.nw
-	notangle -L -R$@ $^ > $@
+	notangle $(TANGLEFLAGS) -R$@ $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@
