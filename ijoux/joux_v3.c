@@ -13,7 +13,6 @@
 
 #include "common.h"
 #include "../quadratic/datastructures.h"
-#include "../preprocessing/preprocessing.h"
 
 struct side_t {
         u64 *L;               /* input list */

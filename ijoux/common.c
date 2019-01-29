@@ -33,7 +33,7 @@ void * aligned_alloc(size_t alignment, size_t size)
         return p;
 }
 
-void * load_file(const char *filename, u64 *size_, MPI_Comm comm)
+void * load_file(char *filename, u64 *size_, MPI_Comm comm)
 {
   /* open the file (collective operation) */
   MPI_File fh;
