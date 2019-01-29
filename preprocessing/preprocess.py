@@ -14,6 +14,7 @@ parser.add_argument("--dry-run", help="print commands but don't run them", actio
 parser.add_argument("--verbose", help="display more information", action="store_true")
 parser.add_argument("--cores", help="number of cores of this machine", type=int, default=1)
 parser.add_argument("--check", help="run check programs", action="store_true")
+parser.add_argument("--slice", help="run the slicer [for joux's algo]", action="store_true")
 args = parser.parse_args()
 
 print("Running with k = {}".format(args.k))
@@ -23,15 +24,19 @@ print()
 L1_cache_size = 16384
 
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
-#PREIMAGE_DIR = '../data/preimages'
+PREIMAGE_DIR = '../data/preimages'
 PREIMAGE_DIR = '../foobar'
 DICT_DIR = '../data/dict'
 HASH_DIR = '../data/hash'
+SLICE_DIR = '../data/slice'
 SPLITTER = './splitter'
 DICT_CHECKER = './dict_checker'
 SORTER = './sorter'
 MERGER = './merger'
 HASH_CHECKER = './hash_checker'
+SLICER = './slicer'
+
+SLICE_L = 20
 
 do_split = True
 check_split = False
@@ -186,8 +191,7 @@ def merging():
             if args.verbose:
                 print(" ".join(cmds))
             if not args.dry_run:
-                subprocess.run(cmds, stdout=subprocess.DEVNULL).check_returncode()            
-        
+                subprocess.run(cmds, stdout=subprocess.DEVNULL).check_returncode()
 
 def check_hash():
     """
@@ -198,8 +202,33 @@ def check_hash():
             cmds = [HASH_CHECKER, file]
             if args.verbose:
                 print(" ".join(cmds))
-            if not dry_run:
+            if not args.dry_run:
                 subprocess.run(cmds).check_returncode()
+
+
+
+def slicing():
+    """
+    compute the slice for foobar hash files.
+    """
+    for i in range(1 << args.k):
+        input_file = '{}/foobar.{:03x}'.format(HASH_DIR, i)
+        output_file = '{}/{:03x}'.format(SLICE_DIR, i)
+        if not os.path.exists(input_file):
+            continue
+        if os.path.exists(output_file):
+            input_mtime = os.stat(input_file).st_mtime
+            output_mtime = os.stat(output_file).st_mtime
+            if input_mtime < output_mtime:
+                if args.verbose:
+                    print('# skipping {} [already sliced]'.format(output_file))
+                continue
+        cmds = [SLICER, '--l', str(SLICE_L), '--target-dir', SLICE_DIR, input_file]
+        if args.verbose:
+            print(" ".join(cmds))
+        if not args.dry_run:
+            subprocess.run(cmds, stdout=subprocess.DEVNULL).check_returncode()
+
 
 if args.stats:
     preimage_stats()
@@ -211,18 +240,22 @@ ensure_dirs()
     
 print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(args.k))
 splitting()
-if args.check:
-    print("X. Checking (unsorted) dictionaries")
-    check_dict()
+#if args.check:
+#    print("X. Checking (unsorted) dictionaries")
+#    check_dict()
 
 print("2. Sorting (dictionaries -> dictionaries)")
 sorting()
-if args.check:
-    print("Y. Checking (sorted) dictionaries")
-    check_dict()
+#if args.check:
+#    print("Y. Checking (sorted) dictionaries")
+#    check_dict()
 
 print("3. Merging (dictionaries -> hash files)")
 merging()
 if args.check:
     print("Z. Checking hashes")
     check_hash()
+
+if args.slice:
+    print("4. Slicing (hash files -> slice files)")
+    slicing()
