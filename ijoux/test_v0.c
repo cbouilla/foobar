@@ -111,11 +111,13 @@ void v_0(int u, int v)
 		}
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
 
-	double barrier_start = MPI_Wtime(),
-	MPI_Barrier();
+	/* synchronisation */
+	double barrier_start = MPI_Wtime();
+	MPI_Barrier(MPI_COMM_WORLD);
 	if (rank == 0)
 		printf("Barrier: %.1fs\n", MPI_Wtime() - barrier_start);
 
+	/* récupération */
 	double transmission_start = MPI_Wtime();
 	int *solutions_sizes = NULL;
 	int *displacements = NULL;
