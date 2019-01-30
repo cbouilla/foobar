@@ -16,8 +16,13 @@
 const char * hash_dir = "/home/mellila/foobar/data/hashes";
 const char * slice_dir = "/home/mellila/foobar/data/slice";
 
+<<<<<<< HEAD
 //const char * hash_dir = "data/hash";
 //const char * slice_dir = "data/slices";
+=======
+const char * hash_dir = "/workgpfs/rech/llv/rllv001/data/hash";
+const char * slice_dir = "/workgpfs/rech/llv/rllv001/data/slices";
+>>>>>>> 0a9c6d53aea1e9a930fed0b5555594a035fd35c8
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -113,6 +118,13 @@ void v_0(int u, int v)
 		}
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
 
+	/* synchronisation */
+	double barrier_start = MPI_Wtime();
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (rank == 0)
+		printf("Barrier: %.1fs\n", MPI_Wtime() - barrier_start);
+
+	/* récupération */
 	double transmission_start = MPI_Wtime();
 	int *solutions_sizes = NULL;
 	int *displacements = NULL;
@@ -170,6 +182,7 @@ void v_0(int u, int v)
 
 int main(int argc, char *argv[])
 {
+<<<<<<< HEAD
 	int u = 0;
 	int v = 0;
 	struct option longopts[3] = {
@@ -192,6 +205,11 @@ int main(int argc, char *argv[])
                 }
 	}
 	
+=======
+	int u = 128;
+	int v = 8;
+
+>>>>>>> 0a9c6d53aea1e9a930fed0b5555594a035fd35c8
 	MPI_Init(&argc,&argv);
 
 	v_0(u, v);

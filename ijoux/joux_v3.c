@@ -13,7 +13,6 @@
 
 #include "common.h"
 #include "../quadratic/datastructures.h"
-#include "../preprocessing/preprocessing.h"
 
 struct side_t {
         u64 *L;               /* input list */
@@ -462,9 +461,9 @@ struct task_result_t * iterated_joux_task_v3(struct jtask_t *task)
                 self.n[k] = task->n[k];
                 self.L[k] = task->L[k];
         }
-        self.T_gemm = 1;
-        self.T_part = 1;
-        self.T_subj = 1; 
+        self.T_gemm = 4;
+        self.T_part = 2;
+        self.T_subj = 3;
         self.p = p;
         self.result = result;
         for (u32 k = 0; k < 2; k++)

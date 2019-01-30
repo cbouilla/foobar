@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "../types.h"
+#include "../preprocessing/preprocessing.h"
 
 #include <mpi.h>
 
@@ -40,7 +41,7 @@ bool big_endian();
 
 void * aligned_alloc(size_t alignment, size_t size);
 
-void * load_file(const char *filename, u64 *size_, MPI_Comm comm);
+void * load_file(char *filename, u64 *size_, MPI_Comm comm);
 
 struct task_result_t * result_init();
 void report_solution(struct task_result_t *result, u64 x, u64 y, u64 z);

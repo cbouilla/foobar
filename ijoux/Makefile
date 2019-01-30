@@ -1,6 +1,12 @@
-CC = mpicc
-CFLAGS = -std=c11 -g -Wall -Wextra -O3 -fopenmp
-LDFLAGS = -fopenmp
+# settings for gcc on a "normal" computer
+#CC = mpicc
+#CFLAGS = -std=c11 -g -Wall -Wextra -O3 -fopenmp
+#LDFLAGS = -fopenmp
+
+# settings for xlc on turing
+CC = mpixlc_r
+CFLAGS = -qsmp=omp
+
 LDLIBS = -lm -lpapi
 
 all: programs
