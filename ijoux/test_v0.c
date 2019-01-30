@@ -16,13 +16,11 @@
 const char * hash_dir = "/home/mellila/foobar/data/hashes";
 const char * slice_dir = "/home/mellila/foobar/data/slice";
 
-<<<<<<< HEAD
 //const char * hash_dir = "data/hash";
 //const char * slice_dir = "data/slices";
-=======
-const char * hash_dir = "/workgpfs/rech/llv/rllv001/data/hash";
-const char * slice_dir = "/workgpfs/rech/llv/rllv001/data/slices";
->>>>>>> 0a9c6d53aea1e9a930fed0b5555594a035fd35c8
+
+//const char * hash_dir = "/workgpfs/rech/llv/rllv001/data/hash";
+//const char * slice_dir = "/workgpfs/rech/llv/rllv001/data/slices";
 
 typedef uint64_t u64;
 typedef uint32_t u32;
@@ -182,7 +180,7 @@ void v_0(int u, int v)
 
 int main(int argc, char *argv[])
 {
-<<<<<<< HEAD
+
 	int u = 0;
 	int v = 0;
 	struct option longopts[3] = {
@@ -205,11 +203,6 @@ int main(int argc, char *argv[])
                 }
 	}
 	
-=======
-	int u = 128;
-	int v = 8;
-
->>>>>>> 0a9c6d53aea1e9a930fed0b5555594a035fd35c8
 	MPI_Init(&argc,&argv);
 
 	v_0(u, v);
