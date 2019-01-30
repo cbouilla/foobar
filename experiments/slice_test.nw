@@ -122,7 +122,7 @@ for (u32 n = 128; n < 256; n++) {
 		u32 best_weight = n;
 		u32 MAX_ITERATIONS = 1 << 18;
 		double start = wtime();
-		u32 it;
+		u32 it, search = 0, echelonize = 0;
 		for (it = 0; it < MAX_ITERATIONS; it++) {
 			bool information_set_ok = false;
 			while (!information_set_ok) {
@@ -130,8 +130,10 @@ for (u32 n = 128; n < 256; n++) {
 				<<Randomly permute 64 rows to the top>>
 				<<Transpose [[M]] into [[T]]>>
 				<<Echelonize [[T]]>>
+				echelonize++;
 				if (information_set_ok) {
-					<<Check for low-weight vectors>>	
+					<<Check for low-weight vectors>>
+					search++;
 				}
 			}
 			if (best_weight <= expected_w + 1)
@@ -140,7 +142,8 @@ for (u32 n = 128; n < 256; n++) {
 		for (u32 i = 0; i < n; i++)
 			if (Wait[i] > 0)
 				printf("%d: %d\n", i, Wait[i]);
-		printf("# %.0f iterations / s\n", it / (wtime() - start));
+		printf("# %.0f echelonize / s || %.0f search / s\n", 
+			echelonize / (wtime() - start), search / (wtime() - start));
 		printf("-----------------------\n");
 	}
 	
@@ -231,15 +234,18 @@ u64 E[64];
 for (u32 i = 0; i < 64; i++)
 	E[i] = 1ull << i;
 for (i32 j = 0; j < 64; j++) {
-	<<Find pivot on column [[j]]; if impossible, abort>>
+	i32 i = -1;
+	u64 mask = 1ull << j;
+	while (i < 0) {
+		<<If there is a pivot on column [[j]], let [[i]] be its rows and [[break]]>>
+		<<Choose a column $k > 64$ at random; Permute columns [[j]] and [[k]]>>
+	}
 	<<Permute newly found pivotal row with row [[j]]>>
 	<<Eliminate everything on column [[j]]>>
 }
 
 
-<<Find pivot on column [[j]]; if impossible, abort>>=
-i32 i = -1;
-u64 mask = 1ull << j;
+<<If there is a pivot on column [[j]], let [[i]] be its rows and [[break]]>>=
 u32 ptr = 0;
 for (i32 k = j; k < 64; k++) {
 	if (((T[ptr] & mask) != 0)) {
@@ -248,11 +254,26 @@ for (i32 k = j; k < 64; k++) {
 	}
 	ptr += w;
 }
-if (i < 0) {
-	information_set_ok = false;
+if (i >= 0)
 	break;
-}
 
+
+<<Choose a column $k > 64$ at random; Permute columns [[j]] and [[k]]>>=
+i32 k = 64 + (lrand48() % (n - 64));
+i32 kw = k / 64;
+i32 kbit = k % 64;
+u32 ptr_swap = 0;
+u64 *Tk = T + kw;
+for (u32 i = 0; i < 64; i++) {
+	u64 a = T[ptr_swap];
+	u64 b = Tk[ptr_swap];
+	u64 delta = ((a >> j) ^ (b >> kbit)) & 1;
+	a ^= delta << j;
+	b ^= delta << kbit;
+	T[ptr_swap] = a;
+	Tk[ptr_swap] = b;
+	ptr_swap += w;
+}
 
 <<Permute newly found pivotal row with row [[j]]>>=
 if (j != i) {
@@ -275,15 +296,17 @@ for (i32 k = 0; k < 64; k++) {
 
 
 <<Check for low-weight vectors>>=
+u32 ptr = 0;
 for (u32 i = 0; i < 64; i++) {
 	u32 weight = 1;
 	for (u32 j = 1; j < w; j++)
-		weight += __builtin_popcountll(T[i * w + j]);
+		weight += __builtin_popcountll(T[ptr + j]);
 	if (weight < best_weight) {
 		// printf("w = %d\n", weight);
 		best_weight = weight;
 		Wait[weight] = it;
 	}
+	ptr += w;
 }
 
 
