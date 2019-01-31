@@ -7,7 +7,7 @@ LDFLAGS += -L$(HOME)/prison/m4ri/install/lib
 
 all: programs doc.pdf
 
-programs: splitter dict_checker sorter merger hash_checker forger slicer # indexer index_checker
+programs: splitter dict_checker sorter merger hash_checker forger slicer slice_test # indexer index_checker
 
 doc.pdf: preprocessing.pdf hasher.pdf splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf forger.pdf slicer.pdf #indexer.pdf index_checker.pdf 
 	pdftk $^ cat output $@
@@ -22,7 +22,11 @@ splitter: CC = mpicc
 sorter.o: hasher.h sorter.c preprocessing.h
 
 slicer.o: preprocessing.h
-slicer: LDLIBS += -lm4ri -lm
+slicer: LDLIBS += -lm
+
+slice_test.o: preprocessing.h
+slice_test: LDLIBS += -lm -lpapi
+
 
 dict_checker.o: dict_checker.c hasher.h preprocessing.h
 dict_checker: preprocessing.o sha256.o hasher.o dict_checker.o
@@ -38,7 +42,7 @@ sha256.o: sha256.c sha256.h
 	notangle -L -R$@ $^ > $@
 
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle -L  $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@

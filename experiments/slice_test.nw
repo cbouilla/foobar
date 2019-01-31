@@ -110,40 +110,32 @@ Here is the high-level structure of the algorithm:
 <<Run the test>>=
 u8 state[256];
 RC4_keysetup(state, 0);
-for (u32 n = 128; n < 256; n++) {
+for (u32 n = 100000; n < 200000; n++) {
 	double R = 64. / n;
 	double expected_w = ceil(n * GV(R));
-	printf("# Starting with n = %d. Bound=%.f\n", n, expected_w);
+	printf("* %d, %.f\n", n, expected_w);
 	for (u32 loops = 0; loops < 10; loops++) {
 		u32 Wait[n];
 		for (u32 i = 0; i < n; i++)
 			Wait[i] = 0;
 		<<Assemble the matrix [[M]]>>
 		u32 best_weight = n;
-		u32 MAX_ITERATIONS = 1 << 18;
+		u32 MAX_ITERATIONS = 1 << 20;
 		double start = wtime();
-		u32 it, search = 0, echelonize = 0;
+		u32 it;
 		for (it = 0; it < MAX_ITERATIONS; it++) {
-			bool information_set_ok = false;
-			while (!information_set_ok) {
-				information_set_ok = true;
-				<<Randomly permute 64 rows to the top>>
-				<<Transpose [[M]] into [[T]]>>
-				<<Echelonize [[T]]>>
-				echelonize++;
-				if (information_set_ok) {
-					<<Check for low-weight vectors>>
-					search++;
-				}
-			}
+			<<Randomly permute 64 rows to the top>>
+			<<Transpose [[M]] into [[T]]>>
+			<<Echelonize [[T]]>>
+			<<Check for low-weight vectors>>	
 			if (best_weight <= expected_w + 1)
 				break;
 		}
 		for (u32 i = 0; i < n; i++)
 			if (Wait[i] > 0)
 				printf("%d: %d\n", i, Wait[i]);
-		printf("# %.0f echelonize / s || %.0f search / s\n", 
-			echelonize / (wtime() - start), search / (wtime() - start));
+		printf("$ %.3f\n", wtime() - start);
+		printf("# %d iterations (%.0f it/s)\n", it, it / (wtime() - start));
 		printf("-----------------------\n");
 	}
 	
@@ -302,7 +294,7 @@ for (u32 i = 0; i < 64; i++) {
 	for (u32 j = 1; j < w; j++)
 		weight += __builtin_popcountll(T[ptr + j]);
 	if (weight < best_weight) {
-		// printf("w = %d\n", weight);
+		printf("w = %d (%d iterations)\n", weight, it);
 		best_weight = weight;
 		Wait[weight] = it;
 	}
