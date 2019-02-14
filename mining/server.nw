@@ -205,7 +205,7 @@ if (nn_bind(socket_pull, server_address_pull) < 0)
 @ The main loop run indefinitely. The server must be manually stopped.
 
 <<Main server loop>>=
-printf("Server ready\n");
+printf("Server ready on port %d\n", server_port);
 while (1) {
 	<<Wait for incoming message and process it>>
 	<<Potentially store status and display progress information>>
@@ -336,8 +336,8 @@ if (nonce_received > last_counter_saved  + 1000) {
 	fwrite(&counter, sizeof(counter), 1, status_file);
 	fclose(status_file);
 	double now = wtime();
-	fprintf(stderr, "\rcurrent counter=%ld, nonce receives=%ld, rate=%.0f/s", 
-		counter, nonce_received, 1.0 * (nonce_received - last_counter_saved) / (now - last_counter_time));
+	fprintf(stderr, "\rPort %d. current counter=%ld, nonce receives=%ld, rate=%.0f/s", 
+		server_port, counter, nonce_received, 1.0 * (nonce_received - last_counter_saved) / (now - last_counter_time));
 	last_counter_saved = nonce_received;
 	last_counter_time = now;
 	fflush(stderr);
