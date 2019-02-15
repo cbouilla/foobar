@@ -68,36 +68,6 @@ void * load_file(char *filename, u64 *size_, MPI_Comm comm)
         return content;
 }
 
-/************************************************************************************/
-void * load(const char *filename, u64 *size_)
-{
-        struct stat infos;
-        if (stat(filename, &infos))
-                err(1, "fstat failed on %s", filename);
-        u64 size = infos.st_size;
-        assert ((size % 8) == 0);
-        u64 *content = aligned_alloc(64, size);
-        if (content == NULL)
-                err(1, "failed to allocate memory");
-        FILE *f = fopen(filename, "r");
-        if (f == NULL)
-                err(1, "fopen failed (%s)", filename);
-        u64 check = fread(content, 1, size, f);
-        if (check != size)
-                errx(1, "incomplete read %s", filename);
-        fclose(f);
-        *size_ = size;
-        if (big_endian()) {
-                #pragma omp parallel for
-                for (u32 i = 0; i < size / 8; i++)
-                        content[i] = bswap_64(content[i]);
-        }
-
-
-        return content;
-}
-/************************************************************************************/
-
 struct task_result_t * result_init()
 {
         struct task_result_t *result = malloc(sizeof(*result));
