@@ -13,8 +13,8 @@
 
 #include "common.h"
 
-const char * hash_dir = "/home/mellila/foobar/data/hashes";
-const char * slice_dir = "/home/mellila/foobar/data/slice";
+const char * hash_dir = "/home/mellila/foobar/testdata/hashes";
+const char * slice_dir = "/home/mellila/foobar/testdata/slice";
 
 //const char * hash_dir = "data/hash";
 //const char * slice_dir = "data/slices";
@@ -26,9 +26,9 @@ typedef uint64_t u64;
 typedef uint32_t u32;
 
 /* fonction externe, boite noire */
-struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
-
-
+//struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
+struct task_result_t_v2 * iterated_joux_task_v4(struct jtask_t *task, u32 task_index[2]);
+//void check_solutions(char *solutions_filename, u32 k);
 void v_0(int u, int v)
 {
 	
@@ -75,6 +75,7 @@ void v_0(int u, int v)
 
 
 	// C
+	
         for (int r = 0; r < v; r++) {
         	sprintf(filename, "%s/%03x", slice_dir, (i ^ j) * v + r);
 	        all_tasks[r].slices = load_file(filename, &all_tasks[r].slices_size, comm_IJ);
@@ -94,11 +95,15 @@ void v_0(int u, int v)
 
 	// GO !
 	double all_tasks_start = MPI_Wtime();
-	struct task_result_t *all_solutions = result_init();
+	//struct task_result_t *all_solutions = result_init();
+	struct task_result_t_v2 *all_solutions = result_init_v2();
         for (int r = 0; r < v; r++)
 	        for (int s = 0; s < v; s++) {
 			// fabrique la "tâche"
 			struct jtask_t task;
+			u32 task_index[2];
+			task_index[0] = i * v + r;
+			task_index[1] = j * v + s;
 			task.L[0] = all_tasks[r].L[0];
 			task.n[0] = all_tasks[r].n[0];
 			task.L[1] = all_tasks[s].L[1];
@@ -107,13 +112,18 @@ void v_0(int u, int v)
 			task.slices_size = all_tasks[r ^ s].slices_size;
 
 			double task_start = MPI_Wtime();
-			struct task_result_t *solutions = iterated_joux_task_v3(&task);
+			//struct task_result_t *solutions = iterated_joux_task_v3(&task);
+			struct task_result_t_v2 *solutions = iterated_joux_task_v4(&task, task_index);
 			printf("Tache (%d, %d): %.1fs\n", i * v + r, j * v + s, MPI_Wtime() - task_start);
+			for (u32 u = 0; u < solutions->size; u++){
 
-                        for (u32 u = 0; u < solutions->size; u++)
-				report_solution(all_solutions, solutions->solutions[u].x, solutions->solutions[u].y, solutions->solutions[u].z);
-                        result_free(solutions);
+				struct solution_t_v2 solution = solutions->solutions[u];
+				report_solution_v2(all_solutions, solution);		
+			}
+
+                        result_free_v2(solutions);	
 		}
+
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
 
 	/* synchronisation */
@@ -126,7 +136,9 @@ void v_0(int u, int v)
 	double transmission_start = MPI_Wtime();
 	int *solutions_sizes = NULL;
 	int *displacements = NULL;
-	struct solution_t *solutions_recv = NULL;
+	//struct solution_t *solutions_recv = NULL;
+	//u64 (*solutions_recv )[3] = NULL;
+	struct solution_t_v2 *solutions_recv = NULL;
 
 	// MPI_Gather sur un tableau de taille 1 : all_solutions->size;  [1 x MPI_UINT32_T]
 	if (rank == 0) 
@@ -142,8 +154,10 @@ void v_0(int u, int v)
 			displacements[i] = d;
 			d += solutions_sizes[i];
 		}
-		solutions_recv = malloc(sizeof(u64) * d);
-		printf("Le nombre de solutions est : %d\n", d / 3);	
+	
+		solutions_recv = malloc( sizeof(struct solution_t_v2) * d / 3 );
+		printf("Le nombre de solutions est : %d\n", d / 3);
+	
 	}
 
 	MPI_Gatherv(all_solutions->solutions, u64_to_send, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
@@ -155,27 +169,28 @@ void v_0(int u, int v)
 		FILE *f_solutions = fopen(filename, "w");
        		if (f_solutions == NULL)
                 	err(1, "fopen failed (%s)", filename);
-		int check = fwrite(solutions_recv, 8, d, f_solutions);
-		if (check != d)
+		int check = fwrite(solutions_recv, sizeof(struct solution_t_v2), d / 3, f_solutions);
+		if (check != d / 3)
 	                errx(1, "incomplete write %s", filename);
         	fclose(f_solutions);
 
 		printf("Récupération et stockage: %.1fs\n", MPI_Wtime() - transmission_start);
-		for (int i = 0; i < d / 3; i++) {
-			 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-                                                solutions_recv[i].x,
-                                                solutions_recv[i].y,
-                                                solutions_recv[i].z);
-		}
+		for (int i = 0; i < d / 3; i++) 
+				 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n", solutions_recv[i].solution[0], solutions_recv[i].solution[1], solutions_recv[i].solution[2]);
+		//printf ("TEST %03x\n",solutions_recv[0].task_index[0]);
+		
 	}
 
+	//check_solutions("solutions.bin",10);	
 	for (int r = 0; r < v; r++) {
 		free(all_tasks[r].L[0]);
 		free(all_tasks[r].L[1]);
 		free(all_tasks[r].slices);
 	}
-	result_free(all_solutions);
-}
+
+	result_free_v2(all_solutions);
+	
+}			
 
 
 int main(int argc, char *argv[])

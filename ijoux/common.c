@@ -68,6 +68,36 @@ void * load_file(char *filename, u64 *size_, MPI_Comm comm)
         return content;
 }
 
+/************************************************************************************/
+void * load(const char *filename, u64 *size_)
+{
+        struct stat infos;
+        if (stat(filename, &infos))
+                err(1, "fstat failed on %s", filename);
+        u64 size = infos.st_size;
+        assert ((size % 8) == 0);
+        u64 *content = aligned_alloc(64, size);
+        if (content == NULL)
+                err(1, "failed to allocate memory");
+        FILE *f = fopen(filename, "r");
+        if (f == NULL)
+                err(1, "fopen failed (%s)", filename);
+        u64 check = fread(content, 1, size, f);
+        if (check != size)
+                errx(1, "incomplete read %s", filename);
+        fclose(f);
+        *size_ = size;
+        if (big_endian()) {
+                #pragma omp parallel for
+                for (u32 i = 0; i < size / 8; i++)
+                        content[i] = bswap_64(content[i]);
+        }
+
+
+        return content;
+}
+/************************************************************************************/
+
 struct task_result_t * result_init()
 {
         struct task_result_t *result = malloc(sizeof(*result));
@@ -79,7 +109,24 @@ struct task_result_t * result_init()
         return result;
 }
 
+struct task_result_t_v2 * result_init_v2()
+{
+        struct task_result_t_v2 *result = malloc(sizeof(*result));
+        if (result == NULL)
+                err(1, "cannot allocate task result object");
+        result->size = 0;
+        result->capacity = 128;
+        result->solutions = malloc(result->capacity * sizeof(struct solution_t_v2));//ici
+        return result;
+}
+
 void result_free(struct task_result_t *result)
+{
+        free(result->solutions);
+        free(result);
+}
+
+void result_free_v2(struct task_result_t_v2 *result)
 {
         free(result->solutions);
         free(result);
@@ -100,6 +147,29 @@ void report_solution(struct task_result_t *result, u64 x, u64 y, u64 z)
     result->solutions[result->size].z = z;
     result->size++;
 }
+
+void report_solution_v2(struct task_result_t_v2 *result,struct solution_t_v2 solution)
+{
+
+    u64 x = solution.solution[0];
+    u64 y = solution.solution[1];
+    u64 z = solution.solution[2]; 	
+    if ((x ^ y ^ z) != 0)
+        warnx("Fake solution reported");
+    if (result->size == result->capacity) {
+        result->solutions = realloc(result->solutions, 2 * result->capacity);
+        if (result->solutions == NULL)
+            err(1, "failed to re-alloc solutions array");
+        result->capacity *= 2;
+    }
+    result->solutions[result->size].solution[0] = x;
+    result->solutions[result->size].solution[1] = y;
+    result->solutions[result->size].solution[2] = z;
+    result->solutions[result->size].task_index[0] = solution.task_index[0];
+    result->solutions[result->size].task_index[1] = solution.task_index[1];
+    result->size++;
+}
+
 
 
 

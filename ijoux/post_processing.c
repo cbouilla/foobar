@@ -27,12 +27,15 @@ void check_solutions(char *solutions_filename, u32 k)
      		if (stat(solutions_filename, &infos))
                 	err(1, "fstat failed on %s", solutions_filename);
         	u64 size = infos.st_size;
-		u64 nb_solutions = size / sizeof(struct solution_t);		
-		struct solution_t *solutions = malloc( size);
+		u64 nb_solutions = size / sizeof(struct solution_t_v2);
+		//u64 nb_solutions = size / 3 * sizeof(u64);			
+		struct solution_t_v2 *solutions = malloc( size);
+		//u64 (*solutions)[3] = malloc( size); 
 		FILE *f = fopen(solutions_filename, "r");
         	if (f == NULL)
         		err(1, "fopen failed (%s)", solutions_filename);
-		u32 check = fread(solutions,sizeof(struct solution_t), nb_solutions, f);
+		//u32 check = fread(solutions, 3 * sizeof(u64), nb_solutions, f);
+		u32 check = fread(solutions, sizeof(struct solution_t_v2), nb_solutions, f);
         	if (check != nb_solutions)
                 	errx(1, "incomplete read %s", solutions_filename);
         	fclose(f);
@@ -40,11 +43,10 @@ void check_solutions(char *solutions_filename, u32 k)
 		/* Charles est un gros débile, il a oublié que turing était big-endian */
 		if (! (big_endian())) {
         		#pragma omp parallel for
-                	for (u32 i = 0; i < nb_solutions; i++) {
-                        	solutions[i].x = bswap_64(solutions[i].x);
-				solutions[i].y = bswap_64(solutions[i].y);
-				solutions[i].z = bswap_64(solutions[i].z);
-			}
+                	for (u32 i = 0; i < nb_solutions; i++) 
+				for (u32 j = 0; j < 3; j++) 
+		                	solutions[i].solution[j] = bswap_64(solutions[i].solution[j]);
+				
         	}
 
 		struct preimage_t preimages[nb_solutions][3];
@@ -73,53 +75,27 @@ void check_solutions(char *solutions_filename, u32 k)
                 				err(1, "fstat failed on %s", filename);
         				u64 size = infos.st_size;		                     
 		                	struct dict_t buffer[size / sizeof(struct dict_t)];
-					//printf("DICO %s\n", filename);
 					FILE * f = fopen(filename, "r");
                                 	if (f == NULL)
                                         	err(1, "cannot open %s for reading", filename);
-					u32 check = fread(buffer, sizeof(*buffer), size, f);
+					u32 check = fread(buffer, sizeof(*buffer), size / sizeof(struct dict_t), f);	
                                         if (ferror(f))
                                                 err(1, "fread failed");
+					if (check != size / sizeof(struct dict_t))
+                				errx(1, "incomplete read %s", filename);
 
 					//printf("Lecture de %s\n", filename);
 
-					//printf("BUF_HASH %016" PRIx64 "\n", buffer[0].hash);
-					//printf("BUF_PRE %d\n", buffer[0].preimage.nonce);
 					#pragma omp parallel for
-					for (u32 j = 0; j < check; j++) {
-                                                for (u32 k = 0; k < nb_solutions; k++) {
-							switch (kind) {
-								case 0 :
-				                                        if (buffer[j].hash == solutions[k].x) {
-				                                                printf("found hash (list A) %016" PRIx64 " in %s\n", solutions[k].x, filename);
-				                                                preimages[k][kind].counter = buffer[j].preimage.counter;
-				                                                preimages[k][kind].nonce = buffer[j].preimage.nonce;
-										#pragma omp atomic
-										nb_preimages++;
-				                                        }
-									break;
-								case 1 :
-				                                        if (buffer[j].hash == solutions[k].y) {
-				                                                printf("found hash (list B)%016" PRIx64 " in %s\n", solutions[k].y, filename);
-				                                                preimages[k][kind].counter = buffer[j].preimage.counter;
-				                                                preimages[k][kind].nonce = buffer[j].preimage.nonce;
-										#pragma omp atomic										
-										nb_preimages ++;
-				                                        }
-									break;
-								case 2 :
-				                                        if (buffer[j].hash == solutions[k].z) {
-				                                                printf("found hash (list C) %016" PRIx64 " in %s\n", solutions[k].z, filename);
-				                                                preimages[k][kind].counter = buffer[j].preimage.counter;
-				                                                preimages[k][kind].nonce = buffer[j].preimage.nonce;
-										#pragma omp atomic										
-										nb_preimages ++;
-				                                        }
-									break;
-							}
-                                                }
-                                        }
-					
+					for (u32 j = 0; j < check; j++) 
+                                                for (u32 k = 0; k < nb_solutions; k++) 
+				                	if (buffer[j].hash == solutions[k].solution[kind]) {
+				                        	printf("found hash (list A) %016" PRIx64 " in %s\n", solutions[k].solution[kind], filename);
+				                                preimages[k][kind].counter = buffer[j].preimage.counter;
+				                               	preimages[k][kind].nonce = buffer[j].preimage.nonce;
+								#pragma omp atomic
+								nb_preimages++;
+				                        }
 					
 					fclose(f);
 					
@@ -131,7 +107,7 @@ void check_solutions(char *solutions_filename, u32 k)
 		}
 
 		if (nb_preimages != 3 * nb_solutions)
-			errx(1, "Charles s'est trompé ! Seulement %d preimages trouvées, %d attendues\n", nb_preimages, 3*nb_solutions);
+			errx(1, "Charles s'est trompé ! Seulement %d preimages trouvées, %d attendues\n", nb_preimages, 3 * nb_solutions);
 
 		char *filename = "preimages.bin";
 		FILE *f_preimages = fopen(filename, "w");
