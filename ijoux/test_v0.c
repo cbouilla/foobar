@@ -26,9 +26,7 @@ typedef uint64_t u64;
 typedef uint32_t u32;
 
 /* fonction externe, boite noire */
-//struct task_result_t * iterated_joux_task_v3(struct jtask_t *task);
-struct task_result_t_v2 * iterated_joux_task_v4(struct jtask_t *task, u32 task_index[2]);
-//void check_solutions(char *solutions_filename, u32 k);
+struct task_result_t * iterated_joux_task_v3(struct jtask_t *task, u32 task_index[2]);
 void v_0(int u, int v)
 {
 	
@@ -95,8 +93,7 @@ void v_0(int u, int v)
 
 	// GO !
 	double all_tasks_start = MPI_Wtime();
-	//struct task_result_t *all_solutions = result_init();
-	struct task_result_t_v2 *all_solutions = result_init_v2();
+	struct task_result_t *all_solutions = result_init();
         for (int r = 0; r < v; r++)
 	        for (int s = 0; s < v; s++) {
 			// fabrique la "tâche"
@@ -112,16 +109,15 @@ void v_0(int u, int v)
 			task.slices_size = all_tasks[r ^ s].slices_size;
 
 			double task_start = MPI_Wtime();
-			//struct task_result_t *solutions = iterated_joux_task_v3(&task);
-			struct task_result_t_v2 *solutions = iterated_joux_task_v4(&task, task_index);
+			struct task_result_t *solutions = iterated_joux_task_v3(&task, task_index);
 			printf("Tache (%d, %d): %.1fs\n", i * v + r, j * v + s, MPI_Wtime() - task_start);
 			for (u32 u = 0; u < solutions->size; u++){
 
-				struct solution_t_v2 solution = solutions->solutions[u];
-				report_solution_v2(all_solutions, solution);		
+				struct solution_t solution = solutions->solutions[u];
+				report_solution(all_solutions, solution);		
 			}
 
-                        result_free_v2(solutions);	
+                        result_free(solutions);	
 		}
 
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
@@ -136,9 +132,7 @@ void v_0(int u, int v)
 	double transmission_start = MPI_Wtime();
 	int *solutions_sizes = NULL;
 	int *displacements = NULL;
-	//struct solution_t *solutions_recv = NULL;
-	//u64 (*solutions_recv )[3] = NULL;
-	struct solution_t_v2 *solutions_recv = NULL;
+	struct solution_t *solutions_recv = NULL;
 
 	// MPI_Gather sur un tableau de taille 1 : all_solutions->size;  [1 x MPI_UINT32_T]
 	if (rank == 0) 
@@ -155,7 +149,7 @@ void v_0(int u, int v)
 			d += solutions_sizes[i];
 		}
 	
-		solutions_recv = malloc( sizeof(struct solution_t_v2) * d / 3 );
+		solutions_recv = malloc( sizeof(struct solution_t) * d / 3 );
 		printf("Le nombre de solutions est : %d\n", d / 3);
 	
 	}
@@ -169,7 +163,7 @@ void v_0(int u, int v)
 		FILE *f_solutions = fopen(filename, "w");
        		if (f_solutions == NULL)
                 	err(1, "fopen failed (%s)", filename);
-		int check = fwrite(solutions_recv, sizeof(struct solution_t_v2), d / 3, f_solutions);
+		int check = fwrite(solutions_recv, sizeof(struct solution_t), d / 3, f_solutions);
 		if (check != d / 3)
 	                errx(1, "incomplete write %s", filename);
         	fclose(f_solutions);
@@ -181,14 +175,13 @@ void v_0(int u, int v)
 		
 	}
 
-	//check_solutions("solutions.bin",10);	
 	for (int r = 0; r < v; r++) {
 		free(all_tasks[r].L[0]);
 		free(all_tasks[r].L[1]);
 		free(all_tasks[r].slices);
 	}
 
-	result_free_v2(all_solutions);
+	result_free(all_solutions);
 	
 }			
 

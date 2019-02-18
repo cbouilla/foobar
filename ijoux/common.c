@@ -68,6 +68,8 @@ void * load_file(char *filename, u64 *size_, MPI_Comm comm)
         return content;
 }
 
+
+
 struct task_result_t * result_init()
 {
         struct task_result_t *result = malloc(sizeof(*result));
@@ -79,46 +81,13 @@ struct task_result_t * result_init()
         return result;
 }
 
-struct task_result_t_v2 * result_init_v2()
-{
-        struct task_result_t_v2 *result = malloc(sizeof(*result));
-        if (result == NULL)
-                err(1, "cannot allocate task result object");
-        result->size = 0;
-        result->capacity = 128;
-        result->solutions = malloc(result->capacity * sizeof(struct solution_t_v2));//ici
-        return result;
-}
-
 void result_free(struct task_result_t *result)
 {
         free(result->solutions);
         free(result);
 }
 
-void result_free_v2(struct task_result_t_v2 *result)
-{
-        free(result->solutions);
-        free(result);
-}
-
-void report_solution(struct task_result_t *result, u64 x, u64 y, u64 z)
-{
-    if ((x ^ y ^ z) != 0)
-        warnx("Fake solution reported");
-    if (result->size == result->capacity) {
-        result->solutions = realloc(result->solutions, 2 * result->capacity);
-        if (result->solutions == NULL)
-            err(1, "failed to re-alloc solutions array");
-        result->capacity *= 2;
-    }
-    result->solutions[result->size].x = x;
-    result->solutions[result->size].y = y;
-    result->solutions[result->size].z = z;
-    result->size++;
-}
-
-void report_solution_v2(struct task_result_t_v2 *result,struct solution_t_v2 solution)
+void report_solution(struct task_result_t *result,struct solution_t solution)
 {
 
     u64 x = solution.solution[0];

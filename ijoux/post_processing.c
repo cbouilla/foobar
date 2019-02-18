@@ -27,15 +27,12 @@ void check_solutions(char *solutions_filename, u32 k)
      		if (stat(solutions_filename, &infos))
                 	err(1, "fstat failed on %s", solutions_filename);
         	u64 size = infos.st_size;
-		u64 nb_solutions = size / sizeof(struct solution_t_v2);
-		//u64 nb_solutions = size / 3 * sizeof(u64);			
-		struct solution_t_v2 *solutions = malloc( size);
-		//u64 (*solutions)[3] = malloc( size); 
+		u64 nb_solutions = size / sizeof(struct solution_t);			
+		struct solution_t *solutions = malloc( size);
 		FILE *f = fopen(solutions_filename, "r");
         	if (f == NULL)
         		err(1, "fopen failed (%s)", solutions_filename);
-		//u32 check = fread(solutions, 3 * sizeof(u64), nb_solutions, f);
-		u32 check = fread(solutions, sizeof(struct solution_t_v2), nb_solutions, f);
+		u32 check = fread(solutions, sizeof(struct solution_t), nb_solutions, f);
         	if (check != nb_solutions)
                 	errx(1, "incomplete read %s", solutions_filename);
         	fclose(f);
