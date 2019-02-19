@@ -28,8 +28,9 @@ set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
 
 to CMakeList and compile.
 
-Copy libnanomsg* to /usr/local/lib/.
+Copy libnanomsg* to /usr/lib/ on the miner
 
+	scp libnanomsg.so* mineur:/usr/lib
 
 
 Cross-compiling CGminer
@@ -44,15 +45,25 @@ CFLAGS="-g -O2 -Wall -Wextra" ./configure --host=arm-linux-gnueabihf --enable-bi
 make clean
 make
 
-One nasty caveat: we chose (this may have been a bad decision) to use 0MQ as our network middleware. This is a C++ library. We coulc cross-compile it, but we ran into a problem: our (local) version of the libc is much more recent than that on the S7 (eglibc...). The cross-compiled 0MQ wouldn't work. Compiling 0MQ on the S7 itself wouldn't work (not enough RAM). Workaround: use an image of the S7 found online as a "firmware upgrade" (http://diyhpl.us/~bryan/irc/bitcoin/bitmain-firmware/), mount it locally, use QEMU to pretend we're an ARM CPU, build, keep the built library.
 
-The built library is in the "built_0MQ_lib" folder. Its content has to be copied to "/usr/" on the S7.
 
-It relies on the C++ standard library (that's why C++ might have been a bad decision). We can install it on the S7, though.
 
 Running the modifier CGminer on the S7
 ======================================
 
-Once 0MQ has been "installed" on the S7, the cross-compiled cgminer binary copied to /root, and the "normal" cgminer stopped, then we may safely run our own (script/run.sh):
+Once nanomsg has been "installed" on the S7, the cross-compiled cgminer binary copied to /root, and the "normal" cgminer stopped, then we may safely run our own (script/run.sh):
 
-./cgminer --bitmain-dev /dev/bitmain-asic --bitmain-options 115200:32:8:5:700:0782:0706  --bitmain-hwerror --queue 8192
+
++ Stop the previous one:
+
+	rm /sbin/monitorcg
+	killall monitorcg
+	killall cgminer
+
++ copy new cgminer
++ run it inside a screen
+
+	export TERM=vt100
+	screen
+	./cgminer --bitmain-dev /dev/bitmain-asic --bitmain-options 115200:32:8:5:700:0782:0706  --bitmain-hwerror --queue 8192
+
