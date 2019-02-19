@@ -4,22 +4,21 @@
 
 #include <mpi.h>
 
-
 struct jtask_t {
-        u64 *L[2];
-        u64 n[2];
-        struct slice_t *slices;
-        u64 slices_size;
+	u64 *L[2];
+	u64 n[2];
+	struct slice_t *slices;
+	u64 slices_size;
 };
 
 struct solution_t {
-        u64 solution[3];
-	u32 task_index[2];           
+	u64 val[3];
+	u64 task_index[3];
 };
 
 struct task_result_t {
-        u32 size;
-        u32 capacity;
+	u32 size;
+	u32 capacity;
 	struct solution_t *solutions;
 };
 
@@ -33,19 +32,19 @@ struct task_result_t {
 
 static inline u64 RIGHT_MASK(u32 n)
 {
-        return (1ull << n) - 1;
+	return (1ull << n) - 1;
 }
 
 double wtime();
 u64 cycles();
 
 bool big_endian();
-void * aligned_alloc(size_t alignment, size_t size);
-void * load_file(char *filename, u64 *size_, MPI_Comm comm);
-void * load(const char *filename, u64 *size_);
-struct task_result_t * result_init();
-void report_solution(struct task_result_t *result,struct solution_t solution);
+void *aligned_alloc(size_t alignment, size_t size);
+void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm);
+void *load_file(const char *filename, u64 * size_);
+struct task_result_t *result_init();
+void report_solution(struct task_result_t *result, const struct solution_t *solution);
 void result_free(struct task_result_t *result);
 
-
-
+/* the task processing function -- in joux_v3.c */
+struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_index);

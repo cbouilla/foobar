@@ -22,17 +22,14 @@ const char * slice_dir = "/home/mellila/foobar/testdata/slice";
 //const char * hash_dir = "/workgpfs/rech/llv/rllv001/data/hash";
 //const char * slice_dir = "/workgpfs/rech/llv/rllv001/data/slices";
 
-typedef uint64_t u64;
-typedef uint32_t u32;
-
 /* fonction externe, boite noire */
-struct task_result_t * iterated_joux_task_v3(struct jtask_t *task, u32 task_index[2]);
+struct task_result_t * iterated_joux_task_(struct jtask_t *task, u32 task_index[2]);
+
 void v_0(int u, int v)
-{
-	
+{	
 	int rank, world_size;
 
-	//Récuperer le rang du processus
+	// Récuperer le rang du processus
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
@@ -48,40 +45,37 @@ void v_0(int u, int v)
 	// B : charger les tranches j * v --> (j+1)*v [exclu]
 	// C : charger les tranches (i ^ j) * v --> ((i ^ j)+1)*v [exclu]
 
-	// A & B
+	double start = MPI_Wtime();
         char filename[255];
 	MPI_Comm comm_I, comm_J, comm_IJ;
 	MPI_Comm_split(MPI_COMM_WORLD, i, 0, &comm_I);
 	MPI_Comm_split(MPI_COMM_WORLD, j, 0, &comm_J);
 	MPI_Comm_split(MPI_COMM_WORLD, i ^ j, 0, &comm_IJ);
-
-	double start = MPI_Wtime();
 	
 	// A
         for (int r = 0; r < v; r++) {
 		sprintf(filename, "%s/foo.%03x", hash_dir, i * v + r);
-	        all_tasks[r].L[0] = load_file(filename, &all_tasks[r].n[0], comm_I);
+	        all_tasks[r].L[0] = load_file_MPI(filename, &all_tasks[r].n[0], comm_I);
 	        all_tasks[r].n[0] /= 8;
 	}
 
 	// B
  	for (int r = 0; r < v; r++) {
                 sprintf(filename, "%s/bar.%03x", hash_dir, j * v + r);
-                all_tasks[r].L[1] = load_file(filename, &all_tasks[r].n[1], comm_J);
+                all_tasks[r].L[1] = load_file_MPI(filename, &all_tasks[r].n[1], comm_J);
                 all_tasks[r].n[1] /= 8;
         }
 
-
 	// C
-	
         for (int r = 0; r < v; r++) {
         	sprintf(filename, "%s/%03x", slice_dir, (i ^ j) * v + r);
-	        all_tasks[r].slices = load_file(filename, &all_tasks[r].slices_size, comm_IJ);
+	        all_tasks[r].slices = load_file_MPI(filename, &all_tasks[r].slices_size, comm_IJ);
 	}
 	
 	double end_load = MPI_Wtime();
 	printf("Temps de chargement (total) %.fs\n", end_load - start);
 
+	/* permutation */
 	for (int r = 0; r < v; r++)
 	        for (int k = 0; k < 2; k++)
 			for (u32 i = 0; i < all_tasks[r].n[k] - 1; i++) {
@@ -98,9 +92,10 @@ void v_0(int u, int v)
 	        for (int s = 0; s < v; s++) {
 			// fabrique la "tâche"
 			struct jtask_t task;
-			u32 task_index[2];
+			u32 task_index[3];
 			task_index[0] = i * v + r;
 			task_index[1] = j * v + s;
+			task_index[2] = task_index[0] ^ task_index[1];
 			task.L[0] = all_tasks[r].L[0];
 			task.n[0] = all_tasks[r].n[0];
 			task.L[1] = all_tasks[s].L[1];
@@ -109,15 +104,13 @@ void v_0(int u, int v)
 			task.slices_size = all_tasks[r ^ s].slices_size;
 
 			double task_start = MPI_Wtime();
-			struct task_result_t *solutions = iterated_joux_task_v3(&task, task_index);
+			struct task_result_t * result = iterated_joux_task(&task, task_index);
 			printf("Tache (%d, %d): %.1fs\n", i * v + r, j * v + s, MPI_Wtime() - task_start);
-			for (u32 u = 0; u < solutions->size; u++){
-
-				struct solution_t solution = solutions->solutions[u];
+			for (u32 u = 0; u < result->size; u++ ){
+				struct solution_t * solution = &result->solutions[u];
 				report_solution(all_solutions, solution);		
 			}
-
-                        result_free(solutions);	
+                        result_free(result);
 		}
 
 	printf("toutes Taches: %.1fs\n", MPI_Wtime() - all_tasks_start);
@@ -136,53 +129,47 @@ void v_0(int u, int v)
 
 	// MPI_Gather sur un tableau de taille 1 : all_solutions->size;  [1 x MPI_UINT32_T]
 	if (rank == 0) 
-		solutions_sizes = malloc( sizeof(u32) * world_size);
-	u32 u64_to_send = 3 * all_solutions->size;
+		solutions_sizes = malloc(sizeof(u32) * world_size);
+	u32 u64_to_send = 6 * all_solutions->size;
 	MPI_Gather(&u64_to_send, 1, MPI_UINT32_T, solutions_sizes, 1, MPI_UINT32_T, 0, MPI_COMM_WORLD);
 
-	// MPI_Gatherv sur un tableau de taille 3 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
+	// MPI_Gatherv sur un tableau de taille 6 * all_solutions->size : all_solutions->solutions  [MPI_UINT64_T]
 	int d = 0;
 	if (rank == 0) {
-		displacements = malloc( sizeof(int) * world_size);
+		displacements = malloc(sizeof(int) * world_size);
 		for (int i = 0; i < world_size; i++) {
 			displacements[i] = d;
 			d += solutions_sizes[i];
 		}
-	
-		solutions_recv = malloc( sizeof(struct solution_t) * d / 3 );
-		printf("Le nombre de solutions est : %d\n", d / 3);
-	
+		solutions_recv = malloc(sizeof(struct solution_t) * (d / 6));
+		printf("Le nombre de solutions est : %d\n", d / 6);
 	}
-
 	MPI_Gatherv(all_solutions->solutions, u64_to_send, MPI_UINT64_T, solutions_recv, solutions_sizes, displacements, MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
 	// si je suis de rang zéro, je réaffiche tout. et j'enregistre dans un fichier !
 	if(rank == 0) {
-		
 		char *filename = "solutions.bin";
 		FILE *f_solutions = fopen(filename, "w");
        		if (f_solutions == NULL)
                 	err(1, "fopen failed (%s)", filename);
-		int check = fwrite(solutions_recv, sizeof(struct solution_t), d / 3, f_solutions);
-		if (check != d / 3)
+		int check = fwrite(solutions_recv, sizeof(struct solution_t), d / 6, f_solutions);
+		if (check != d / 6)
 	                errx(1, "incomplete write %s", filename);
         	fclose(f_solutions);
 
 		printf("Récupération et stockage: %.1fs\n", MPI_Wtime() - transmission_start);
 		for (int i = 0; i < d / 3; i++) 
-				 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n", solutions_recv[i].solution[0], solutions_recv[i].solution[1], solutions_recv[i].solution[2]);
-		//printf ("TEST %03x\n",solutions_recv[0].task_index[0]);
-		
+			printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n", 
+				solutions_recv[i].val[0], solutions_recv[i].val[1], solutions_recv[i].val[2]);	
 	}
 
+	/* cleanup */
 	for (int r = 0; r < v; r++) {
 		free(all_tasks[r].L[0]);
 		free(all_tasks[r].L[1]);
 		free(all_tasks[r].slices);
 	}
-
 	result_free(all_solutions);
-	
 }			
 
 
