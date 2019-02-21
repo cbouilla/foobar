@@ -14,8 +14,7 @@ all: programs
 common.o: common.h
 joux_v3.o: common.h
 
-
-programs: test_v0 #joux_standalone
+programs: test_v0 joux_standalone
 joux_standalone: common.o ../quadratic/datastructures.o joux_v3.o
 test_v0: common.o ../quadratic/datastructures.o joux_v3.o test_v0.o
 

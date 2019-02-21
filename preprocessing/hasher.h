@@ -1,5 +1,5 @@
 #include <string.h>
-#include <preprocessing.h>
+#include "preprocessing.h"
 
 static inline void build_plaintext_block(int kind, struct preimage_t *preimage, char *buffer) {
         static const char *TEMPLATE[3] = {

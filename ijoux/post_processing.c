@@ -80,8 +80,8 @@ void check_solutions(char *solutions_filename, u32 k)
 				#pragma omp parallel for
 				for (u32 j = 0; j < check; j++) 
 				for (u32 k = 0; k < nb_solutions; k++) 
-				                if (buffer[j].hash == solutions[k].solution[kind]) {
-				                       	printf("found hash (list A) %016" PRIx64 " in %s\n", solutions[k].solution[kind], filename);
+				                if (buffer[j].hash == solutions[k].val[kind]) {
+				                       	printf("found hash (list A) %016" PRIx64 " in %s\n", solutions[k].val[kind], filename);
 				                               preimages[k][kind].counter = buffer[j].preimage.counter;
 				                              	preimages[k][kind].nonce = buffer[j].preimage.nonce;
 							#pragma omp atomic

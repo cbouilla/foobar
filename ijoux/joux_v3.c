@@ -776,7 +776,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	struct slice_t *slice = task->slices;
 	u32 i = 0;
 	while (1) {
-		process_slice_(&self, slice, task_index, slice_verbose);
+		process_slice_v2(&self, slice, task_index, slice_verbose);
 		i++;
 		u32 n = slice->n;
 		u8 *ptr = (u8 *) slice;
