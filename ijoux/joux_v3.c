@@ -12,7 +12,9 @@
 #include <papi.h>
 
 #include "common.h"
-#include "../quadratic/datastructures.h"
+//#include "../quadratic/datastructures.h"
+#include "../quadratic/datastructures2.h"
+
 
 struct side_t {
 	u64 *L;			/* input list */
@@ -53,7 +55,8 @@ struct context_t {
 
 struct slice_ctx_t {
 	const struct slice_t *slice;
-	struct hash_table_t *H;
+	//struct hash_table_t *H; ////////////
+	u64 *H;
 	struct task_result_t *result;
 };
 struct matmul_table_t {
@@ -73,7 +76,7 @@ static inline void gemm(const u64 * IN, u64 * OUT, u32 n, const struct matmul_ta
 void partition(u32 p, struct side_t *side);
 u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions);
 u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3]);
-u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3]);
+u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H);
 static const u32 CACHE_LINE_SIZE = 64;
 u64 ROUND(u64 s)
 {
@@ -132,204 +135,19 @@ void prepare_side(struct context_t *self, u32 k, bool verbose)
 	}
 }
 
-static void process_slice_(struct context_t *self, const struct slice_t *slice,
-		      const u32 *task_index, bool verbose)
-{
-	double start = wtime();
-	struct slice_ctx_t ctx = {.slice = slice };
-	ctx.result = result_init();
-	ctx.H = hashtable_build(slice->CM, 0, slice->n);
-
-	u32 fan_out = 1 << self->p;
-	u64 probes = 0;
-	u64 volume = self->n[0] + self->n[1];
-	double Mvolume = volume * 9.5367431640625e-07;
-	self->volume += volume;
-	if (slice->l - self->p < 9)
-		printf("WARNING : l and p are too close (increase l)\n");
-	struct matmul_table_t M;
-	matmul_init(slice->M, &M);
-	// counters[0] = counters[1] = 0;
-	long long gemm_start = PAPI_get_real_usec();
-	long long instr = 0, cycles = 0;
-#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_gemm)
-	{
-		long long counters[2] = { 0, 0 };
-		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
-
-		gemm(self->L[0], self->side[0].LM, self->side[0].n, &M);
-		gemm(self->L[1], self->side[1].LM, self->side[1].n, &M);
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
-		//      printf("GEMM, tid=%d, intr=%lld, cycl=%lld\n", omp_get_thread_num(), instr, cycles);
-	}
-	self->gemm_usec += PAPI_get_real_usec() - gemm_start;
-	self->gemm_instr += instr;
-	self->gemm_cycles += cycles;
-	if (verbose) {
-		double gemm_rate =
-		    Mvolume / (PAPI_get_real_usec() - gemm_start) * 1.048576;
-		printf
-		    ("[gemm/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     instr / Mvolume, cycles / Mvolume, gemm_rate);
-	}
-
-	long long part_start = PAPI_get_real_usec();
-	instr = 0, cycles = 0;
-#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_part)
-	{
-		long long counters[2] = { 0, 0 };
-		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
-
-		for (u32 k = 0; k < 2; k++)
-			partition(self->p, &self->side[k]);
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
-
-	}
-	self->part_usec += PAPI_get_real_usec() - part_start;
-	self->part_instr += instr;
-	self->part_cycles += cycles;
-	if (verbose) {
-		double part_rate =
-		    Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
-		printf
-		    ("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     instr / Mvolume, cycles / Mvolume, part_rate);
-	}
-
-	instr = 0, cycles = 0;
-	long long subj_start = PAPI_get_real_usec();
-	// printf("subj\n");
-#pragma omp parallel reduction(+:probes, instr, cycles) num_threads(self->T_subj)
-	{
-		long long counters[2] = { 0, 0 };
-		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
-		// u32 per_thread = ceil((1.0 * fan_out) / T);
-		// u32 tid = omp_get_thread_num();
-		// u32 lo = tid * per_thread;
-		// u32 hi = MIN(fan_out, (tid + 1) * per_thread);
-#pragma omp for schedule(dynamic, 1)
-		for (u32 i = 0; i < fan_out; i++) {
-			u32 T = self->T_part;
-			u64 *L[2][T];
-			u32 n[2][T];
-			struct scattered_t scattered[2];
-			for (u32 k = 0; k < 2; k++) {
-				scattered[k].L = L[k];
-				scattered[k].n = n[k];
-				struct side_t *side = &self->side[k];
-				for (u32 t = 0; t < T; t++) {
-					u32 lo =
-					    side->psize * i + side->tsize * t;
-					u32 hi = side->count[t * fan_out + i];
-					scattered[k].L[t] = side->scratch + lo;
-					scattered[k].n[t] = hi - lo;
-				}
-			}
-
-			probes += subjoin(&ctx, T, scattered);
-		}
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
-
-	}
-	self->subj_usec += PAPI_get_real_usec() - subj_start;
-	self->subj_instr += instr;
-	self->subj_cycles += cycles;
-	if (verbose) {
-		double subjoin_rate = Mvolume / (PAPI_get_real_usec() - subj_start) * 1.048576;
-		printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     probes / Mvolume, instr / Mvolume, cycles / Mvolume, subjoin_rate);
-	}
-
-	/* lift solutions */
-	struct solution_t * loc = ctx.result->solutions;
-	u32 n_sols = ctx.result->size;
-	for (u32 i = 0; i < n_sols; i++) {
-		struct solution_t solution;
-		for (u32 j = 0; j < 3; j++) {
-			solution.val[j] = naive_gemv(loc[i].val[j], slice->Minv);
-			solution.task_index[j] = task_index[j];
-		}
-		report_solution(self->result, &solution);
-	}
-	hashtable_free(ctx.H);
-	result_free(ctx.result);
-
-	if (verbose) {
-		double duration = wtime() - start;
-		// printf("Block, total time: %.1fs\n", duration);
-		double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
-		double rate = volume / duration;
-		printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
-	}
-}
 static void process_slice_v2(struct context_t *self, const struct slice_t *slice,
 		      const u32 *task_index, bool verbose)
 {
 	double start = wtime();
 	struct slice_ctx_t ctx = {.slice = slice };
 	ctx.result = result_init();
-	ctx.H = hashtable_build(slice->CM, 0, slice->n);
-
+	//ctx.H = hashtable_build(slice->CM, 0, slice->n);////////////////////////
+	u64 H[256];
+	bool bad_H = cuckoo_build(slice->CM, 0, slice->n, H);
+/*	if (bad_H)
+	  warnx("bad H\n");
+	else
+	  warnx("good H\n");*/
 	u32 fan_out = 1 << self->p;
 	u64 probes = 0;
 	u32 size = 0;
@@ -393,10 +211,8 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 		if (false) {
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s", 
+					omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0];
 			instr = counters[1];
 		}
@@ -407,10 +223,8 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 			counters[0] = counters[1] = 0;
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0] - cycles;
 			instr = counters[1] - instr;
 		}
@@ -420,10 +234,8 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 	self->part_instr += instr;
 	self->part_cycles += cycles;
 	if (verbose) {
-		double part_rate =
-		    Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
-		printf
-		    ("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
+		double part_rate = Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
+		printf("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     instr / Mvolume, cycles / Mvolume, part_rate);
 	}
 
@@ -437,10 +249,8 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 		if (false) {
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0];
 			instr = counters[1];
 		}
@@ -448,9 +258,12 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 		// u32 tid = omp_get_thread_num();
 		// u32 lo = tid * per_thread;
 		// u32 hi = MIN(fan_out, (tid + 1) * per_thread);
+		
+		u64 preselected[2048][3];
+
 #pragma omp for schedule(dynamic, 1)
 		for (u32 i = 0; i < fan_out; i++) {
-			u64 (*preselected)[3];
+			
 			u32 T = self->T_part;
 			u64 *L[2][T];
 			u32 n[2][T];
@@ -471,20 +284,17 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 			}
 			
 			size = subjoin_v2(&ctx, T, scattered, preselected);
-			probes += checkup(&ctx, size, preselected);
+			probes += checkup(&ctx, size, preselected, H, bad_H);
 		}
 		if (false) {
 			counters[0] = counters[1] = 0;
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0] - cycles;
 			instr = counters[1] - instr;
 		}
-
 	}
 	self->subj_usec += PAPI_get_real_usec() - subj_start;
 	self->subj_instr += instr;
@@ -506,7 +316,7 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 		}
 		report_solution(self->result, &solution);
 	}
-	hashtable_free(ctx.H);
+	//hashtable_free(ctx.H);/////////////////////////
 	result_free(ctx.result);
 
 	if (verbose) {
@@ -517,7 +327,6 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 		printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
 	}
 }
-
 
 u64 naive_gemv(u64 x, const u64 * M)
 {
@@ -589,11 +398,13 @@ void partition(u32 p, struct side_t *side)
 		scratch[idx] = x;
 	}
 }
-u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
+
+u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3])
 {
 	static const u32 HASH_SIZE = 16384 / 4 / sizeof(u64);
 	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
 	u8 l = ctx->slice->l;
+	//printf("L%d\n",l);
 	u8 shift = 64 - l;
 	u64 emitted = 0;
 	u64 H[HASH_SIZE];
@@ -629,72 +440,7 @@ u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
 			//probe_probes++;
 			while (x != 0) {
 				u64 z = x ^ y;
-				if ((z >> shift) == 0) {// stocker x, y, z dans uns structure de données
-					// printf("Trying %016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 "\n", x, y, z);
-					if (hashtable_lookup(ctx->H, z)) {
-						struct solution_t solution;
-						solution.val[0] = x;
-						solution.val[1] = y;
-						solution.val[2] = z;
-						report_solution(ctx->result, &solution);
-					}
-					emitted++;
-				}
-				h = (h + 1) & HASH_MASK;
-				x = H[h];
-			}
-		}
-	}
-	// printf("[subjoin] mems/item [build] = %.2f, mems/item [probe] = %.2f\n",
-	//      (1.0 * build_probes) / build_volume,
-	//      (1.0 * probe_probes) / probe_volume);
-	return emitted;
-}
-
-
-u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[2])
-{
-	static const u32 HASH_SIZE = 16384 / 4 / sizeof(u64);
-	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
-	u8 l = ctx->slice->l;
-	u8 shift = 64 - l;
-	u64 emitted = 0;
-	u64 H[HASH_SIZE];
-	preselected = malloc(HASH_SIZE * 2);
-	for (u32 i = 0; i < HASH_SIZE; i++)
-		H[i] = 0;
-
-	// u32 build_probes = 0;
-	// u32 build_volume = 0;
-	for (u32 t = 0; t < T; t++) {
-		u64 *A = partitions[0].L[t];
-		u32 nA = partitions[0].n[t];
-		for (u32 i = 0; i < nA; i++) {
-			u32 h = (A[i] >> shift) & HASH_MASK;
-			// build_probes++;
-			while (H[h] != 0) {
-				h = (h + 1) & HASH_MASK;
-				// build_probes++;
-			}
-			H[h] = A[i];
-		}
-
-		// build_volume += nA;
-	}
-	// u32 probe_probes = 0;
-	// u32 probe_volume = 0;
-	for (u32 t = 0; t < T; t++) {
-		u64 *B = partitions[1].L[t];
-		u32 nB = partitions[1].n[t];
-		for (u32 i = 0; i < nB; i++) {
-			u64 y = B[i];
-			u32 h = (y >> shift) & HASH_MASK;
-			u64 x = H[h];
-			//probe_probes++;
-			while (x != 0) {
-				u64 z = x ^ y;
-				if ((z >> shift) == 0) {// stocker x, y, z dans uns structure de données
-					
+				if ((z >> shift) == 0) {// stocker x, y, z dans uns structure de données					
 					preselected[emitted][0] = x;
 					preselected[emitted][1] = y;
 					preselected[emitted][2] = z; 
@@ -712,21 +458,36 @@ u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u
 	return emitted;
 }
 
-u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3])
+u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
 {
-	u64 emitted = 0;
-	for (u32 i = 0; i < size; i++) {
-		if (hashtable_lookup(ctx->H, preselected[i][2])) {
-			struct solution_t solution;
-			solution.val[0] = preselected[i][0];
-			solution.val[1] = preselected[i][1];
-			solution.val[2] = preselected[i][2];
-			report_solution(ctx->result, &solution);
-		}
-		emitted++;
-	}
-	return emitted;
+  u64 emitted = 0;
+  if (bad_H) {
+    for (u32 i = 0; i < size; i++) {
+      if (linear_lookup(H, preselected[i][2])) {
+	struct solution_t solution;
+	solution.val[0] = preselected[i][0];
+	solution.val[1] = preselected[i][1];
+	solution.val[2] = preselected[i][2];
+	report_solution(ctx->result, &solution);
+      }
+      emitted++;
+    }
+  } else {
+    for (u32 i = 0; i < size; i++) {
+      if (cuckoo_lookup(H, preselected[i][2])) {
+	struct solution_t solution;
+	solution.val[0] = preselected[i][0];
+	solution.val[1] = preselected[i][1];
+	solution.val[2] = preselected[i][2];
+	report_solution(ctx->result, &solution);
+      }
+      emitted++;
+    }
+  }
+  return emitted;
 }
+
+
 
 struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_index)
 {
