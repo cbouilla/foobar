@@ -42,8 +42,8 @@ struct context_t {
 	u32 p;			/* bits used in partitioning */
 
 	/* performance measurement */
-	u64 volume;
-	u64 gemm_usec, part_usec, subj_usec;
+	u64 volume, probes;
+	u64 gemm_usec, part_usec, subj_usec, chck_usec;
 	long long gemm_instr, gemm_cycles;
 	long long part_instr, part_cycles;
 	long long subj_instr, subj_cycles;
@@ -203,32 +203,25 @@ u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u
 	static const u32 HASH_SIZE = 16384 / 4 / sizeof(u64);
 	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
 	u8 l = ctx->slice->l;
-	//printf("L%d\n",l);
 	u8 shift = 64 - l;
-	u64 emitted = 0;
 	u64 H[HASH_SIZE];
+
+	/* build phase */
 	for (u32 i = 0; i < HASH_SIZE; i++)
 		H[i] = 0;
-
-	// u32 build_probes = 0;
-	// u32 build_volume = 0;
 	for (u32 t = 0; t < T; t++) {
 		u64 *A = partitions[0].L[t];
 		u32 nA = partitions[0].n[t];
 		for (u32 i = 0; i < nA; i++) {
 			u32 h = (A[i] >> shift) & HASH_MASK;
-			// build_probes++;
-			while (H[h] != 0) {
+			while (H[h] != 0)
 				h = (h + 1) & HASH_MASK;
-				// build_probes++;
-			}
 			H[h] = A[i];
 		}
-
-		// build_volume += nA;
 	}
-	// u32 probe_probes = 0;
-	// u32 probe_volume = 0;
+
+	/* probe phase */
+	u64 emitted = 0;
 	for (u32 t = 0; t < T; t++) {
 		u64 *B = partitions[1].L[t];
 		u32 nB = partitions[1].n[t];
@@ -236,54 +229,45 @@ u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u
 			u64 y = B[i];
 			u32 h = (y >> shift) & HASH_MASK;
 			u64 x = H[h];
-			//probe_probes++;
 			while (x != 0) {
 				u64 z = x ^ y;
-				if ((z >> shift) == 0) {// stocker x, y, z dans uns structure de données					
+				if ((z >> shift) == 0) {
 					preselected[emitted][0] = x;
 					preselected[emitted][1] = y;
 					preselected[emitted][2] = z; 
 					emitted++;
-					break;
 				}
 				h = (h + 1) & HASH_MASK;
 				x = H[h];
 			}
 		}
 	}
-	// printf("[subjoin] mems/item [build] = %.2f, mems/item [probe] = %.2f\n",
-	//      (1.0 * build_probes) / build_volume,
-	//      (1.0 * probe_probes) / probe_volume);
 	return emitted;
 }
 
-u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
+void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
 {
-  u64 emitted = 0;
-  if (bad_H) {
-    for (u32 i = 0; i < size; i++) {
-      if (linear_lookup(H, preselected[i][2])) {
-	struct solution_t solution;
-	solution.val[0] = preselected[i][0];
-	solution.val[1] = preselected[i][1];
-	solution.val[2] = preselected[i][2];
-	report_solution(ctx->result, &solution);
-      }
-      emitted++;
-    }
-  } else {
-    for (u32 i = 0; i < size; i++) {
-      if (cuckoo_lookup(H, preselected[i][2])) {
-	struct solution_t solution;
-	solution.val[0] = preselected[i][0];
-	solution.val[1] = preselected[i][1];
-	solution.val[2] = preselected[i][2];
-	report_solution(ctx->result, &solution);
-      }
-      emitted++;
-    }
-  }
-  return emitted;
+	if (bad_H) {
+		for (u32 i = 0; i < size; i++) {
+			if (linear_lookup(H, preselected[i][2])) {
+				struct solution_t solution;
+				solution.val[0] = preselected[i][0];
+				solution.val[1] = preselected[i][1];
+				solution.val[2] = preselected[i][2];
+				report_solution(ctx->result, &solution);
+      			}
+		}
+	} else {
+		for (u32 i = 0; i < size; i++) {
+			if (cuckoo_lookup(H, preselected[i][2])) {
+				struct solution_t solution;
+				solution.val[0] = preselected[i][0];
+				solution.val[1] = preselected[i][1];
+				solution.val[2] = preselected[i][2];
+				report_solution(ctx->result, &solution);
+			}
+		}
+	}
 }
 
 
@@ -433,7 +417,8 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 			}
 			
 			size = subjoin_v2(&ctx, T, scattered, preselected);
-			probes += checkup(&ctx, size, preselected, H, bad_H);
+			self->probes += size;
+			checkup(&ctx, size, preselected, H, bad_H);
 		}
 		if (false) {
 			counters[0] = counters[1] = 0;
@@ -448,6 +433,7 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 	self->subj_usec += PAPI_get_real_usec() - subj_start;
 	self->subj_instr += instr;
 	self->subj_cycles += cycles;
+	self->probes += probes;
 	if (verbose) {
 		double subjoin_rate = Mvolume / (PAPI_get_real_usec() - subj_start) * 1.048576;
 		printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
@@ -510,6 +496,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	self.subj_instr = 0;
 	self.subj_cycles = 0;
 	self.bad_slice = 0;
+	self.probes = 0;
 
 	if (task_verbose) {
 		/* task-level */
@@ -518,6 +505,8 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		double mbytes = 8 * (task->n[0] + task->n[1]) / 1048576.0;
 		printf("Volume. Hash = %.1fMbyte + Slice = %.1fMbyte\n", mbytes,
 		       task->slices_size / 1048576.0);
+		printf("Partition size (A): %.0f elements (hash fill=%.0f%%)\n", 
+			task->n[0] / 1024., task->n[0] / 5242.88);
 	}
 	
 	/* process all slices */
@@ -558,6 +547,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		printf("* subjoin:   \tT = %d, \ttime = %.2fs\trate = %.2fMitem/s\n",
 		     self.T_subj, 1e-6 * self.subj_usec,
 		     self.volume / (self.subj_usec / 1.048576));
+		printf("         \tprobes = %.2f x expected \n", self.probes / ((double) self.n[0] * self.n[1] * i / 524288.));
 
 		/*
 		   printf("* GEMM:      \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
