@@ -12,8 +12,7 @@
 #include <papi.h>
 
 #include "common.h"
-//#include "../quadratic/datastructures.h"
-#include "../quadratic/datastructures2.h"
+#include "datastructures.h"
 
 
 struct side_t {

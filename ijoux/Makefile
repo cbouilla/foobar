@@ -12,11 +12,10 @@ LDLIBS = -lm -lpapi
 all: programs
 
 common.o: common.h
-joux_v3.o: common.h
+joux_v3.o: common.h datastructures.h
 
 programs: joux_standalone
-joux_standalone: common.o ../quadratic/datastructures.o joux_v3.o
-test_v0: common.o ../quadratic/datastructures.o joux_v3.o test_v0.o
+joux_standalone: common.o joux_v3.o
 
 clean:
 	rm -rf *.o  *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex

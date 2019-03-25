@@ -48,13 +48,15 @@ int main(int argc, char **argv)
 	/* go */
 	u32 grid_size = 1 << k;
 	printf("Grid is %d x %d\n", grid_size, grid_size);
+
 	for (u32 i = 0; i < grid_size; i++)
 		for (u32 j = 0; j < grid_size; j++) {
-			printf("starting task (%d, %d, %d) : ", i, j, i^j);
+			printf("Task (%d, %d, %d) : ", i, j, i^j);
+			fflush(stdout);
 			u32 idx[3] = {i, j, i ^ j};
 			struct jtask_t task;
 
-			printf("Loading...\n");
+			//printf("Loading...\n");
 			for (u32 k = 0;  k < 2; k++) {
 				char filename[255];
 				char *kind_name[3] = {"foo", "bar", "foobar"};
@@ -68,7 +70,7 @@ int main(int argc, char **argv)
 			sprintf(filename, "%s/%03x", slice_dir, idx[2]);
 			task.slices = load_file_MPI(filename, &task.slices_size, MPI_COMM_WORLD);
 
-			printf("Permuting...\n");
+			// printf("Permuting...\n");
 			#pragma omp parallel for schedule(static)
 			for (u32 k = 0; k < 2; k++)
 				for (u32 i = 0; i < task.n[k] - 1; i++) {
@@ -78,16 +80,18 @@ int main(int argc, char **argv)
 					task.L[k][j] = x;
 				}
 
-			printf("Running...\n");
-			double start = MPI_Wtime();
+			// printf("Running...\n");
+			double start = wtime();
 			struct task_result_t *result = iterated_joux_task(&task, idx);
-			printf("DONE in %.2fs\n", MPI_Wtime() - start);
+			printf("%.2fs\n", wtime() - start);
 
-			printf("#solutions = %d\n", result->size);
-			for (u32 u = 0; u < result->size; u++) {
-				struct solution_t * sol = &result->solutions[u];
-				printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-						sol->val[0], sol->val[1], sol->val[2]);
+			if (result->size > 0) {
+				printf("#solutions = %d\n", result->size);
+				for (u32 u = 0; u < result->size; u++) {
+					struct solution_t * sol = &result->solutions[u];
+					printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
+							sol->val[0], sol->val[1], sol->val[2]);
+				}
 			}
 
 			result_free(result);
@@ -95,4 +99,5 @@ int main(int argc, char **argv)
 			free(task.L[1]);
 			free(task.slices);
 		}
+	MPI_Finalize();
 }
