@@ -1,11 +1,13 @@
 CFLAGS = -std=c11 -g -Wall -Wextra -O3 -I/usr/local/include -Werror
 LDLIBS = -lm -lpapi
+#TANGLEFLAGS = -L
 all: programs # doc.pdf
 
-programs: quad_standalone server quad_client peek
+programs: quad_standalone #server quad_client peek
 doc.pdf: common.pdf datastructures.pdf quadratic_v1.pdf quad_standalone.pdf server.pdf quad_client.pdf peek.pdf
 	pdftk $^ cat output $@
 
+sources: common.c common.h datastructures.h datastructures.c quad_standalone.c quadratic_v2.c
 
 quadratic_v1.o: common.h datastructures.h
 quadratic_v1.5.o: common.h datastructures.h
@@ -13,9 +15,7 @@ quadratic_v2.o: common.h datastructures.h
 quadratic_v2.o: CFLAGS += -mavx2
 
 quad_standalone.o: quad_standalone.c common.h datastructures.h
-quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v1.o
-
-quad_few: quad_few.o common.o datastructures.o quadratic_v2.o
+quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v2.o
 
 server.o: server.c server.h
 server: LDLIBS += -lnanomsg
@@ -28,10 +28,10 @@ peek.o: peek.c server.h common.h
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw
-	notangle -L $^ > $@
+	notangle $(TANGLEFLAGS) $^ > $@
 
 %.h : %.nw
-	notangle -R$@ $^ > $@
+	notangle $(TANGLEFLAGS) -R$@ $^ > $@
 
 %.tex : %.nw
 	noweave -x -delay $^ > $@

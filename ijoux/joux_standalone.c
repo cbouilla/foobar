@@ -11,6 +11,7 @@
 
 int main(int argc, char **argv)
 {
+	MPI_Init(&argc, &argv);
 	/* parse command-line options */
 	struct option longopts[4] = {
 		{"partitioning-bits", required_argument, NULL, 'k'},
@@ -58,14 +59,14 @@ int main(int argc, char **argv)
 				char filename[255];
 				char *kind_name[3] = {"foo", "bar", "foobar"};
 				sprintf(filename, "%s/%s.%03x", hash_dir, kind_name[k], idx[k]);
-				task.L[k] = load_file(filename, &task.n[k]);
+				task.L[k] = load_file_MPI(filename, &task.n[k], MPI_COMM_WORLD);
 				assert((task.n[k] % 8) == 0);
 				task.n[k] /= 8;
 			}
 
 			char filename[255];
 			sprintf(filename, "%s/%03x", slice_dir, idx[2]);
-			task.slices = load_file(filename, &task.slices_size);
+			task.slices = load_file_MPI(filename, &task.slices_size, MPI_COMM_WORLD);
 
 			printf("Permuting...\n");
 			#pragma omp parallel for schedule(static)
@@ -78,8 +79,10 @@ int main(int argc, char **argv)
 				}
 
 			printf("Running...\n");
+			double start = MPI_Wtime();
 			struct task_result_t *result = iterated_joux_task(&task, idx);
-			
+			printf("DONE in %.2fs\n", MPI_Wtime() - start);
+
 			printf("#solutions = %d\n", result->size);
 			for (u32 u = 0; u < result->size; u++) {
 				struct solution_t * sol = &result->solutions[u];

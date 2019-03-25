@@ -12,7 +12,9 @@
 #include <papi.h>
 
 #include "common.h"
-#include "../quadratic/datastructures.h"
+//#include "../quadratic/datastructures.h"
+#include "../quadratic/datastructures2.h"
+
 
 struct side_t {
 	u64 *L;			/* input list */
@@ -53,7 +55,8 @@ struct context_t {
 
 struct slice_ctx_t {
 	const struct slice_t *slice;
-	struct hash_table_t *H;
+	//struct hash_table_t *H; ////////////
+	u64 *H;
 	struct task_result_t *result;
 };
 struct matmul_table_t {
@@ -72,7 +75,8 @@ void matmul_init(const u64 * M, struct matmul_table_t *T);
 static inline void gemm(const u64 * IN, u64 * OUT, u32 n, const struct matmul_table_t *M);
 void partition(u32 p, struct side_t *side);
 u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions);
-
+u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3]);
+u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H);
 static const u32 CACHE_LINE_SIZE = 64;
 u64 ROUND(u64 s)
 {
@@ -131,16 +135,22 @@ void prepare_side(struct context_t *self, u32 k, bool verbose)
 	}
 }
 
-static void process_slice_(struct context_t *self, const struct slice_t *slice,
+static void process_slice_v2(struct context_t *self, const struct slice_t *slice,
 		      const u32 *task_index, bool verbose)
 {
 	double start = wtime();
 	struct slice_ctx_t ctx = {.slice = slice };
 	ctx.result = result_init();
-	ctx.H = hashtable_build(slice->CM, 0, slice->n);
-
+	//ctx.H = hashtable_build(slice->CM, 0, slice->n);////////////////////////
+	u64 H[256];
+	bool bad_H = cuckoo_build(slice->CM, 0, slice->n, H);
+/*	if (bad_H)
+	  warnx("bad H\n");
+	else
+	  warnx("good H\n");*/
 	u32 fan_out = 1 << self->p;
 	u64 probes = 0;
+	u32 size = 0;
 	u64 volume = self->n[0] + self->n[1];
 	double Mvolume = volume * 9.5367431640625e-07;
 	self->volume += volume;
@@ -201,10 +211,8 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 		if (false) {
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s", 
+					omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0];
 			instr = counters[1];
 		}
@@ -215,10 +223,8 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 			counters[0] = counters[1] = 0;
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0] - cycles;
 			instr = counters[1] - instr;
 		}
@@ -228,10 +234,8 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 	self->part_instr += instr;
 	self->part_cycles += cycles;
 	if (verbose) {
-		double part_rate =
-		    Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
-		printf
-		    ("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
+		double part_rate = Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
+		printf("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     instr / Mvolume, cycles / Mvolume, part_rate);
 	}
 
@@ -245,10 +249,8 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 		if (false) {
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0];
 			instr = counters[1];
 		}
@@ -256,13 +258,19 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 		// u32 tid = omp_get_thread_num();
 		// u32 lo = tid * per_thread;
 		// u32 hi = MIN(fan_out, (tid + 1) * per_thread);
+		
+		u64 preselected[2048][3];
+
 #pragma omp for schedule(dynamic, 1)
 		for (u32 i = 0; i < fan_out; i++) {
+			
 			u32 T = self->T_part;
 			u64 *L[2][T];
 			u32 n[2][T];
 			struct scattered_t scattered[2];
 			for (u32 k = 0; k < 2; k++) {
+
+				
 				scattered[k].L = L[k];
 				scattered[k].n = n[k];
 				struct side_t *side = &self->side[k];
@@ -274,21 +282,19 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 					scattered[k].n[t] = hi - lo;
 				}
 			}
-
-			probes += subjoin(&ctx, T, scattered);
+			
+			size = subjoin_v2(&ctx, T, scattered, preselected);
+			probes += checkup(&ctx, size, preselected, H, bad_H);
 		}
 		if (false) {
 			counters[0] = counters[1] = 0;
 			rc = PAPI_read_counters(counters, 2);
 			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
+				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+				     omp_get_thread_num(), rc, PAPI_strerror(rc));
 			cycles = counters[0] - cycles;
 			instr = counters[1] - instr;
 		}
-
 	}
 	self->subj_usec += PAPI_get_real_usec() - subj_start;
 	self->subj_instr += instr;
@@ -310,7 +316,7 @@ static void process_slice_(struct context_t *self, const struct slice_t *slice,
 		}
 		report_solution(self->result, &solution);
 	}
-	hashtable_free(ctx.H);
+	//hashtable_free(ctx.H);/////////////////////////
 	result_free(ctx.result);
 
 	if (verbose) {
@@ -393,11 +399,12 @@ void partition(u32 p, struct side_t *side)
 	}
 }
 
-u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
+u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3])
 {
 	static const u32 HASH_SIZE = 16384 / 4 / sizeof(u64);
 	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
 	u8 l = ctx->slice->l;
+	//printf("L%d\n",l);
 	u8 shift = 64 - l;
 	u64 emitted = 0;
 	u64 H[HASH_SIZE];
@@ -433,16 +440,12 @@ u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
 			//probe_probes++;
 			while (x != 0) {
 				u64 z = x ^ y;
-				if ((z >> shift) == 0) {
-					// printf("Trying %016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 "\n", x, y, z);
-					if (hashtable_lookup(ctx->H, z)) {
-						struct solution_t solution;
-						solution.val[0] = x;
-						solution.val[1] = y;
-						solution.val[2] = z;
-						report_solution(ctx->result, &solution);
-					}
+				if ((z >> shift) == 0) {// stocker x, y, z dans uns structure de données					
+					preselected[emitted][0] = x;
+					preselected[emitted][1] = y;
+					preselected[emitted][2] = z; 
 					emitted++;
+					break;
 				}
 				h = (h + 1) & HASH_MASK;
 				x = H[h];
@@ -454,6 +457,37 @@ u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions)
 	//      (1.0 * probe_probes) / probe_volume);
 	return emitted;
 }
+
+u64 checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
+{
+  u64 emitted = 0;
+  if (bad_H) {
+    for (u32 i = 0; i < size; i++) {
+      if (linear_lookup(H, preselected[i][2])) {
+	struct solution_t solution;
+	solution.val[0] = preselected[i][0];
+	solution.val[1] = preselected[i][1];
+	solution.val[2] = preselected[i][2];
+	report_solution(ctx->result, &solution);
+      }
+      emitted++;
+    }
+  } else {
+    for (u32 i = 0; i < size; i++) {
+      if (cuckoo_lookup(H, preselected[i][2])) {
+	struct solution_t solution;
+	solution.val[0] = preselected[i][0];
+	solution.val[1] = preselected[i][1];
+	solution.val[2] = preselected[i][2];
+	report_solution(ctx->result, &solution);
+      }
+      emitted++;
+    }
+  }
+  return emitted;
+}
+
+
 
 struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_index)
 {
@@ -503,7 +537,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	struct slice_t *slice = task->slices;
 	u32 i = 0;
 	while (1) {
-		process_slice_(&self, slice, task_index, slice_verbose);
+		process_slice_v2(&self, slice, task_index, slice_verbose);
 		i++;
 		u32 n = slice->n;
 		u8 *ptr = (u8 *) slice;
