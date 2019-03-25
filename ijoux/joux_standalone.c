@@ -7,11 +7,18 @@
 #include <getopt.h>
 #include <string.h>
 
+#include <omp.h>
+#include <papi.h>
+#include <mpi.h>
+
 #include "common.h"
+
 
 int main(int argc, char **argv)
 {
+	/* setup libraries */
 	MPI_Init(&argc, &argv);
+	
 	/* parse command-line options */
 	struct option longopts[4] = {
 		{"partitioning-bits", required_argument, NULL, 'k'},

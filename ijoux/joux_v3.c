@@ -69,19 +69,19 @@ struct scattered_t {
 };
 
 static const u32 CACHE_LINE_SIZE = 64;
-u64 ROUND(u64 s)
+static u64 ROUND(u64 s)
 {
 	return CACHE_LINE_SIZE * ceil(((double)s) / CACHE_LINE_SIZE);
 }
 
-u64 chernoff_bound(u64 N, u32 n_buckets)
+static u64 chernoff_bound(u64 N, u32 n_buckets)
 {
 	double mu = ((double)N) / n_buckets;
 	double delta = sqrt(210 / mu);
 	return ROUND(N * (1 + delta) / n_buckets);
 }
 
-void prepare_side(struct context_t *self, u32 k, bool verbose)
+static void prepare_side(struct context_t *self, u32 k, bool verbose)
 {
 	u32 T = self->T_part;
 	u32 n = self->n[k];
@@ -127,7 +127,7 @@ void prepare_side(struct context_t *self, u32 k, bool verbose)
 }
 
 
-u64 naive_gemv(u64 x, const u64 * M)
+static u64 naive_gemv(u64 x, const u64 * M)
 {
 	u64 y = 0;
 	for (u32 i = 0; i < 64; i++) {
@@ -152,9 +152,9 @@ static inline u64 gemv(u64 x, const struct matmul_table_t *M)
 	return r;
 }
 
-void matmul_init(const u64 * M, struct matmul_table_t *T)
+static void matmul_init(const u64 * M, struct matmul_table_t *T)
 {
-#pragma omp parallel for schedule(static)
+	#pragma omp parallel for schedule(static)
 	for (u32 i = 0; i < 8; i++) {
 		u32 lo = i * 8;
 		T->tables[i][0] = 0;
@@ -169,12 +169,12 @@ void matmul_init(const u64 * M, struct matmul_table_t *T)
 
 static inline void gemm(const u64 * IN, u64 * OUT, u32 n, const struct matmul_table_t *M)
 {
-#pragma omp for schedule(static)
+	#pragma omp for schedule(static)
 	for (u32 i = 0; i < n; i++)
 		OUT[i] = gemv(IN[i], M);
 }
 
-void partition(u32 p, struct side_t *side)
+static void partition(u32 p, struct side_t *side)
 {
 	u32 tid = omp_get_thread_num();
 	u32 fan_out = 1 << p;
@@ -185,20 +185,17 @@ void partition(u32 p, struct side_t *side)
 	const u32 n = side->n;
 	u64 *scratch = side->scratch;
 	u8 shift = 64 - p;
-	// u32 per_thread = 1 + n / T;
-	// u32 lo = tid * per_thread;
-	// u32 hi = MIN(n, (tid + 1) * per_thread);
-#pragma omp for schedule(static)
+
+	#pragma omp for schedule(static)
 	for (u32 i = 0; i < n; i++) {
 		u64 x = L[i];
 		u64 h = x >> shift;
-		// assert(h < fan_out);
 		u32 idx = count[h]++;
 		scratch[idx] = x;
 	}
 }
 
-u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3])
+static u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u64 (*preselected)[3])
 {
 	static const u32 HASH_SIZE = 16384 / 4 / sizeof(u64);
 	static const u64 HASH_MASK = 16384 / 4 / sizeof(u64) - 1;
@@ -245,8 +242,10 @@ u64 subjoin_v2(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partitions, u
 	return emitted;
 }
 
-void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
+
+static long long checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
 {
+	long long chck_start = PAPI_get_real_usec();
 	if (bad_H) {
 		for (u32 i = 0; i < size; i++) {
 			if (linear_lookup(H, preselected[i][2])) {
@@ -268,16 +267,18 @@ void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, b
 			}
 		}
 	}
+	long long chck_usec = (PAPI_get_real_usec() - chck_start);
+	return chck_usec;
 }
 
 
-static void process_slice_v2(struct context_t *self, const struct slice_t *slice,
+static void process_slice(struct context_t *self, const struct slice_t *slice,
 		      const u32 *task_index, bool verbose)
 {
 	double start = wtime();
 	struct slice_ctx_t ctx = {.slice = slice };
 	ctx.result = result_init();
-	u64 H[256];
+	u64 H[512];
 	bool bad_H = cuckoo_build(slice->CM, 0, slice->n, H);
 	if (bad_H)
 		self->bad_slice++;
@@ -298,41 +299,37 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 	long long instr = 0, cycles = 0;
 	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_gemm)
 	{
+		#if 0
 		long long counters[2] = { 0, 0 };
-		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
+		int rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1,
+			     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
+			     omp_get_thread_num(), rc,
+			     PAPI_strerror(rc));
+		cycles = counters[0];
+		instr = counters[1];
+		#endif
 
 		gemm(self->L[0], self->side[0].LM, self->side[0].n, &M);
 		gemm(self->L[1], self->side[1].LM, self->side[1].n, &M);
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1,
-				     "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc,
-				     PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
+		
+		#if 0
+		counters[0] = counters[1] = 0;
+		rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+			     omp_get_thread_num(), rc, PAPI_strerror(rc));
+		cycles = counters[0] - cycles;
+		instr = counters[1] - instr;
+		#endif
 	}
 	self->gemm_usec += PAPI_get_real_usec() - gemm_start;
 	self->gemm_instr += instr;
 	self->gemm_cycles += cycles;
 	if (verbose) {
-		double gemm_rate =
-		    Mvolume / (PAPI_get_real_usec() - gemm_start) * 1.048576;
-		printf
-		    ("[gemm/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
+		double gemm_rate = Mvolume / (PAPI_get_real_usec() - gemm_start) * 1.048576;
+		printf("[gemm/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     instr / Mvolume, cycles / Mvolume, gemm_rate);
 	}
 
@@ -342,28 +339,27 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 	instr = 0, cycles = 0;
 	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_part)
 	{
+		#if 0
 		long long counters[2] = { 0, 0 };
-		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s", 
-					omp_get_thread_num(), rc, PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
+		int rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s", 
+			   	omp_get_thread_num(), rc, PAPI_strerror(rc));
+		cycles = counters[0];
+		instr = counters[1];
+		#endif
 
 		for (u32 k = 0; k < 2; k++)
 			partition(self->p, &self->side[k]);
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc, PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
+		#if 0
+		counters[0] = counters[1] = 0;
+		rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+			          omp_get_thread_num(), rc, PAPI_strerror(rc));
+		cycles = counters[0] - cycles;
+		instr = counters[1] - instr;
+		#endif
 
 	}
 	self->part_usec += PAPI_get_real_usec() - part_start;
@@ -379,60 +375,60 @@ static void process_slice_v2(struct context_t *self, const struct slice_t *slice
 
 	instr = 0, cycles = 0;
 	long long subj_start = PAPI_get_real_usec();
-	#pragma omp parallel reduction(+:probes, instr, cycles) num_threads(self->T_subj)
+	long long chck_usec = 0;
+	#pragma omp parallel reduction(+:probes, instr, cycles, chck_usec) num_threads(self->T_subj)
 	{
+		#if 0
 		long long counters[2] = { 0, 0 };
 		int rc;
-		if (false) {
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc, PAPI_strerror(rc));
-			cycles = counters[0];
-			instr = counters[1];
-		}
+		rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s",
+			     omp_get_thread_num(), rc, PAPI_strerror(rc));
+		cycles = counters[0];
+		instr = counters[1];
+		#endif
 		
-		u64 preselected[2048][3];
+		u64 preselected[1024][3];
 
 		#pragma omp for schedule(dynamic, 1)
 		for (u32 i = 0; i < fan_out; i++) {
-			
 			u32 T = self->T_part;
-			u64 *L[2][T];
-			u32 n[2][T];
+			u64 *L[2][4];
+			u32 n[2][4];
 			struct scattered_t scattered[2];
 			for (u32 k = 0; k < 2; k++) {
-
-				
 				scattered[k].L = L[k];
 				scattered[k].n = n[k];
 				struct side_t *side = &self->side[k];
 				for (u32 t = 0; t < T; t++) {
-					u32 lo =
-					    side->psize * i + side->tsize * t;
+					u32 lo = side->psize * i + side->tsize * t;
 					u32 hi = side->count[t * fan_out + i];
 					scattered[k].L[t] = side->scratch + lo;
 					scattered[k].n[t] = hi - lo;
 				}
 			}
 			
-			size = subjoin_v2(&ctx, T, scattered, preselected);
+			size = subjoin(&ctx, T, scattered, preselected);
+			assert(size < 1024);
 			self->probes += size;
-			checkup(&ctx, size, preselected, H, bad_H);
+			chck_usec += checkup(&ctx, size, preselected, H, bad_H);
 		}
-		if (false) {
-			counters[0] = counters[1] = 0;
-			rc = PAPI_read_counters(counters, 2);
-			if (rc < PAPI_OK)
-				errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-				     omp_get_thread_num(), rc, PAPI_strerror(rc));
-			cycles = counters[0] - cycles;
-			instr = counters[1] - instr;
-		}
+		#if 0
+		counters[0] = counters[1] = 0;
+		rc = PAPI_read_counters(counters, 2);
+		if (rc < PAPI_OK)
+			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
+			     omp_get_thread_num(), rc, PAPI_strerror(rc));
+		cycles = counters[0] - cycles;
+		instr = counters[1] - instr;
+		#endif
 	}
+
 	self->subj_usec += PAPI_get_real_usec() - subj_start;
 	self->subj_instr += instr;
 	self->subj_cycles += cycles;
+	self->chck_usec += chck_usec / self->T_subj;
 	self->probes += probes;
 	if (verbose) {
 		double subjoin_rate = Mvolume / (PAPI_get_real_usec() - subj_start) * 1.048576;
@@ -495,6 +491,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	self.subj_usec = 0;
 	self.subj_instr = 0;
 	self.subj_cycles = 0;
+	self.chck_usec = 0;
 	self.bad_slice = 0;
 	self.probes = 0;
 
@@ -513,7 +510,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	struct slice_t *slice = task->slices;
 	u32 i = 0;
 	while (1) {
-		process_slice_v2(&self, slice, task_index, slice_verbose);
+		process_slice(&self, slice, task_index, slice_verbose);
 		i++;
 		u32 n = slice->n;
 		u8 *ptr = (u8 *) slice;
@@ -547,7 +544,8 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		printf("* subjoin:   \tT = %d, \ttime = %.2fs\trate = %.2fMitem/s\n",
 		     self.T_subj, 1e-6 * self.subj_usec,
 		     self.volume / (self.subj_usec / 1.048576));
-		printf("         \tprobes = %.2f x expected \n", self.probes / ((double) self.n[0] * self.n[1] * i / 524288.));
+		printf("         \tprobes = %.2fM\t\t%.2f x expected \n", 9.5367431640625e-07 * self.probes, self.probes / ((double) self.n[0] * self.n[1] * i / 524288.));
+		printf("         \t\ttime = %.2fs\trate = %.2fMitem/s\n", 1e-6 * self.chck_usec, self.probes / (self.subj_usec / 1.048576));
 
 		/*
 		   printf("* GEMM:      \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
