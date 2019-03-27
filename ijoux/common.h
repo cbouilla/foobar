@@ -37,6 +37,7 @@ static inline u64 RIGHT_MASK(u32 n)
 
 double wtime();
 u64 cycles();
+long long usec();
 
 bool big_endian();
 void *aligned_alloc(size_t alignment, size_t size);

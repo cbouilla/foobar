@@ -245,7 +245,7 @@ static u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partition
 
 static long long checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
 {
-	long long chck_start = PAPI_get_real_usec();
+	long long chck_start = usec();
 	if (bad_H) {
 		for (u32 i = 0; i < size; i++) {
 			if (linear_lookup(H, preselected[i][2])) {
@@ -267,7 +267,7 @@ static long long checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3
 			}
 		}
 	}
-	long long chck_usec = (PAPI_get_real_usec() - chck_start);
+	long long chck_usec = (usec() - chck_start);
 	return chck_usec;
 }
 
@@ -295,7 +295,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	
 	/************* phase 1: GEMM */
 
-	long long gemm_start = PAPI_get_real_usec();
+	long long gemm_start = usec();
 	long long instr = 0, cycles = 0;
 	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_gemm)
 	{
@@ -324,18 +324,18 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		instr = counters[1] - instr;
 		#endif
 	}
-	self->gemm_usec += PAPI_get_real_usec() - gemm_start;
+	self->gemm_usec += usec() - gemm_start;
 	self->gemm_instr += instr;
 	self->gemm_cycles += cycles;
 	if (verbose) {
-		double gemm_rate = Mvolume / (PAPI_get_real_usec() - gemm_start) * 1.048576;
+		double gemm_rate = Mvolume / (usec() - gemm_start) * 1.048576;
 		printf("[gemm/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     instr / Mvolume, cycles / Mvolume, gemm_rate);
 	}
 
 	/************* phase 2: partitioning */
 
-	long long part_start = PAPI_get_real_usec();
+	long long part_start = usec();
 	instr = 0, cycles = 0;
 	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_part)
 	{
@@ -362,11 +362,11 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		#endif
 
 	}
-	self->part_usec += PAPI_get_real_usec() - part_start;
+	self->part_usec += usec() - part_start;
 	self->part_instr += instr;
 	self->part_cycles += cycles;
 	if (verbose) {
-		double part_rate = Mvolume / (PAPI_get_real_usec() - part_start) * 1.048576;
+		double part_rate = Mvolume / (usec() - part_start) * 1.048576;
 		printf("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     instr / Mvolume, cycles / Mvolume, part_rate);
 	}
@@ -374,7 +374,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	/************* phase 3: subjoins */
 
 	instr = 0, cycles = 0;
-	long long subj_start = PAPI_get_real_usec();
+	long long subj_start = usec();
 	long long chck_usec = 0;
 	#pragma omp parallel reduction(+:probes, instr, cycles, chck_usec) num_threads(self->T_subj)
 	{
@@ -389,7 +389,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		instr = counters[1];
 		#endif
 		
-		u64 preselected[1024][3];
+		u64 preselected[8192][3];
 
 		#pragma omp for schedule(dynamic, 1)
 		for (u32 i = 0; i < fan_out; i++) {
@@ -410,7 +410,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 			}
 			
 			size = subjoin(&ctx, T, scattered, preselected);
-			assert(size < 1024);
+			assert(size < 8192);
 			self->probes += size;
 			chck_usec += checkup(&ctx, size, preselected, H, bad_H);
 		}
@@ -425,13 +425,13 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		#endif
 	}
 
-	self->subj_usec += PAPI_get_real_usec() - subj_start;
+	self->subj_usec += usec() - subj_start;
 	self->subj_instr += instr;
 	self->subj_cycles += cycles;
 	self->chck_usec += chck_usec / self->T_subj;
 	self->probes += probes;
 	if (verbose) {
-		double subjoin_rate = Mvolume / (PAPI_get_real_usec() - subj_start) * 1.048576;
+		double subjoin_rate = Mvolume / (usec() - subj_start) * 1.048576;
 		printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
 		     probes / Mvolume, instr / Mvolume, cycles / Mvolume, subjoin_rate);
 	}

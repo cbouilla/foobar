@@ -4,16 +4,32 @@
 #include <arpa/inet.h>
 #include <byteswap.h>
 #include <sys/stat.h>
+# include <sys/time.h>
 #include <assert.h>
 #include <mpi.h>
 
 #include "common.h"
 #include "papi.h"
 
-double wtime()
+/*double wtime()
 {
 	return PAPI_get_real_usec() / 1e6;
+}*/
+
+double wtime()
+{
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+	return (double)ts.tv_sec + ts.tv_usec / 1e6;
 }
+
+long long usec()
+{
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+	return 1000000 * ts.tv_sec + ts.tv_usec;
+}
+
 
 u64 cycles()
 {

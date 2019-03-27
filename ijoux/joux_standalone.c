@@ -56,6 +56,7 @@ int main(int argc, char **argv)
 	u32 grid_size = 1 << k;
 	printf("Grid is %d x %d\n", grid_size, grid_size);
 
+	double start = wtime();
 	for (u32 i = 0; i < grid_size; i++)
 		for (u32 j = 0; j < grid_size; j++) {
 			printf("Task (%d, %d, %d) : ", i, j, i^j);
@@ -106,5 +107,6 @@ int main(int argc, char **argv)
 			free(task.L[1]);
 			free(task.slices);
 		}
+	printf("FINISHED in %.1fs\n", wtime() - start);
 	MPI_Finalize();
 }
