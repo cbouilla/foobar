@@ -41,13 +41,16 @@ struct context_t {
 	u32 T_gemm, T_part, T_subj;	/* number of threads */
 	u32 p;			/* bits used in partitioning */
 
-	/* performance measurement */
+	/**** performance measurement ****/
 	u64 volume, probes;
 	u64 gemm_usec, part_usec, subj_usec, chck_usec;
 	long long gemm_instr, gemm_cycles;
 	long long part_instr, part_cycles;
 	long long subj_instr, subj_cycles;
 	u32 bad_slice;
+
+	/**** scratch space ****/
+	u64 (*preselected[4])[3];
 
 	/**** output ****/
 	struct task_result_t *result;
@@ -69,6 +72,7 @@ struct scattered_t {
 };
 
 static const u32 CACHE_LINE_SIZE = 64;
+
 static u64 ROUND(u64 s)
 {
 	return CACHE_LINE_SIZE * ceil(((double)s) / CACHE_LINE_SIZE);
@@ -92,8 +96,7 @@ static void prepare_side(struct context_t *self, u32 k, bool verbose)
 	u32 scratch_size = psize * fan_out;
 	u32 partition_size = chernoff_bound(n, fan_out);
 
-	u64 *scratch =
-	    aligned_alloc(CACHE_LINE_SIZE, sizeof(u64) * scratch_size);
+	u64 *scratch = aligned_alloc(CACHE_LINE_SIZE, sizeof(u64) * scratch_size);
 	if (scratch == NULL)
 		err(1, "failed to allocate scratch space");
 	u64 *LM = aligned_alloc(CACHE_LINE_SIZE, sizeof(u64) * n);
@@ -243,9 +246,8 @@ static u64 subjoin(struct slice_ctx_t *ctx, u32 T, struct scattered_t *partition
 }
 
 
-static long long checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
+static void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u64 *H, bool bad_H)
 {
-	long long chck_start = usec();
 	if (bad_H) {
 		for (u32 i = 0; i < size; i++) {
 			if (linear_lookup(H, preselected[i][2])) {
@@ -267,8 +269,6 @@ static long long checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3
 			}
 		}
 	}
-	long long chck_usec = (usec() - chck_start);
-	return chck_usec;
 }
 
 
@@ -283,8 +283,6 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	if (bad_H)
 		self->bad_slice++;
 	u32 fan_out = 1 << self->p;
-	u64 probes = 0;
-	u32 size = 0;
 	u64 volume = self->n[0] + self->n[1];
 	double Mvolume = volume * 9.5367431640625e-07;
 	self->volume += volume;
@@ -375,9 +373,10 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 
 	instr = 0, cycles = 0;
 	long long subj_start = usec();
-	long long chck_usec = 0;
-	#pragma omp parallel reduction(+:probes, instr, cycles, chck_usec) num_threads(self->T_subj)
+	u32 n_preselected[4];
+	#pragma omp parallel num_threads(self->T_subj)
 	{
+		u32 probes = 0;
 		#if 0
 		long long counters[2] = { 0, 0 };
 		int rc;
@@ -389,9 +388,9 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		instr = counters[1];
 		#endif
 		
-		u64 preselected[8192][3];
-
-		#pragma omp for schedule(dynamic, 1)
+		int tid = omp_get_thread_num();
+		u64 (*preselected)[3] = self->preselected[tid];
+		#pragma omp for schedule(dynamic, 4)
 		for (u32 i = 0; i < fan_out; i++) {
 			u32 T = self->T_part;
 			u64 *L[2][4];
@@ -409,11 +408,10 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 				}
 			}
 			
-			size = subjoin(&ctx, T, scattered, preselected);
-			assert(size < 8192);
-			self->probes += size;
-			chck_usec += checkup(&ctx, size, preselected, H, bad_H);
+			u32 size = subjoin(&ctx, T, scattered, preselected + probes);
+			probes += size;
 		}
+		n_preselected[tid] = probes;
 		#if 0
 		counters[0] = counters[1] = 0;
 		rc = PAPI_read_counters(counters, 2);
@@ -424,17 +422,26 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		instr = counters[1] - instr;
 		#endif
 	}
-
 	self->subj_usec += usec() - subj_start;
 	self->subj_instr += instr;
 	self->subj_cycles += cycles;
-	self->chck_usec += chck_usec / self->T_subj;
-	self->probes += probes;
-	if (verbose) {
-		double subjoin_rate = Mvolume / (usec() - subj_start) * 1.048576;
-		printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     probes / Mvolume, instr / Mvolume, cycles / Mvolume, subjoin_rate);
+	self->probes += n_preselected[0] + n_preselected[1] + n_preselected[2];
+	// if (verbose) {
+	// 	double subjoin_rate = Mvolume / (usec() - subj_start) * 1.048576;
+	// 	printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
+	// 	     probes / Mvolume, instr / Mvolume, cycles / Mvolume, subjoin_rate);
+	// }
+
+	/************* phase 4: intersection with CM */
+
+	long long chck_start = usec();
+	#pragma omp parallel num_threads(self->T_subj)
+	{
+		int tid = omp_get_thread_num();
+		u64 (*preselected)[3] = self->preselected[tid];
+		checkup(&ctx, n_preselected[tid], preselected, H, bad_H);
 	}
+	self->chck_usec += usec() - chck_start;
 
 	/* lift solutions */
 	struct solution_t * loc = ctx.result->solutions;
@@ -449,13 +456,13 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	}
 	result_free(ctx.result);
 
-	if (verbose) {
-		double duration = wtime() - start;
-		// printf("Block, total time: %.1fs\n", duration);
-		double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
-		double rate = volume / duration;
-		printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
-	}
+	//if (verbose) {
+	//	double duration = wtime() - start;
+	//	// printf("Block, total time: %.1fs\n", duration);
+	//	double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
+	//	double rate = volume / duration;
+	//	printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
+	//}
 }
 
 
@@ -481,6 +488,8 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	self.result = result;
 	for (u32 k = 0; k < 2; k++)
 		prepare_side(&self, k, task_verbose);
+	for (u32 t = 0; t < self.T_subj; t++)
+		self.preselected[t] = malloc(task->n[0] * 24);
 	self.volume = 0;
 	self.gemm_usec = 0;
 	self.gemm_instr = 0;
@@ -494,6 +503,8 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	self.chck_usec = 0;
 	self.bad_slice = 0;
 	self.probes = 0;
+
+
 
 	if (task_verbose) {
 		/* task-level */
@@ -527,6 +538,8 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		free(self.side[k].LM);
 		free(self.side[k].count);
 	}
+	for (u32 t = 0; t < self.T_subj; t++)
+		free(self.preselected[t]);
 
 	if (task_verbose) {
 		double task_duration = wtime() - start;
@@ -545,7 +558,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		     self.T_subj, 1e-6 * self.subj_usec,
 		     self.volume / (self.subj_usec / 1.048576));
 		printf("         \tprobes = %.2fM\t\t%.2f x expected \n", 9.5367431640625e-07 * self.probes, self.probes / ((double) self.n[0] * self.n[1] * i / 524288.));
-		printf("         \t\ttime = %.2fs\trate = %.2fMitem/s\n", 1e-6 * self.chck_usec, self.probes / (self.subj_usec / 1.048576));
+		printf("         \t\ttime = %.2fs\trate = %.2fMitem/s\n", 1e-6 * self.chck_usec, self.probes / (self.chck_usec / 1.048576));
 
 		/*
 		   printf("* GEMM:      \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
