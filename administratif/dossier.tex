@@ -1,0 +1,505 @@
+%%%%%%%%%%%%%%%%%  Debut du fichier Latex  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[
+    a4paper, 
+    12pt, onecolumn,
+    %draft
+]{article}
+
+%%% Pour un texte en francais
+\usepackage[francais]{babel}
+%\usepackage[latin1]{inputenc}	         % encodage des lettres accentuees
+\usepackage[utf8]{inputenc}          % encodage des lettres accentuees
+\usepackage{xspace}
+% \usepackage{graphicx}
+\usepackage{graphicx} \def\BIB{}
+\usepackage{aeguill}
+\usepackage{eurosym}
+\usepackage{amsfonts}
+
+\newcommand{\bigO}[1]{\mathcal{O}\hspace{-2px}\left(#1\right)}
+
+
+%%% Quelques raccourcis pour la mise en page
+\newcommand{\remarque}[1]{{\small \it #1}}
+\newcommand{\rubrique}{\bigskip \noindent $\bullet$ }
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%  PREMIERE PAGE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% DANS CETTE PAGE, ON REMPLACE LES INDICATIONS ENTRE CROCHETS [...]
+%%% PAR LES INFORMATIONS DEMANDEES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\sha}{\textsf{SHA-256}\xspace} 
+\noindent GENCI\hfill \textsc{Demande d'Attribution de Ressources Informatiques}
+
+\begin{center}
+\Large  \bf
+Description scientifique du projet
+\end{center}
+\bigskip
+
+\rubrique  Titre du projet:  
+\hfill
+%%% METTRE ICI LE RENSEIGNEMENT DEMANDE
+Half-Breaking \sha
+
+
+
+\rubrique  Num\'ero du projet DARI
+\footnote{ Uniquement en cas de demande de prolongation d'un projet
+  existant.} : 
+\hfill
+%%% METTRE ICI LE RENSEIGNEMENTS DEMANDE
+$\emptyset$
+
+\rubrique  Responsable scientifique
+\footnote{ Le responsable se charge du suivi du projet et fournit un bilan
+  en fin d'ann\'ee.} 
+(nom, pr\'enom) :  
+\hfill
+%%% METTRE ICI LES RENSEIGNEMENTS DEMANDES
+BOUILLAGUET Charles
+
+
+\rubrique Laboratoire:  
+\hfill
+%%% METTRE ICI LES RENSEIGNEMENTS DEMANDES
+Université de Lille, laboratoire CRIStAL (UMR 9189)
+
+
+%%% HEURES DEMANDEES
+\rubrique  Nombre d'heures demand\'ees (Cpu mono-processeur) sur le projet :
+   %%% DECOMMENTER LES LIGNES QUI CONCERNENT LE PROJET
+   %%% ET REMPLACER [1200] PAR LE RENSEIGNEMENT DEMANDE
+   %%% NE METTRE QUE LES DONNEES NON-NULLES
+   % \newline TGCC  BULL noeuds fins Curie : \hfill  [1200] heures scalaires
+   % \newline CINES BULL noeuds fins Occigen : \hfill  [1200] heures scalaires
+   % \newline IDRIS IBM SP Ada      : \hfill  [1200] heures scalaires
+   \newline IDRIS IBM BG/Q Turing     : \hfill  $10\ 000\ 000$ heures scalaires
+
+%%% RESUME
+\section{R\'esum\'e}
+
+
+
+%%% A COMMMENTER LORS DE LA REDACTION DU PROJET
+Ce projet consiste à faire la démonstration pratique qu'il est possible de
+contrôler la moitié de la sortie de fonction de hachage \sha.
+
+Cette fonction de hachage \sha est largement utilisée, notamment dans les
+protocole cryptographiques \textsf{TLS}, \textsf{SSH}, \ldots où elle sert à
+authentifier les données transmises. Elle est réputée sûre, ce qui signifie
+qu'il est a priori impossible de \og contrôler\fg{} l'empreinte de 256 bits qui
+est produite à partir de données arbitraires en entrée. Par exemple, l'humanité
+ne sait pas produire deux fichiers différents qui ont la même empreinte par
+cette fonction, ou bien produire un fichier qui ait une empreinte donnée.
+
+Le but de ce projet consiste à produire trois fichiers, dont la somme des
+empreinte s'annule partiellement : on veut que les 128 premiers bits de la somme
+soient nuls. Si ceci était réalisé, on aurait atteint l'objectif qui consiste à
+\og contrôler\fg{} $50\%$ de la sortie. Ceci n'a encore jamais été accompli, et
+ce serait une étape supplémentaire dans les progrès de la cryptanalyse de cette
+fonction, qui est un standard de facto.
+
+La réalisation concrète de cette \og attaque cryptographique\fg{} nécesite la
+résolution d'une grande instance du (classique) problème des 3-sommes : étant
+donné trois listes d'environ 4 milliards d'entiers 64 bits aléatoires, trouver
+l'ensemble des triplets composés d'un élément de chaque liste, dont la somme
+vaut zéro. Ce problème est inhéremment quadratique, aussi ceci est
+calculatoirement très coûteux. Les heures de calcul demandées doivent servir à
+la résolution de ce problème.
+
+
+
+\newpage\section{Pr\'esentation g\'en\'erale}
+
+%%% A COMMMENTER LORS DE LA REDACTION DU PROJET
+%\emph{Longueur typique {\bf 2 pages}, longueur maximale de {\bf 4 pages}. Si le projet se d\'ecompose en sous-projets, {\bf 2 pages additionnelles maximum par sous-projets}.}
+%\vskip 0.2cm  
+
+\paragraph{Contexte} La fonction de hachage cryptographique \sha est l'une des
+plus largement déployée au monde. C'est une fonction qui prend en entrée des
+données arbitraires et qui produit une empreinte de 256 bits. Elle a été conçue
+par la NSA en 2001 ; c'est l'une des seules actuellement autorisées par le
+gouvernement américain pour son propre usage~\cite{NIST}.
+
+Cette fonction de hachage joue de multiples rôles et c'est notamment un
+ingrédient-clef de la procédure de vérification des certificats qui servent à
+établir l'identité des serveurs auxquels nous nous connectons sur internet. En
+effet, pour réaliser ou vérifier une signature électronique, on applique un
+algorithme de signature sur l'empreinte des données à signer par une fonction de
+hachage cryptographique. En 2019, c'est \sha qui est généralement utilisée ---
+par exemple, la bibliothèqe standard \textsf{OpenSSL} utilise \sha pour cet usage.
+
+L'idée générale, c'est que l'empreinte d'un document par une fonction de hachage
+cryptographique doit identifier ce document de manière unique, tout en ne
+révélant aucune information exploitable sur son contenu. Ces fonctions jouent
+donc un rôle fondamental dans les mécanismes qui garantissent l'intégrité et
+l'authenticité des données lors d'échanges sécurisés.
+
+Une bonne fonction de hachage cryptographique est une \emph{fonction publique
+  sans structure}. Pour ces raisons, les empreintes qu'elle produit doivent
+avoir un aspect imprédictible et incontrôlable. Le cahier des charges précise
+explicitement qu'il ne doit pas être possible de produire deux documents ayant
+la même empreinte, de même qu'il ne doit pas être possible de produire un
+document ayant une empreinte donnée. Plus généralement, il ne doit pas être
+possible de produire des documents dont les empreintes satisfont des relations
+non-triviales. Dans le meilleur des mondes, tout devrait se passer comme si une
+fonction hachage cryptographique renvoyait des valeurs aléatoires.
+
+\sha remplace une précédente fonction \og standard de facto\fg{},
+\textsf{SHA-1}, qui produisait des empreintes de 160 bits. Les problèmes de
+sécurité de \textsf{SHA-1}, ont été diagnostiqués dès 2005\cite{WangYY05a},
+conduisant la plupart des gouvernements à la déprécier en 2010. Finalement, en
+2017, une équipe universitaire a réussi à produire une \og collision\fg{},
+c'est-à-dire deux documents distincts ayant la même empreinte pour
+\textsf{SHA-1}\cite{StevensBKAM17}. Ceci a nécessité 60 millions d'heures de
+calcul sur CPU ainsi qu'un million d'heures de calcul sur GPU (les calculs ont
+été effectués par Google).
+
+L'existence de cette collision signait instantanément l'arrêt de mort de la
+fonction de hachage cryptographique \textsf{SHA-1}, car la démonstration était
+faite en pratique qu'elle ne pouvait plus servir à garantir l'authenticité des
+données hachées.
+
+Étudier la sécurité de \sha est donc un enjeu scientifique majeur pour la
+communauté cryptographique. En 2019, \sha est considérée comme sûre, et le
+moment où un problème de sécurité de grande ampleur sera annoncé paraît
+lointain.
+
+Pour évaluer la sécurité de la fonction, les cryptanalystes en étudient des
+versions réduites. Comme \sha applique 64 fois une fonction plus simple sur les
+données en entrée (on dit qu'il y a 64 \og tours\fg), on peut essayer de casser
+des versions réduites avec moins de tours, car le niveau de sécurité augmente
+exponentiellement avec le nombre de tours. L'un des meilleurs résultats concrets
+à ce jour est une collision sur 28 tours au lieu des 64 prévus par la
+spécification de la fonction~\cite{MendelNS13}.
+
+\paragraph{Objectifs} Dans ce projet, nous abordons le problème sous un autre
+angle : au lieu d'affaiblir \sha en réduisant son nombre de tours, on considère
+une version complète de la fonction, mais où la taille de la sortie est tronquée
+à 128 bits sur 256. On se propose de démontrer que cette version réduite est
+faible. Ceci constituerait un progrès significatif dans la cryptanalyse de \sha,
+puisque cela reviendrait à réussir à \og contrôler\fg{} la moitié des bits de
+sortie sur la fonction complète, ce qui n'a encore jamais été accompli.
+
+Pour cela, nous proposons de \textbf{produire trois documents dont la somme des
+  empreintes (tronquées à 128 bits) vaut zéro}. Autrement dit, il s'agit de
+produire trois documents dont les empreintes sont (très fortement) corrélées, ce
+qui n'est pas censé être possible. Ceci démontrerait de manière frappante que la
+version tronquée de \sha est faible.
+
+Beaucoup de travaux de cryptanalyse décrivent des attaques \emph{sur le
+  papier}~: ce sont des algorithmes qui brisent une propriété que devrait avoir
+le mécanisme cryptographique étudié, et dont le temps d'exécution théorique est
+censé être inférieur à ce que le niveau de sécurité du mécanisme exige. Ces
+travaux sont parfois difficile à valider scientifiquement, car le temps
+d'éxécution réel de ces algorithmes est difficile à estimer.
+
+A contrario, les attaques \og en pratique\fg{}, telles que la collision complète
+sur \textsf{SHA-1} sont plus rares et plus marquantes. Pour cette raison, nous
+souhaitons démontrer dans les faits qu'il est possible de contrôler 128 bits de
+la sortie de \sha afin de frapper les esprits. Ce serait un pas en avant dans la
+compréhension de la sécurité d'un mécanisme cryptographique largement déployé.
+
+
+% \emph{Cette partie doit montrer l'int\'er\^et scientifique du projet. Le
+% canevas suivant est propos\'e : pr\'eciser les objectifs, situer les travaux
+% de l'\'equipe sur le th\`eme de recherche propos\'e tant vis \`a vis du
+% travail d\'ej\`a effectu\'e par l'\'equipe (r\'esultats acquis sur le sujet),
+% que vis \`a vis d'autres travaux sur un plan national et international, donner
+% une liste de publications de l'\'equipe dans le domaine dans la section
+% \ref{Sec:Biblio}. On peut joindre au dossier tous les documents (en format
+% pdf) annexes jug\'es utiles.}
+
+\paragraph{Positionnement}
+
+Ce projet s'inscrit dans le cadre de l'ANR BRUTUS qui vise à étudier la sécurité
+de mécanismes de chiffrement garantissant l'intégrité des données chiffrées.
+
+Dans une publication précédente~\cite{BouillaguetDF18}, nous avons amélioré les
+algorithmes permettant de réaliser un tel calcul, en proposant un meilleur
+algorithme pour résoudre le problème des \og 3-sommes\fg{}. Ceci améliorait des
+travaux antérieurs~\cite{NikolicSasaki2014}, en augmentant l'efficacité
+d'attaques contre les mécanismes de chiffrement authentifié reposant sur le mode
+opératoire COPA~\cite{COPA}.
+
+Pour insister sur l'aspect pratique et démontrer la validité des algorithmes que
+nous proposions, nous avons calculé trois chaines de bits qui forment une \og
+3-somme\fg{} sur la fonction \sha tronquée à 96 bits. Ceci avait été obtenu sur
+le cluster de calcul de l'université de Lille, en quelques jours sur quelques
+centaines de coeurs. La nécessité de devoir résoudre les problèmes pratiques
+liés à la réalisation d'un \og vrai\fg{} calcul nous a permis de jeter un regard
+critique sur les travaux plus théoriques publiés précédemment.
+
+Depuis cette publication, en utilisant des accélérateurs de calcul dédiés
+(cf. ci-dessous) ainsi que la grille de calcul \textsf{Grid5000}, nous avons
+atteint 116 bits à l'automne 2018. Ce résultat n'a pas été publié. C'était 1000
+fois plus diffficile calculatoirement que le calcul effectué
+dans~\cite{BouillaguetDF18}, et 64 fois plus facile que celui que nous nous
+proposons de mener à bien.
+
+Les principaux travaux de recherche en cryptanalyse sur \sha se donnent
+généralement comme objectif de \og casser\fg{} des versions affaiblies de la
+fonction avec le plus de tour possible. Pour autant que nous le sachions,
+l'approche orthogonale que nous souhaitons mettre en oeuvre, avec tous les 64
+tours mais une sortie tronquée, est nouvelle.
+
+\section{M\'ethode}
+
+On rappelle que l'objectif du projet consiste à produire trois documents dont la
+somme des empreintes par \sha (tronquée à 128 bits) vaut zéro.
+
+\paragraph{Accélérateurs de calculs ad hoc} La réalisation de ce projet repose
+de manière cruciale sur le \og détournement\fg{} d'accélérateurs de calculs qui
+n'ont pas été conçu dans le but de faire de la cryptanalyse.
+
+Le développement des crypto-monnaies, et notamment du bitcoin, a abouti à la
+conception et à la large distribution d'accélérateurs de calculs spéciaux, les
+\og mineurs de bitcoin\fg{}, qui sont nécessaires au bon fonctionnement du
+réseau pair-à-pair qui fait vivre la crypto-monnaie. Ces machines sont composées
+d'un grand nombre de circuits intégrés (ASICs) dédiés à une forme restreinte
+d'évaluation de \sha. Plus précisément, ces circuits intégrés calculent la
+fonction suivante~:
+\[
+  M \in \{0, 1\}^{608} \mapsto \Bigl\{ x \in \{0, 1\}^{32}~\Bigl|\Bigr.~ \exists y \in \{0, 1\}^{224}~.~\textsf{SHA-256}(\textsf{SHA-256}(M.x)) = \texttt{0x00000000} . y \Bigr\}
+\]
+
+Autrement dit, étant donné un préfixe $M$ de 76 octets, ces circuits intégrés
+trouvent tous les suffixes $x$ possibles de 4 octets tels que l'assemblage $M.x$
+(le point désigne la concaténation), haché deux fois avec \sha, possède une
+empreinte dont les 32 premiers bits valent zéro.
+
+En moyenne, il existe une valeur de $x$ par valeur de $M$, et on ne sait pas la
+trouver autrement que par recherche exhaustive, donc en essayant les
+$2^{32} \approx 4 \cdot 10^{9}$ possibilités pour $x$. Un coeur d'un CPU moderne
+peut faire environ $10^{7}$ essais par seconde. Un mineur de bitcoin d'occasion
+acheté 300\euro\xspace sur \texttt{leboncoin.fr} peut en faire $10^{13}$ par seconde.
+
+L'une des principale contribution de ce projet consiste à observer que ces
+accélérateurs de calculs \og inoffensifs\fg{} peuvent être détournés de leur
+usage normal et servir à réaliser l'attaque sur la version tronquée de \sha
+décrite ci-desssus.
+
+En effet, sur certains modèles, il est possible de se débarasser de la couche
+\og bitcoin\fg{} et d'exercer un contrôle direct sur les valeurs du préfixe $M$
+qui sont soumises aux circuits intégrés.
+
+\paragraph{Principe général de l'attaque} La réalisation de l'attaque sur \sha
+tronquée à 128 bits se déroule en deux phases.
+
+\begin{description}
+\item[Minage] En utilisant des mineurs de bitcoins, accumuler trois listes $A$,
+  $B$ et $C$ chacune constituée de $2^{32}$ chaines de bits dont l'empreinte par
+  \sha commence par 32 bits à zéro.
+
+\item[3-Somme] En utilisant un ordinateur massivement parallèle, trouver un
+  triplet $(a,b,c) \in A \times B \times C$ tel que la somme des empreintes
+  tronquées à 128 bits de $a, b$ et $c$ vaut zéro (en réalité, la \og somme\fg{}
+  est un OU exclusif), c'est-à-dire l'addition sur $(\mathbb{F}_2)^n$.
+\end{description}
+
+La première phase est déjà réalisée. Elle a mis 6 mois en utilisant un ou deux
+mineurs de bitcoin achetés d'occasion. Si cette phase avait été réalisée sur
+CPU, elle aurait nécessité 677 millions d'heures de calcul. À l'issue de la
+première phase, 32 bits de la sortie de \sha sont sous contrôle et il en reste
+96 à traiter.
+
+Nous estimons que la deuxième phase nécessitera 10 millions d'heures sur
+\texttt{turing}. Le problème algorithmique correspondant est classique : c'est
+le problème des \og 3-sommes\fg{}. Il est par exemple équivalent au fait de
+tester si, dans un nuage de points dans le plan, il en existe trois qui sont
+alignés.
+
+Ce problème est inhéremment quadratique en la taille des listes $A, B$ et
+$C$. L'algorithme naïf consiste à tester, pour chaque paire
+$(a, b) \in A \times B$, si $-(a+b) \in C$. L'algorithme possédant la meilleure
+complexité asymptotique a été inventé en 2005 par Baran, Demaine, et
+P{\v{a}}tra{\c{s}}cu (BDP)~\cite{BDP2005}. Il s'exécute en
+$\bigO{N^2 \frac{\log \log N}{\log^2 N}}$, où $N$ désigne la taille des listes,
+mais il n'est pas utilisable en pratique à causes des constantes cachées dans la
+notation $\mathcal{O}$.
+
+Dans notre cas, les listes sont de taille $4 \cdot 10^{9}$, et donc le nombre
+d'opérations à réaliser est de l'ordre de $10^{19}$ (10 exa-opérations), ce qui
+nécessite l'emploi de très grands équipements de calcul.
+
+\paragraph{Algorithmes pour les 3-sommes}
+
+Tout d'abord, on note qu'une instance $(A, B, C)$ du problème, constituée de
+trois listes de taille $N$, peut se diviser en quatre sous-instances de taille
+$N/2$. Notons $A_0$ (resp. $A_1$) la sous-liste de $A$ constituée des vecteurs
+dont le dernier bit est 0 (resp. 1), et notons $B_0, B_1, C_0, C_1$ de la même
+manière. Un triplet solution de l'instance originale est nécessairement contenu
+dans $(A_0, B_0, C_0), (A_0, B_1, C_1), (A_1, B_0, C_1)$ ou bien
+$(A_1, B_1, C_0)$. Ce découpage peut se faire récursivement : on peut découper
+le problème initial en $4^k$ sous-instances indépendantes de taille
+$N/2^k$. Ceci permet d'adapter la taille des sous-instances aux contraintes de
+la machine (taille de la RAM, des caches, etc.), et permet d'extraire autant de
+parallélisme que nécessaire, puisque toutes les sous-instances peuvent être
+traitées en parallèle.
+
+Un avantage est que les sous-instances ont toutes la même taille moyenne, et que
+la variance est très faible. Aussi, un simple équilibrage statique de charge
+donne de très bons résultats.
+
+Pour adapter le problème aux réalités du matériel de calcul, on tronque les
+empreintes dans les trois listes $A, B$ et $C$ à 64 bits (sur les 96 qui restent
+à contrôler). On s'attend donc à trouver environ $2^{32}$ triplets $(a, b, c)$
+dont la somme vaut zéro sur 64 bits, et parmi ceux-là on devrait en avoir un
+dont la somme vaut zéro sur les 96 bits.
+
+L'algorithme naïf esquissé ci-dessus peut ainsi être implanté très
+efficacement~\cite{BouillaguetDF18}. Sur le plan algorithmique, ceci nécessite
+d'utiliser des tables de hachages sophistiquées (\emph{cuckoo
+  hashing}~\cite{Pagh01}) pour stocker $C$, qui permettent notamment de
+vectoriser les test d'appartenances. Sur les CPU \texttt{x86-64} muni
+d'instructions vectorielles \textsf{AVX2}, 8 paires $(a,b)$ peuvent être testées
+simultanément, et le coût amorti du traitement de chaque paire $(a, b)$ est de
+2.3 cycles d'horloge. Cet algorithme est \emph{CPU-bound} (toutes les données
+auxquelles il accède sont dans le cache L1 du processeur). Le parallelisme est
+simple à mettre en oeuvre, car il suffit de traiter toutes les paires $(a, b)$
+en parallèle.
+
+Du côté des algorithmes moins naïfs, l'algorithme BDP est irréaliste en pratique
+(il est plus lent que l'algorithme naïf pour des valeurs de $N$ inférieures au
+nombre d'atomes dans l'univers...). Par contre, nous en avons conçu un autre,
+décrit dans~\cite{BouillaguetDF18} dont la complexité est en en
+$\bigO{N^2 / \log N}$, et nous avons démontré dans la pratique, sur des
+instances plus petites, qu'il est peut être plus rapide que des implantations
+très optimisées de l'algorithme naïf.
+
+Cet algorithme repose sur l'idée que si $a + b + c = 0$, alors
+$aM + bM + cM = 0$, où $M$ est une matrice inversible de taille 64 qui agit sur
+les bits de $a,b$ et $c$. Cette observation est exploitée par l'algorithme
+ci-dessous :
+\begin{enumerate}
+\item Déterminer une matrice $M$ de taille $64 \times 64$ qui force à zéro les
+  32 premier bits des 32 premières entrées de $C \times M$.
+\item Calculer $A' \gets A \times M, B' \gets B \times M$.
+\item Calculer la jointure de $A'$ et $B'$ sur les 32 derniers bits.
+\item Pour chaque élément dans la jointure, vérifier s'il appartient à $C \times M$.
+\item Répéter l'ensemble de la procédure avec les 32 prochains élements de $C$,
+  jusqu'à ce que tous les éléments de $C$ aient été traités.
+\end{enumerate}
+
+\paragraph{Adaptation à la machine ciblée}
+
+Nous avons utilisé notre accès préliminaire pour adapter notre code aux
+processeurs de \texttt{turing}.
+
+Il est notable que cet algorithme est \emph{memory-bound} sur les processeurs
+\texttt{x86-64} récents mais \emph{CPU-bound} sur les processeurs
+\texttt{PowerPC A2} de \texttt{turing}, auquel il est particulièrement
+adapté. Paradoxalement, le fait que ces processeurs ne soient pas très rapides
+(par rapport à la vitesse de la mémoire) est un avantage.
+
+Pour simplifier le code à exécuter \og en production\fg{}, toutes les matrices
+$M$ sont calculées à l'avance, dans un pré-traitement qui a un coût négligeable.
+
+L'étape du produit de matrice utilise la technique dite des \og quatre
+russes\fg~\cite{4russians} et nécessite 33 instructions pour multiplier chaque
+vecteur de 64 bits par une matrice de taille $64 \times 64$. Il s'exécute à une
+instruction par cycle avec 4 threads matériels, au maximum des capacités du CPU
+et représente $40\%$ du temps d'exécution total.
+
+La partie la plus difficile à implanter efficacement est le calcul de la
+jointure, qui est un problème classique dans la communauté des bases de
+données. Nous utilisons un \og \emph{partitioning
+  hash-join}~\cite{BalkesenATO13}, qui a la faveur des experts. Dans la mesure
+où nous pouvons choisir la taille des instances, nous l'ajustons pour pouvoir
+nous contenter d'une seule étape de partitionnement.
+
+Dans la réalisation du partitionnement, qui occupe $20\%$ du temps total, le
+facteur critique est le nombre de lignes du cache L1, qui limite à 10 le nombre
+de bits sur lesquels on peut partitionner efficacement. Du coup, les partitions
+sont $2^{10} \approx 1000$ fois plus petite que le problème de départ. Le fait
+que les processeurs \textsf{PowerPC A2} n'aient pas de mémoire virtuelle, et
+donc pas de mécanisme de conversion des adresses virtuelles en adresse physique
+est un autre avantage : il n'y a pas de fautes de TLB, et des techniques
+non-triviales qui sont utilisées sur les machines avec MMU sont inutiles
+ici. Ceci rend le code plus simple. Les meilleurs performances ($0.8$
+instructions par cycle) ont été observées avec seulement deux threads
+matériels. Ceci sature la bande passante mémoire à 26Go/s, donc semble
+difficilement améliorable.
+
+Le calcul des sous-jointures occupe les $40\%$ restants du temps de calcul. Nous
+utilisons des tables de hachage avec sondage linéaire : elles sont plus rapides
+que des \emph{cuckoo tables} sur \texttt{PowerPC A2}, alors que sur
+\texttt{x86-64} c'est l'inverse... Il y a beaucoup d'erreurs de prédiction de
+branchement dans ce code, qui atteint $0.75$ instructions par cycle avec 3
+threads materiels. Pour que les sous-jointure se fassent en cache L1, leur
+taille est restreinte, et ceci combiné avec les contraintes du partitionnement
+fixe la taille optimale des sous-instances à traiter sur un coeur.
+
+Au total, le programme effectue en moyenne 0.8 instructions par cycle, or il
+n'utilise pas du tout de flottants, donc il ne peut faire qu'une instruction par
+cycle dans le meilleur des cas. Il est donc assez proche des capacités nominales
+de la machine. Il ne peut pas exploiter les instructions vectorielles
+disponibles sur \texttt{turing}, car elles sont restreintes aux flottants.
+
+Le code est écrit entièrement en \textsf{C} (par nous) et totalise moins de 1000
+lignes de code (sans compter le pré-traitement / post-traitement). Il est
+public. Il ne fait pas appel à des bibliothèques externes. Il utilise
+\textsf{OpenMP} pour la gestion des threads matériels, et ---évidemment---
+\textsf{MPI} pour la gestion du parallélisme. Le chargement des données utilise
+les fonctions d'\textsf{I/O} collectives de \textsf{MPI}. Il ne contient pas de
+mécanisme de \emph{checkpointing}, mais ce serait facile à ajouter
+
+\paragraph{Passage à l'échelle}
+
+Dans le cadre de notre accès préliminaire, nous avons réalisé un test de passage
+à l'echelle sur un petit jeu de données, avec des listes de taille
+$146 \cdot 10^6$ (au lieu de $4\cdot 10^9$). Lors d'un pré-traitement, nous
+avons découpé récursivement cette instance en $4^{10} \approx 10^6$
+sous-instances. Le temps de traitement séquentiel d'une de ces sous-instances
+sur un coeur de \texttt{turing} est d'environ 57s.
+
+Nous avons soumis un job sur 16384 coeurs, en affectant de manière statique 64
+sous-instances à chaque coeur. On s'attend donc à un temps total de calcul de
+$64 \times 57 = 3648$s dans le meilleur des cas. La taille totale du jeu de
+données est de 7Go, et chaque coeur doit charger 55Mo. Les 16384 coeurs ont
+chargé leurs données en 30s.
+
+Tous les coeurs ont terminé au bout de 3635s de calcul, quasiment tous en même
+temps. Leur synchronisation et la sauvegarde des triplets solutions a mis
+42s. La correction des triplets solutions trouvés a été validée.
+
+Ceci nous permet de conclure que notre code passe bien à l'échelle. Il suffit de
+lancer six jobs équivalents pour occuper \texttt{turing} entièrement avec une
+efficacité très proche de $100\%$.
+
+Nous soulignons que le nombre de coeurs utilisé par les jobs, et la durée des
+jobs sont tous les deux paramétrables. En ajustant le nombre de tâches par
+coeur (qui doit être une puissance de 4), on peut ajuster la durée du job : 1h,
+4h, 16h... ce qui peut permettre de boucher des trous dans l'ordonnancement.
+
+\paragraph{Temps de calcul prévisionnel}
+
+Avec notre code actuel (nous espérons pouvoir l'améliorer encore un peu), nous
+estimons que l'ensemble des triplets solutions peuvent être trouvés en 10
+millions d'heures de calcul sur \texttt{turing}.
+
+En effet, avec les données réelles, nous pensons partitionner le problème en
+$4^{15} \approx 10^9$ sous-instances, et chacune d'entre elle peut se résoudre
+en 30s. Ceci donnera 10 millions d'heures de calcul, si toutes les
+sous-instances doivent être résolues
+
+Ceci dit, \og la\fg{} solution pourrait être trouvée avant que toutes les
+sous-instances n'aient été explorées, et alors le projet pourrait être
+interrompu (et mené à bien) avant d'avoir consommé toutes ses heures.
+
+
+\newpage\section{Bibliographie}
+\label{Sec:Biblio}
+
+La référence \protect\cite{BouillaguetDF18} est celle de l'équipe.
+
+\bibliographystyle{plain}
+\bibliography{biblio}
+
+
+\end{document}
+%%%%%%%%%%%%%%%%%  Fin du fichier Latex  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+

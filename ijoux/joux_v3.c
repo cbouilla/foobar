@@ -44,9 +44,6 @@ struct context_t {
 	/**** performance measurement ****/
 	u64 volume, probes;
 	u64 gemm_usec, part_usec, subj_usec, chck_usec;
-	long long gemm_instr, gemm_cycles;
-	long long part_instr, part_cycles;
-	long long subj_instr, subj_cycles;
 	u32 bad_slice;
 
 	/**** scratch space ****/
@@ -58,7 +55,6 @@ struct context_t {
 
 struct slice_ctx_t {
 	const struct slice_t *slice;
-	//struct hash_table_t *H; ////////////
 	u64 *H;
 	struct task_result_t *result;
 };
@@ -275,7 +271,6 @@ static void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u6
 static void process_slice(struct context_t *self, const struct slice_t *slice,
 		      const u32 *task_index, bool verbose)
 {
-	double start = wtime();
 	struct slice_ctx_t ctx = {.slice = slice };
 	ctx.result = result_init();
 	u64 H[512];
@@ -284,7 +279,6 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		self->bad_slice++;
 	u32 fan_out = 1 << self->p;
 	u64 volume = self->n[0] + self->n[1];
-	double Mvolume = volume * 9.5367431640625e-07;
 	self->volume += volume;
 	if (slice->l - self->p < 9)
 		printf("WARNING : l and p are too close (increase l)\n");
@@ -294,99 +288,30 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	/************* phase 1: GEMM */
 
 	long long gemm_start = usec();
-	long long instr = 0, cycles = 0;
-	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_gemm)
+	#pragma omp parallel num_threads(self->T_gemm)
 	{
-		#if 0
-		long long counters[2] = { 0, 0 };
-		int rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1,
-			     "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-			     omp_get_thread_num(), rc,
-			     PAPI_strerror(rc));
-		cycles = counters[0];
-		instr = counters[1];
-		#endif
-
 		gemm(self->L[0], self->side[0].LM, self->side[0].n, &M);
 		gemm(self->L[1], self->side[1].LM, self->side[1].n, &M);
-		
-		#if 0
-		counters[0] = counters[1] = 0;
-		rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-			     omp_get_thread_num(), rc, PAPI_strerror(rc));
-		cycles = counters[0] - cycles;
-		instr = counters[1] - instr;
-		#endif
 	}
 	self->gemm_usec += usec() - gemm_start;
-	self->gemm_instr += instr;
-	self->gemm_cycles += cycles;
-	if (verbose) {
-		double gemm_rate = Mvolume / (usec() - gemm_start) * 1.048576;
-		printf("[gemm/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     instr / Mvolume, cycles / Mvolume, gemm_rate);
-	}
 
 	/************* phase 2: partitioning */
 
 	long long part_start = usec();
-	instr = 0, cycles = 0;
-	#pragma omp parallel reduction(+:instr, cycles) num_threads(self->T_part)
+	#pragma omp parallel num_threads(self->T_part)
 	{
-		#if 0
-		long long counters[2] = { 0, 0 };
-		int rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s", 
-			   	omp_get_thread_num(), rc, PAPI_strerror(rc));
-		cycles = counters[0];
-		instr = counters[1];
-		#endif
-
 		for (u32 k = 0; k < 2; k++)
 			partition(self->p, &self->side[k]);
-		#if 0
-		counters[0] = counters[1] = 0;
-		rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-			          omp_get_thread_num(), rc, PAPI_strerror(rc));
-		cycles = counters[0] - cycles;
-		instr = counters[1] - instr;
-		#endif
-
 	}
 	self->part_usec += usec() - part_start;
-	self->part_instr += instr;
-	self->part_cycles += cycles;
-	if (verbose) {
-		double part_rate = Mvolume / (usec() - part_start) * 1.048576;
-		printf("[partition/item] cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-		     instr / Mvolume, cycles / Mvolume, part_rate);
-	}
-
+	
 	/************* phase 3: subjoins */
 
-	instr = 0, cycles = 0;
 	long long subj_start = usec();
 	u32 n_preselected[4];
 	#pragma omp parallel num_threads(self->T_subj)
 	{
 		u32 probes = 0;
-		#if 0
-		long long counters[2] = { 0, 0 };
-		int rc;
-		rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1, "PAPI_read_counters (start): tid=%d, rc=%d, %s",
-			     omp_get_thread_num(), rc, PAPI_strerror(rc));
-		cycles = counters[0];
-		instr = counters[1];
-		#endif
 		
 		int tid = omp_get_thread_num();
 		u64 (*preselected)[3] = self->preselected[tid];
@@ -412,25 +337,9 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 			probes += size;
 		}
 		n_preselected[tid] = probes;
-		#if 0
-		counters[0] = counters[1] = 0;
-		rc = PAPI_read_counters(counters, 2);
-		if (rc < PAPI_OK)
-			errx(1, "PAPI_read_counters (end): tid=%d, rc=%d, %s",
-			     omp_get_thread_num(), rc, PAPI_strerror(rc));
-		cycles = counters[0] - cycles;
-		instr = counters[1] - instr;
-		#endif
 	}
 	self->subj_usec += usec() - subj_start;
-	self->subj_instr += instr;
-	self->subj_cycles += cycles;
 	self->probes += n_preselected[0] + n_preselected[1] + n_preselected[2];
-	// if (verbose) {
-	// 	double subjoin_rate = Mvolume / (usec() - subj_start) * 1.048576;
-	// 	printf("[subjoin/item] Probes = %.4f, cycles = %.1f, instr = %.1f. Rate=%.1fMitem/s\n",
-	// 	     probes / Mvolume, instr / Mvolume, cycles / Mvolume, subjoin_rate);
-	// }
 
 	/************* phase 4: intersection with CM */
 
@@ -455,14 +364,6 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 		report_solution(self->result, &solution);
 	}
 	result_free(ctx.result);
-
-	//if (verbose) {
-	//	double duration = wtime() - start;
-	//	// printf("Block, total time: %.1fs\n", duration);
-	//	double volume = 9.5367431640625e-07 * (self->n[0] + self->n[1] + probes);
-	//	double rate = volume / duration;
-	//	printf("Join volume: %.1fM item (%.1fM item/s)\n", volume, rate);
-	//}
 }
 
 
@@ -492,27 +393,18 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		self.preselected[t] = malloc(task->n[0] * 24);
 	self.volume = 0;
 	self.gemm_usec = 0;
-	self.gemm_instr = 0;
-	self.gemm_cycles = 0;
 	self.part_usec = 0;
-	self.part_instr = 0;
-	self.part_cycles = 0;
 	self.subj_usec = 0;
-	self.subj_instr = 0;
-	self.subj_cycles = 0;
 	self.chck_usec = 0;
 	self.bad_slice = 0;
 	self.probes = 0;
 
-
-
 	if (task_verbose) {
 		/* task-level */
-		printf("Task: |A|=%" PRId64 ",  |B|=%" PRId64 "\n", task->n[0],
-		       task->n[1]);
+		printf("Task: |A|=%" PRId64 ",  |B|=%" PRId64 "\n", task->n[0], task->n[1]);
 		double mbytes = 8 * (task->n[0] + task->n[1]) / 1048576.0;
-		printf("Volume. Hash = %.1fMbyte + Slice = %.1fMbyte\n", mbytes,
-		       task->slices_size / 1048576.0);
+		printf("Volume. Hash = %.1fMbyte + Slice = %.1fMbyte\n", 
+			mbytes, task->slices_size / 1048576.0);
 		printf("Partition size (A): %.0f elements (hash fill=%.0f%%)\n", 
 			task->n[0] / 1024., task->n[0] / 5242.88);
 	}
@@ -549,29 +441,13 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 		printf("Total volume: %.1fMitem\n", Mvolume);
 		printf("Breakdown:\n");
 		printf("* GEMM:      \tT = %d, \ttime = %.2fs\trate = %.2fMitem/s\n",
-		     self.T_gemm, 1e-6 * self.gemm_usec,
-		     self.volume / (self.gemm_usec / 1.048576));
+		     self.T_gemm, 1e-6 * self.gemm_usec, self.volume / (self.gemm_usec / 1.048576));
 		printf("* partition: \tT = %d, \ttime = %.2fs\trate = %.2fMitem/s\n",
-		     self.T_part, 1e-6 * self.part_usec,
-		     self.volume / (self.part_usec / 1.048576));
+		     self.T_part, 1e-6 * self.part_usec, self.volume / (self.part_usec / 1.048576));
 		printf("* subjoin:   \tT = %d, \ttime = %.2fs\trate = %.2fMitem/s\n",
-		     self.T_subj, 1e-6 * self.subj_usec,
-		     self.volume / (self.subj_usec / 1.048576));
+		     self.T_subj, 1e-6 * self.subj_usec, self.volume / (self.subj_usec / 1.048576));
 		printf("         \tprobes = %.2fM\t\t%.2f x expected \n", 9.5367431640625e-07 * self.probes, self.probes / ((double) self.n[0] * self.n[1] * i / 524288.));
 		printf("         \t\ttime = %.2fs\trate = %.2fMitem/s\n", 1e-6 * self.chck_usec, self.probes / (self.chck_usec / 1.048576));
-
-		/*
-		   printf("* GEMM:      \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
-		   1e-6 * self.gemm_usec, (1.0 * self.gemm_instr) / self.gemm_cycles,
-		   (1.0 * self.gemm_instr) / self.volume, (1.0 * self.gemm_cycles) / self.volume);
-		   printf("* partition: \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
-		   1e-6 * self.part_usec, (1.0 * self.part_instr) / self.part_cycles,
-		   (1.0 * self.part_instr) / self.volume, (1.0 * self.part_cycles) / self.volume);
-		   printf("* subjoin:   \ttime = %.2fs\tIPC = %.2f\tinstr/item = %.1f\tcycles/item = %.1f\n", 
-		   1e-6 * self.subj_usec, (1.0 * self.subj_instr) / self.subj_cycles,
-		   (1.0 * self.subj_instr) / self.volume, (1.0 * self.subj_cycles) / self.volume);
-		 */
-
 	}
 	return result;
 }

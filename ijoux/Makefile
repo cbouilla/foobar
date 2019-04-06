@@ -14,9 +14,10 @@ all: programs
 common.o: common.h
 joux_v3.o: common.h datastructures.h
 
-programs: joux_standalone
+programs: joux_standalone do_task_group
 joux_standalone: common.o joux_v3.o
+do_task_group: common.o joux_v3.o
 
 clean:
-	rm -rf *.o  *.pdf *.aux *.bbl *.blg *.log *.out *.cweb *.idx *.tex
-	rm -rf joux_standalone test_v0
+	rm -rf *.o
+	rm -rf joux_standalone do_task_group

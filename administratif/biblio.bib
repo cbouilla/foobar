@@ -1,0 +1,723 @@
+@misc{NIST,
+author = {National Institute of Standards and Technology},
+title = {{NIST} Policy on Hash Functions},
+url = {https://csrc.nist.gov/projects/hash-functions/nist-policy-on-hash-functions},
+year = 2015
+}
+
+@InProceedings{COPA,
+author="Andreeva, Elena
+and Bogdanov, Andrey
+and Luykx, Atul
+and Mennink, Bart
+and Tischhauser, Elmar
+and Yasuda, Kan",
+editor="Sako, Kazue
+and Sarkar, Palash",
+title="Parallelizable and Authenticated Online Ciphers",
+booktitle="Advances in Cryptology - ASIACRYPT 2013",
+year="2013",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="424--443",
+abstract="Online ciphers encrypt an arbitrary number of plaintext blocks and output ciphertext blocks which only depend on the preceding plaintext blocks. All online ciphers proposed so far are essentially serial, which significantly limits their performance on parallel architectures such as modern general-purpose CPUs or dedicated hardware.We propose the first parallelizable online cipher, COPE. It performs two calls to the underlying block cipher per plaintext block and is fully parallelizable in both encryption and decryption. COPE is proven secure against chosenplaintext attacks assuming the underlying block cipher is a strong PRP. We then extend COPE to create COPA, the first parallelizable, online authenticated cipher with nonce-misuse resistance. COPA only requires two extra block cipher calls to provide integrity. The privacy and integrity of the scheme is proven secure assuming the underlying block cipher is a strong PRP. Our implementation with Intel AES-NI on a Sandy Bridge CPU architecture shows that both COPE and COPA are about 5 times faster than their closest competition: TC1, TC3, and McOE-G. This high factor of advantage emphasizes the paramount role of parallelizability on up-to-date computing platforms.",
+isbn="978-3-642-42033-7"
+}
+
+@article{BouillaguetDF18,
+  author    = {Charles Bouillaguet and
+               Claire Delaplace and
+               Pierre{-}Alain Fouque},
+  title     = {Revisiting and Improving Algorithms for the 3XOR Problem},
+  journal   = {{IACR} Trans. Symmetric Cryptol.},
+  volume    = {2018},
+  number    = {1},
+  pages     = {254--276},
+  year      = {2018},
+  url       = {https://doi.org/10.13154/tosc.v2018.i1.254-276},
+  doi       = {10.13154/tosc.v2018.i1.254-276},
+  timestamp = {Fri, 30 Nov 2018 13:25:41 +0100},
+  biburl    = {https://dblp.org/rec/bib/journals/tosc/BouillaguetDF18},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@inproceedings{MendelNS13,
+  author    = {Florian Mendel and
+               Tomislav Nad and
+               Martin Schl{\"{a}}ffer},
+  title     = {Improving Local Collisions: New Attacks on Reduced {SHA-256}},
+  booktitle = {Advances in Cryptology - {EUROCRYPT} 2013, 32nd Annual International
+               Conference on the Theory and Applications of Cryptographic Techniques,
+               Athens, Greece, May 26-30, 2013. Proceedings},
+  pages     = {262--278},
+  year      = {2013},
+  crossref  = {DBLP:conf/eurocrypt/2013},
+  url       = {https://doi.org/10.1007/978-3-642-38348-9\_16},
+  doi       = {10.1007/978-3-642-38348-9\_16},
+  timestamp = {Wed, 14 Nov 2018 10:54:57 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/eurocrypt/MendelNS13},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@proceedings{DBLP:conf/eurocrypt/2013,
+  editor    = {Thomas Johansson and
+               Phong Q. Nguyen},
+  title     = {Advances in Cryptology - {EUROCRYPT} 2013, 32nd Annual International
+               Conference on the Theory and Applications of Cryptographic Techniques,
+               Athens, Greece, May 26-30, 2013. Proceedings},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {7881},
+  publisher = {Springer},
+  year      = {2013},
+  url       = {https://doi.org/10.1007/978-3-642-38348-9},
+  doi       = {10.1007/978-3-642-38348-9},
+  isbn      = {978-3-642-38347-2},
+  timestamp = {Wed, 14 Nov 2018 10:54:57 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/eurocrypt/2013},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@inproceedings{StevensBKAM17,
+  author    = {Marc Stevens and
+               Elie Bursztein and
+               Pierre Karpman and
+               Ange Albertini and
+               Yarik Markov},
+  title     = {The First Collision for Full {SHA-1}},
+  booktitle = {Advances in Cryptology - {CRYPTO} 2017 - 37th Annual International
+               Cryptology Conference, Santa Barbara, CA, USA, August 20-24, 2017,
+               Proceedings, Part {I}},
+  pages     = {570--596},
+  year      = {2017},
+  crossref  = {DBLP:conf/crypto/2017-1},
+  url       = {https://doi.org/10.1007/978-3-319-63688-7\_19},
+  doi       = {10.1007/978-3-319-63688-7\_19},
+  timestamp = {Mon, 14 Aug 2017 14:34:46 +0200},
+  biburl    = {https://dblp.org/rec/bib/conf/crypto/StevensBKAM17},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@proceedings{DBLP:conf/crypto/2017-1,
+  editor    = {Jonathan Katz and
+               Hovav Shacham},
+  title     = {Advances in Cryptology - {CRYPTO} 2017 - 37th Annual International
+               Cryptology Conference, Santa Barbara, CA, USA, August 20-24, 2017,
+               Proceedings, Part {I}},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {10401},
+  publisher = {Springer},
+  year      = {2017},
+  url       = {https://doi.org/10.1007/978-3-319-63688-7},
+  doi       = {10.1007/978-3-319-63688-7},
+  isbn      = {978-3-319-63687-0},
+  timestamp = {Mon, 14 Aug 2017 14:32:34 +0200},
+  biburl    = {https://dblp.org/rec/bib/conf/crypto/2017-1},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@inproceedings{WangYY05a,
+  author    = {Xiaoyun Wang and
+               Yiqun Lisa Yin and
+               Hongbo Yu},
+  title     = {Finding Collisions in the Full {SHA-1}},
+  booktitle = {Advances in Cryptology - {CRYPTO} 2005: 25th Annual International
+               Cryptology Conference, Santa Barbara, California, USA, August 14-18,
+               2005, Proceedings},
+  pages     = {17--36},
+  year      = {2005},
+  crossref  = {DBLP:conf/crypto/2005},
+  url       = {https://doi.org/10.1007/11535218\_2},
+  doi       = {10.1007/11535218\_2},
+  timestamp = {Wed, 14 Nov 2018 10:51:40 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/crypto/WangYY05a},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+@proceedings{DBLP:conf/crypto/2005,
+  editor    = {Victor Shoup},
+  title     = {Advances in Cryptology - {CRYPTO} 2005: 25th Annual International
+               Cryptology Conference, Santa Barbara, California, USA, August 14-18,
+               2005, Proceedings},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {3621},
+  publisher = {Springer},
+  year      = {2005},
+  url       = {https://doi.org/10.1007/11535218},
+  doi       = {10.1007/11535218},
+  isbn      = {3-540-28114-2},
+  timestamp = {Wed, 14 Nov 2018 10:51:40 +0100},
+  biburl    = {https://dblp.org/rec/bib/conf/crypto/2005},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
+@article{DBLP:journals/corr/abs-1305-3827,
+  author    = {Zahra Jafargholi and
+               Emanuele Viola},
+  title     = {3SUM, 3XOR, Triangles},
+  journal   = {CoRR},
+  volume    = {abs/1305.3827},
+  year      = {2013},
+  url       = {http://arxiv.org/abs/1305.3827},
+  archivePrefix = {arXiv},
+  eprint    = {1305.3827},
+  timestamp = {Wed, 07 Jun 2017 14:42:55 +0200},
+  biburl    = {http://dblp.org/rec/bib/journals/corr/abs-1305-3827},
+  bibsource = {dblp computer science bibliography, http://dblp.org}
+}
+
+@techreport{viola,
+  author = {Emanuele Viola},
+  title = {Reducing 3XOR to listing triangles, an exposition},
+  institution = {Northeastern University, College of Computer and Information Science},
+  note = {Available at \url{http://www.ccs.neu.edu/home/viola/papers/xxx.pdf}},
+  month = {May},
+  year = {2012}
+}
+
+@book{zeromq,
+      author        = "Hintjens, Pieter",
+      title         = "{ZeroMQ: messaging for many applications}",
+      publisher     = "O'Reilly",
+      address       = "Sebastopol, CA",
+      year          = "2013",
+      url           = "http://cds.cern.ch/record/1541341",
+}
+
+@article{BalkesenATO13,
+  author    = {Cagri Balkesen and
+               Gustavo Alonso and
+               Jens Teubner and
+               M. Tamer {\"{O}}zsu},
+  title     = {Multi-Core, Main-Memory Joins: Sort vs. Hash Revisited},
+  journal   = {{PVLDB}},
+  volume    = {7},
+  number    = {1},
+  pages     = {85--96},
+  year      = {2013},
+  url       = {http://www.vldb.org/pvldb/vol7/p85-balkesen.pdf},
+  doi       = {10.14778/2732219.2732227},
+  timestamp = {Thu, 16 Aug 2018 11:33:44 +0200},
+  biburl    = {https://dblp.org/rec/bib/journals/pvldb/BalkesenATO13},
+  bibsource = {dblp computer science bibliography, https://dblp.org}
+}
+
+@BOOK{Knuth,
+   author = "Donald E. Knuth",
+   title = "Searching and sorting",
+   volume = 3,
+   series = "The Art of Computer Programming",
+   publisher = "Addison-Wesley",
+   address = "Reading, Massachusetts",
+   edition = "Second",
+   month = "10~" # jan,
+   year = "1998",
+   note = "This is a full BOOK entry",
+}
+
+@article{FredmanWillard1993,
+  title={Surpassing the information theoretic bound with fusion trees},
+  author={Fredman, Michael L and Willard, Dan E},
+  journal={Journal of computer and system sciences},
+  volume={47},
+  number={3},
+  pages={424--436},
+  year={1993},
+  publisher={Elsevier}
+}
+
+@inproceedings{Mansour1990,
+  title={The computational complexity of universal hashing},
+  author={Mansour, Yishay and Nisan, Noam and Tiwari, Prasoon},
+  booktitle={Proceedings of the twenty-second annual ACM symposium on Theory of computing},
+  pages={235--243},
+  year={1990},
+  organization={ACM}
+}
+
+@MISC{Bernstein05,
+    author = {Daniel J. Bernstein},
+    title = {Better price-performance ratios for generalized birthday attacks},
+    year = {2007},
+    booktitle={SHARCS'07: Special-purpose Hardware for Attacking Cryptographic Systems},
+    url={http://cr.yp.to/papers.html#genbday}
+}
+
+@inproceedings{Pagh01,
+  title={Cuckoo hashing},
+  author={Pagh, Rasmus and Rodler, Flemming Friche},
+  booktitle={European Symposium on Algorithms},
+  pages={121--133},
+  year={2001},
+  organization={Springer}
+}
+
+@article{Fredman84,
+ author = {Fredman, Michael L. and Koml\'{o}s, J\'{a}nos and Szemer{\'e}di, Endre},
+ title = {Storing a Sparse Table with 0(1) Worst Case Access Time},
+ journal = {J. ACM},
+ issue_date = {July 1984},
+ volume = {31},
+ number = {3},
+ month = jun,
+ year = {1984},
+ issn = {0004-5411},
+ pages = {538--544},
+ numpages = {7},
+ url = {http://doi.acm.org/10.1145/828.1884},
+ doi = {10.1145/828.1884},
+ acmid = {1884},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+} 
+
+@misc{CAESAR,
+title = {{CAESAR: Competition for Authenticated Encryption: Security, Applicability, and Robustness}},
+url = {https://competitions.cr.yp.to/caesar.html},
+year = {2014},
+month = {mars}
+}
+
+@inproceedings{ABLMTY2013,
+  author    = {Elena Andreeva and
+  
+               Andrey Bogdanov and
+               Atul Luykx and
+               Bart Mennink and
+               Elmar Tischhauser and
+               Kan Yasuda},
+  title     = "{Parallelizable and Authenticated Online Ciphers}",
+  booktitle = {ASIACRYPT},
+  pages     = {424--443},
+  year      = {2013}
+  }
+  
+  @inproceedings{4russians,
+  title={On economic construction of the transitive closure of a direct graph},
+  author={Kronrod, M and Arlazarov, V and Dinic, E and Faradzev, I},
+  booktitle={Sov. Math (Doklady)},
+  volume={11},
+  pages={1209--1210},
+  year={1970}
+}
+  
+%proceedings{DBLP:conf/asiacrypt/2013-1,
+%  editor    = {Kazue Sako and
+%               Palash Sarkar},
+%  title     = {Advances in Cryptology - {ASIACRYPT} 2013 - 19th International Conference
+%               on the Theory and Application of Cryptology and Information Security,
+%               Bengaluru, India, December 1-5, 2013, Proceedings, Part {I}},
+%  series    = {Lecture Notes in Computer Science},
+%  volume    = {8269},
+%  publisher = {Springer},
+%  year      = {2013},
+%  url       = {http://dx.doi.org/10.1007/978-3-642-42033-7},
+%  doi       = {10.1007/978-3-642-42033-7},
+%  isbn      = {978-3-642-42032-0},
+%  timestamp = {Thu, 12 Dec 2013 14:46:53 +0100},
+%  biburl    = {http://dblp.uni-trier.de/rec/bib/conf/asiacrypt/2013-1},
+%  bibsource = {dblp computer science bibliography, http://dblp.org}
+%}
+
+
+@book{Joux2009,
+  title={Algorithmic cryptanalysis},
+  author={Joux, Antoine},
+  year={2009},
+  publisher={CRC Press}
+}
+
+@inproceedings{Wagner2002,
+  title="{A generalized birthday problem}",
+  author={Wagner, David},
+  booktitle={CRYPTO},
+  pages={288--304},
+  year={2002}
+}
+
+@inproceedings{NikolicSasaki2014,
+  title="{Refinements of the k-tree Algorithm for the Generalized Birthday Problem}",
+  author={Nikoli{\'c}, Ivica and Sasaki, Yu},
+  booktitle={ASIACRYPT},
+  pages={683--703},
+  year={2014},
+  organization={Springer}
+}
+
+@book{CLRS2001,
+  title="{Introduction to algorithms}",
+  author={Cormen, Thomas and Leiserson, Charles Eric and Rivest, Ronald L and Stein, Clifford},
+  volume={6},
+  year={2001},
+  publisher={MIT press Cambridge}
+}
+
+@inproceedings{BDP2005,
+  title="{Subquadratic algorithms for 3SUM}",
+  author={Baran, Ilya and Demaine, Erik D and P{\v{a}}tra{\c{s}}cu, Mihai},
+  booktitle={Workshop on Algorithms and Data Structures},
+  pages={409--421},
+  year={2005},
+  organization={Springer}
+}
+
+@article{GajentaanOvermars1995,
+  title="{On a class of $\mathcal{O}(n^2)$ problems in computational geometry}",
+  author={Gajentaan, Anka and Overmars, Mark H},
+  journal={Computational geometry},
+  volume={5},
+  number={3},
+  pages={165--185},
+  year={1995},
+  publisher={Elsevier}
+}
+
+@phdthesis{Mitzenmacher1996,
+  title="{The power of two random choices in randomized load balancing}",
+  author={Mitzenmacher, Michael David},
+  year={1996},
+  school={PhD thesis, Graduate Division of the University of California at Berkley}
+}
+
+@phdthesis{Becker2012,
+  title="{The representation technique: application to hard problems in cryptography}",
+  author={Becker, Anja},
+  year={2012},
+  school={Versailles-St Quentin en Yvelines}
+}
+
+@article{McEliece1978,
+  title="{A public-key cryptosystem based on algebraic}",
+  author={McEliece, Robert J},
+  journal={Coding Theory},
+  volume={4244},
+  pages={114--116},
+  year={1978}
+}
+
+@inproceedings{BJN2000,
+  title="{Why textbook ElGamal and RSA encryption are insecure}",
+  author={Boneh, Dan and Joux, Antoine and Nguyen, Phong Q},
+  booktitle={ASIACRYPT},
+  pages={30--43},
+  year={2000},
+  organization={Springer}
+}
+
+@inproceedings{Bleichenbacher2002,
+  title="{On the generation of DSA one-time keys}",
+  author={Bleichenbacher, Daniel},
+  booktitle={The 6th Workshop on Elliptic Curve Cryptography (ECC 2002)},
+  year={2002}
+}
+
+@book{Brent1973,
+  title="{Algorithms for Minimization Without Derivatives}",
+  author={Brent, Richard P},
+  year={1973},
+  publisher={Courier Corporation}
+}
+
+@inproceedings{AKS2001,
+  title="{A sieve algorithm for the shortest lattice vector problem}",
+  author={Ajtai, Mikl{\'o}s and Kumar, Ravi and Sivakumar, Dandapani},
+  booktitle={Proceedings of the thirty-third annual ACM symposium on Theory of computing},
+  pages={601--610},
+  year={2001},
+  organization={ACM}
+}
+
+@article{CoronJoux2004,
+  title="{Cryptanalysis of a Provably Secure Cryptographic Hash Function.}",
+  author={Coron, Jean-S{\'e}bastien and Joux, Antoine},
+  journal={IACR Cryptology ePrint Archive},
+  volume={2004},
+  pages={13},
+  year={2004}
+}
+
+@article{CoffeyGoodman1990,
+  title="{The complexity of information set decoding}",
+  author={Coffey, John T and Goodman, Rodney M},
+  journal={IEEE Transactions on Information Theory},
+  volume={36},
+  number={5},
+  pages={1031--1037},
+  year={1990},
+  publisher={IEEE}
+}
+
+@article{Gilbert1952,
+  title="{A comparison of signalling alphabets}",
+  author={Gilbert, Edgar N},
+  journal={Bell System Technical Journal},
+  volume={31},
+  number={3},
+  pages={504--522},
+  year={1952},
+  publisher={Wiley Online Library}
+}
+
+@journal{Varshamov1957,
+  title="{Estimate of the number of signals in error correcting codes}",
+  author={Varshamov, RR},
+  booktitle={Dokl. Akad. Nauk SSSR},
+  volume={117},
+  number={5},
+  pages={739--741},
+  year={1957}
+}
+
+@article{MinderSinclair2012,
+  title="{The extended $k$-tree algorithm}",
+  author={Minder, Lorenz and Sinclair, Alistair},
+  journal={Journal of cryptology},
+  volume={25},
+  number={2},
+  pages={349--382},
+  year={2012},
+  publisher={Springer}
+}
+
+@inproceedings{MayOzerov2015,
+  title={On Computing Nearest Neighbors with Applications to Decoding of Binary Linear Codes.},
+  author={May, Alexander and Ozerov, Ilya},
+  booktitle={EUROCRYPT},
+  pages={203--228},
+  year={2015}
+}
+
+@inproceedings{BJMM2012,
+  title="{Decoding random binary linear codes in $2^{n/20}$: How $1+ 1= 0$ improves information set decoding}",
+  author={Becker, Anja and Joux, Antoine and May, Alexander and Meurer, Alexander},
+  booktitle={EUROCRYPT},
+  pages={520--536},
+  year={2012},
+  organization={Springer}
+}
+
+@inproceedings{MMT2011,
+  title="{Decoding Random Linear Codes in $\tilde{\mathcal{O}}(2^{0.054 n})$}",
+  author={May, Alexander and Meurer, Alexander and Thomae, Enrico},
+  booktitle={EUROCRYPT},
+  pages={107--124},
+  year={2011},
+  organization={Springer}
+}
+
+@article{CanteauChabaud1998,
+  title="{A new algorithm for finding minimum-weight words in a linear code: application to McEliece's cryptosystem and to narrow-sense BCH codes of length 511}",
+  author={Canteaut, Anne and Chabaud, Florent},
+  journal={IEEE Trans. on Information Theory},
+  volume={44},
+  number={1},
+  pages={367--378},
+  year={1998},
+  publisher={IEEE}
+}
+
+@article{Leon1988,
+  title="{A probabilistic algorithm for computing minimum weights of large error-correcting codes}",
+  author={Leon, Jeffrey S},
+  journal={IEEE Trans. on Information Theory},
+  volume={34},
+  number={5},
+  pages={1354--1359},
+  year={1988},
+  publisher={IEEE}
+}
+
+@inproceedings{BMM1997,
+  title="{A new paradigm for collision-free hashing: Incrementality at reduced cost}",
+  author={Bellare, Mihir and Micciancio, Daniele},
+  booktitle={EUROCRYPT},
+  pages={163--192},
+  year={1997},
+  organization={Springer}
+}
+
+@article{JouxLercier2001,
+  title="{“Chinese \& Match”, an alternative to Atkin’s “Match and Sort” method used in the SEA algorithm}",
+  author={Joux, Antoine and Lercier, Reynald},
+  journal={Math. Comp.},
+  volume={70},
+  number={234},
+  pages={827--836},
+  year={2001}
+}
+
+@article{BKW2003,
+  title="{Noise-tolerant learning, the parity problem, and the statistical query model}",
+  author={Blum, Avrim and Kalai, Adam and Wasserman, Hal},
+  journal={Journal of the ACM (JACM)},
+  volume={50},
+  number={4},
+  pages={506--519},
+  year={2003},
+  publisher={ACM}
+}
+
+@inproceedings{chose2002fast,
+  title="{Fast correlation attacks: An algorithmic point of view}",
+  author={Chose, Philippe and Joux, Antoine and Mitton, Michel},
+  booktitle={EUROCRYPT},
+  pages={209--221},
+  year={2002},
+  organization={Springer}
+}
+
+@article{Bernstein2001,
+  title="{Enumerating solutions to $ p(a)+ q(b) = r(c) +s(d)$}",
+  author={Bernstein, Daniel},
+  journal={Math. Comp.},
+  volume={70},
+  number={233},
+  pages={389--394},
+  year={2001}
+}
+
+@inproceedings{CamionPatarin1991,
+  title="{The knapsack hash function proposed at Crypto’89 can be broken}",
+  author={Camion, Paul and Patarin, Jacques},
+  booktitle={EUROCRYPT},
+  pages={39--53},
+  year={1991},
+  organization={Springer}
+}
+
+@inproceedings{SchroeppelShamir1979,
+  title="{A $TS^2= \mathcal{O}(2^n)$ time/space tradeoff for certain NP-complete problems}",
+  author={Schroeppel, Richard and Shamir, Adi},
+  booktitle={Foundations of Computer Science, 20th Annual Symposium on},
+  pages={328--336},
+  year={1979},
+  organization={IEEE}
+}
+
+@article{SchroeppelShamir1981,
+  title="{A $T=\mathcal{O}(2^{n/2})$, $S=\mathcal{O}(2^{n/4})$ Algorithm for Certain NP-Complete Problems}",
+  author={Schroeppel, Richard and Shamir, Adi},
+  journal={SIAM journal on Computing},
+  volume={10},
+  number={3},
+  pages={456--464},
+  year={1981},
+  publisher={SIAM}
+}
+
+@article{Nandi2015,
+  title="{Revisiting Security Claims of XLS and COPA.}",
+  author={Nandi, Mridul},
+  journal={IACR Cryptology ePrint Archive},
+  volume={2015},
+  pages={444},
+  year={2015}
+}
+
+%inproceedings{nandi2014xls,
+%  title={XLS is not a strong pseudorandom permutation},
+%  author={Nandi, Mridul},
+%  booktitle={International Conference on the Theory and Application of Cryptology and Information Security},
+%  pages={478--490},
+%  year={2014},
+%  organization={Springer}
+%}
+
+@incollection{DDKS2012,
+  title="{Efficient dissection of composite problems, with applications to cryptanalysis, knapsacks, and combinatorial search problems}",
+  author={Dinur, Itai and Dunkelman, Orr and Keller, Nathan and Shamir, Adi},
+  booktitle={CRYPTO},
+  pages={719--740},
+  year={2012},
+  publisher={Springer}
+}
+
+@inproceedings{AKKM2013,
+  title="{Space--time tradeoffs for subset sum: An improved worst case algorithm}",
+  author={Austrin, Per and Kaski, Petteri and Koivisto, Mikko and M{\"a}{\"a}tt{\"a}, Jussi},
+  booktitle={International Colloquium on Automata, Languages, and Programming},
+  pages={45--56},
+  year={2013},
+  organization={Springer}
+}
+
+@incollection{Lyubashevsky2005,
+  title="{The parity problem in the presence of noise, decoding random linear codes, and the subset sum problem}",
+  author={Lyubashevsky},
+  booktitle={Approximation, Randomization and Combinatorial Optimization. Algorithms and Techniques},
+  pages={378--389},
+  year={2005},
+  publisher={Springer}
+}
+
+@inproceedings{Shallue2008,
+  title="{An improved multi-set algorithm for the dense subset sum problem}",
+  author={Shallue, Andrew},
+  booktitle={International Algorithmic Number Theory Symposium},
+  pages={416--429},
+  year={2008},
+  organization={Springer}
+}
+
+ @inproceedings{BLNPS2009,
+  title="{FSBday: Implementing Wagner’s Generalized Birthday Attack}",
+  author={Bernstein, Daniel J and Lange, Tanja and Niederhagen, Ruben and Peters, Christiane and Schwabe, Peter},
+  booktitle={INDOCRYPT},
+  pages={18--38},
+  year={2009}
+}
+
+@inproceedings{Stern1988,
+  title="{A method for finding codewords of small weight}",
+  author={Stern, Jacques},
+  booktitle={Coding Theory and Applications},
+  pages={106--113},
+  year={1988},
+  organization={Springer}
+}
+
+@inproceedings{LeeBrickell1988,
+  title="{An observation on the security of McEliece’s public-key cryptosystem}",
+  author={Lee, Pil Joong and Brickell, Ernest F},
+  booktitle={Workshop on the Theory and Application of of Cryptographic Techniques},
+  pages={275--280},
+  year={1988},
+  organization={Springer}
+}
+
+@inproceedings{Erickson1995,
+  title="{Lower Bounds for Linear Satisfiability Problems.}",
+  author={Erickson, Jeff},
+  booktitle={SODA},
+  pages={388--395},
+  year={1995}
+}
+
+@inproceedings{JorgensenPetti1914,
+  author    = {Allan Gr{\o}nlund J{\o}rgensen and
+               Seth Pettie},
+  title     = "{Threesomes, Degenerates, and Love Triangles}",
+  booktitle = {FOCS}, 
+  pages     = {621--630},
+  year      = {2014}
+}
+
+@inproceedings{ChanLewenstein1915,
+  author    = {Timothy M. Chan and
+               Moshe Lewenstein},
+  title     = "{Clustered Integer 3SUM via Additive Combinatorics}",
+  booktitle = {STOC}, 
+  pages     = {31--40},
+  year      = {2015}
+}
+
+@article{Yu2015,
+  author    = "{Huacheng Yu}",
+  title     = "{An Improved Combinatorial Algorithm for Boolean Matrix Multiplication}",
+  journal   ="{CoRR}",
+  volume    = "{abs/1505.06811}",
+  year      = {2015},
+  url       = "{http://arxiv.org/abs/1505.06811}"
+}
+
+@manual{m4ri,
+    key          = "M4RI",
+    author       = "Martin Albrecht and Gregory Bard",
+    organization = "The M4RI~Team",
+    title        = "{The M4RI Library -- Version 20121224}",
+    year         = 2012,
+    url          = "{http://m4ri.sagemath.org}",
+}
