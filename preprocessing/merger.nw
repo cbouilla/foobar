@@ -80,6 +80,9 @@ int main(int argc, char **argv)
 	<<Load all input files>>
 	<<Sort input>>
 	<<Deduplicate to auxiliary array>>
+	if (randomize) {
+		<<Randomly permute output>>
+	}
 	<<Dump output>>
 	exit(EXIT_SUCCESS);
 }
@@ -87,16 +90,21 @@ int main(int argc, char **argv)
 @ The name of input and output files are given on the command-line. Let us deal with the technicalities first.
 
 <<Process the command line>>=
-struct option longopts[2] = {
+struct option longopts[3] = {
 	{"output", required_argument, NULL, 'o'},
+	{"randomize", no_argument, NULL, 'r'},
 	{NULL, 0, NULL, 0}
 };
 char *out_filename = NULL;
+bool randomize = false;
 signed char ch;
 while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 	switch (ch) {
 	case 'o':
 		out_filename = optarg;
+		break;
+	case 'r':
+		randomize = true;
 		break;
 	default:
 		errx(1, "Unknown option\n");
@@ -170,6 +178,15 @@ for (u64 i = 0; i < total_size; i++) {
 }
 printf("-- item processed = %" PRId64 ", hash collisions=%d, duplicate=%d\n", n, collisions, duplicates);
 
+
+<<Randomly permute output>>=
+for (u32 i = 0; i < n - 1; i++) {
+        u32 j = i + (OUT[i] % (n - i));
+        u64 x = OUT[i];
+	OUT[i] = OUT[j];
+        OUT[j] = x;
+}
+        
 
 <<Dump output>>=
 printf("-- Saving\n");

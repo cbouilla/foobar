@@ -167,7 +167,7 @@ def merging():
                     if args.verbose:
                         print('# skipping {} [already merged]'.format(output_file))
                     continue
-            cmds = [MERGER, '--output', output_file] + input_files
+            cmds = [MERGER, '--randomize', '--output', output_file] + input_files
             if args.verbose:
                 print(" ".join(cmds))
             if not args.dry_run:
