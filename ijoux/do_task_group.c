@@ -277,16 +277,6 @@ int main(int argc, char **argv)
 
         struct jtask_t *all_tasks = load_tg_data(ctx);
 
-	/* permutation. FIXME : do it once and for all! */
-	for (int r = 0; r < ctx->per_core_grid_size; r++)
-	        for (int k = 0; k < 2; k++)
-			for (u32 i = 0; i < all_tasks[r].n[k] - 1; i++) {
-                		u32 j = i + (all_tasks[r].L[k][i] % (all_tasks[r].n[k] - i));
-	                        u64 x = all_tasks[r].L[k][i];
-	                        all_tasks[r].L[k][i] = all_tasks[r].L[k][j];
-	                        all_tasks[r].L[k][j] = x;
-        		}
-        
         struct task_result_t * all_solutions = tg_task_work(ctx, all_tasks);
 	
 	tg_gather_and_save(ctx, all_solutions);
