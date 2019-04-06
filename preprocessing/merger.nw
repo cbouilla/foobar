@@ -193,7 +193,7 @@ printf("-- Saving\n");
 FILE *f_out = fopen(out_filename, "w");
 if (f_out == NULL)
 	err(1, "cannot open %s for writing", out_filename);
-size_t check = fwrite(OUT, n, sizeof(*OUT), f_out);
+size_t check = fwrite(OUT, sizeof(*OUT), n, f_out);
 if (check != n)
 	err(1, "incomplete fwrite");
 if (fclose(f_out))
