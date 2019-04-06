@@ -40,10 +40,8 @@ SLICE_L = 20
 
 do_split = True
 check_split = False
-do_sort = True
-check_sort = False
 do_merge = True
-check_merge = False
+check_merge = True
 
 n_preimages = {}
 n_dict = {}
@@ -135,24 +133,6 @@ def splitting():
                 subprocess.run(cmdline).check_returncode()
 
 
-def sorting():
-    """
-    Sort all dictionnaries.
-    """
-    jobs = []
-    for i in range(1 << args.k):
-        for file in sorted(glob.glob('{}/{:03x}/*.unsorted'.format(DICT_DIR, i))):
-            file_sorted = file[:-9] + '.sorted'
-            if os.path.exists(file_sorted) and os.path.getsize(file) == os.path.getsize(file_sorted):
-                if args.verbose:
-                    print("# Skiping {} [already sorted]".format(file))
-                continue
-            cmds = [SORTER, file]
-            if args.verbose:
-                print(" ".join(cmds))
-            if not args.dry_run:
-                subprocess.run(cmds).check_returncode()
-
 def check_dict():
     """
     Verify all dictionnaries.
@@ -170,11 +150,11 @@ def check_dict():
 
 def merging():
     """
-    merge all (sorted) dictionnaries.
+    merge all dictionnaries.
     """
     for kind in KINDS:
         for i in range(1 << args.k):
-            input_files = sorted(glob.glob('{}/{:03x}/{}.*.sorted'.format(DICT_DIR, i, kind)))
+            input_files = sorted(glob.glob('{}/{:03x}/{}.*.unsorted'.format(DICT_DIR, i, kind)))
             if not input_files:
                 continue
             output_file = '{}/{}.{:03x}'.format(HASH_DIR, kind, i)
@@ -242,12 +222,6 @@ print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(args.k)
 splitting()
 #if args.check:
 #    print("X. Checking (unsorted) dictionaries")
-#    check_dict()
-
-print("2. Sorting (dictionaries -> dictionaries)")
-sorting()
-#if args.check:
-#    print("Y. Checking (sorted) dictionaries")
 #    check_dict()
 
 print("3. Merging (dictionaries -> hash files)")

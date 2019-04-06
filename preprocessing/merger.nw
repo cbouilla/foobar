@@ -13,11 +13,9 @@
 \setcounter{chapter}{4}
 \chapter{Merger}
 
-This program takes (sorted) sub-dictionnary files and writes down a
+This program takes sub-dictionnary files and writes down a
 \textbf{hash file} (i.e. a sequence of [[u64]]) in ascending order,
-without duplicates. It mostly implements a multi-way merge. This process is
-certainly IO bound. We did not make any effort to overlap IO and
-computation.
+without duplicates. Optionnaly, the output can be randomly permuted.
 
 <<*>>=
 <<Header files to include>>
@@ -38,6 +36,7 @@ computation.
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include "preprocessing.h"
 
@@ -51,14 +50,37 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1E6;
 }
 
+<<Auxiliary functions>>=
+void * load_dict(const char *filename, u64 *size_)
+{
+        struct stat infos;
+        if (stat(filename, &infos))
+                err(1, "fstat failed on %s", filename);
+        u64 size = infos.st_size;
+        assert(size % sizeof(struct dict_t) == 0);
+        u64 *content = malloc(size);
+        if (content == NULL)
+                err(1, "failed to allocate memory");
+        FILE *f = fopen(filename, "r");
+        if (f == NULL)
+                err(1, "fopen failed (%s)", filename);
+        u64 check = fread(content, 1, size, f);
+        if (check != size)
+                errx(1, "incomplete read %s", filename);
+        fclose(f);
+        *size_ = size / sizeof(struct dict_t);
+        return content;
+}
+
 
 <<The main program>>=
 int main(int argc, char **argv)
 {
 	<<Process the command line>>
-	<<Open all files>>
-	<<Merge input dictionnaries>>
-	<<Close all files>>
+	<<Load all input files>>
+	<<Sort input>>
+	<<Deduplicate to auxiliary array>>
+	<<Dump output>>
 	exit(EXIT_SUCCESS);
 }
 
@@ -88,172 +110,77 @@ u32 P = argc - optind;
 char **in_filenames = argv + optind;
 
 
-<<Open all files>>=
-FILE *f_in[P];
+<<Load all input files>>=
+struct dict_t *dict[P];
+u64 size[P];
+u64 total_size = 0;
 for (u32 i = 0; i < P; i++) {
-	f_in[i] = fopen(in_filenames[i], "r");
-	if (f_in[i] == NULL)
-		err(1, "cannot open %s for reading", in_filenames[i]);
+	printf("* Loading %s\n", in_filenames[i]);
+	dict[i] = load_dict(in_filenames[i], &size[i]);
+	total_size += size[i];
 }
-
-FILE *f_out = fopen(out_filename, "w");
-if (f_out == NULL)
-	err(1, "cannot open %s for writing", out_filename);
-
-<<Close all files>>=
-for (u32 i = 0; i < P; i++)
-	if (fclose(f_in[i]))
-		err(1, "fclose on %s", in_filenames[i]);
-if (fclose(f_out))
-	err(1, "fclose on %s", out_filename);
-
-
-@ The actual ``meat" of the program is the $P$-way merge procedure. Two
-options present themselves: using a heap or a tournament tree. We chose the
-latter (somewhat arbitrarily). This implementation is based on Knuth's
-``replacement selection'' algorithm.
-
-We maintain a binary tree with $P$ internal nodes and $P$ leaves. The $i$-th
-leave is associated with the $i$-th input file. Each internal node contains
-two fields: the [[struct dict_t]] of the loser of the match between its two
-children and the ``input file index'' of this value. Nodes are numbered from
-$1$ to $P$, so that the parent of [[i]] is [[i / 2]]. The zero-th node is
-implicitly represented by [[Q]]; it contains the winner of the tournament (the
-smallest hash).
-
-Each leaf of the tree is attached to a buffer, read from the $i$-th input
-file. We use the special hash value [[0xffffffffffffffff]] as a sentinel to mark
-the end of each files. At all times, the ``champion'' (smallest hash) is in
-[[Q]] and its file of origin is in [[i]].
-
-<<Merge input dictionnaries>>=
-static const u64 SENTINEL = 0xffffffffffffffffull;
-<<Allocate buffers>>
-<<Initialize the tournament tree>>
-while (Q.hash < SENTINEL) {
-	<<Append [[Q]] to the output buffer if not duplicate>>
-	<<If the [[i]]-th input buffer is empty, try to refill it>>
-	<<Read the next hash from the [[i]]-th buffer into [[Q]]>>
-	<<Update tournament tree ; update [[Q]] and [[i]]>>
-}
-<<Flush the output buffer to disk>>
-printf("\n");
-
-@ Let us start with the setup. We need one input buffer for each input file,
-and one output buffer. We must be careful that these buffer may not be full,
-and will be partially consumed.
-
-<<Allocate buffers>>=
-static const u32 OUT_BUFFER_SIZE = 131072;
-static const u32 IN_BUFFER_SIZE = 52428;
-struct dict_t *buffer_in[P];
-u32 size_in[P], ptr_in[P];
+struct dict_t *IN = malloc(total_size * sizeof(*IN));
+total_size = 0;
 for (u32 i = 0; i < P; i++) {
-	buffer_in[i] = malloc(IN_BUFFER_SIZE * sizeof(struct dict_t));
-	if (buffer_in[i] == NULL)
-		err(1, "malloc failed (input buffer)");
-	size_in[i] = 0;
-	ptr_in[i] = 0;
+	memcpy(IN + total_size, dict[i], size[i] * sizeof(*IN));
+	total_size += size[i];
+	free(dict[i]);
 }
-u64 *buffer_out = malloc(OUT_BUFFER_SIZE * sizeof(*buffer_out));
-if (buffer_out == NULL)
-	err(1, "malloc failed (output buffer)");
-u32 ptr_out = 0;
-u32 flushed = 0;
-double start = wtime();
+
+@ We use a cheap strategy: sort, then deduplicate.
+
+<<Auxiliary functions>>=
+int cmp(const void *a_, const void *b_)
+{
+	struct dict_t *a = (struct dict_t *) a_;
+	struct dict_t *b = (struct dict_t *) b_;
+	return (a->hash > b->hash) - (a->hash < b->hash);
+}
+
+
+<<Sort input>>=
+printf("--- Sorting\n");
+qsort(IN, total_size, sizeof(*IN), cmp);
 
 @ Duplicates are detected on output. We simply keep the previous value
 actually written and discard an eventual output if it is equal to this value.
-As a bonus, initializing this to zero automatically discards the parasitic
-inputs we used to build the tree! Writing the sorted elements to the output
-file is easy. We take the opportunity to implement some verbosity.
-
-<<Append [[Q]] to the output buffer if not duplicate>>=
-if (ptr_out == OUT_BUFFER_SIZE) {
-	<<Flush the output buffer to disk>>
-}
-if (Q.hash != Q_prev.hash) {
-	buffer_out[ptr_out++] = Q.hash;
-} else {
-	/* diagnose duplicate */
-	if ((Q.preimage.counter == Q_prev.preimage.counter) 
-				&& (Q.preimage.nonce == Q_prev.preimage.nonce))
-		duplicates++;
-	else
-		collisions++;
-}
-Q_prev = Q;
 
 
-<<Flush the output buffer to disk>>=
-flushed += ptr_out;
-size_t check_out = fwrite(buffer_out, sizeof(*buffer_out), ptr_out, f_out);
-if (check_out != (size_t) ptr_out)
-	err(1, "fwrite inconsistency : %zd vs %d", check_out, ptr_out);
-ptr_out = 0;
-double mhash = flushed * 1e-6;
-double rate = mhash / (wtime() - start);
-printf("\rItem processed: %.1fM (%.1fM/s) ", mhash, rate);
-printf("hash collisions=%d, duplicate=%d, ", collisions, duplicates - P);
-printf("IN=%.1f Mb/s   OUT =%.1f Mb/s", 20*rate, 8*rate);
-fflush(stdout);
-
-@ To bootstrap the tree construction, we use a trick: we create $P$ fake
-records whose hash is set to zero, each supposedly originating from a
-different input file. Because the initial value of [[prev]] is also zero, 
-the deduplication mecanism ensures that these special zero hashes will not 
-be pushed to the output. But ``extracting" them from the tree will cause a fresh, 
-actual value to be fetched from each input file.
-
-This scheme will cause $P$ artifical duplicates, that we eliminate when reporting.
-
-<<Initialize the tournament tree>>=
-struct dict_t loser[P];
-u32 origin[P];
-for (u32 j = 0; j < P; j++) {
-	loser[j].hash = 0;
-	loser[j].preimage.counter = 0;
-	loser[j].preimage.nonce = 0;
-	origin[j] = j;
-}
-struct dict_t Q = {0, {0, 0}}, Q_prev = {0, {0, 0}};
-u32 i = 0, collisions = 0, duplicates = 0;
-
-@ Now that the top of the tree has been dealt with, we must replace it with a
-new value from input buffer $i$. First, we take care of the fact that this
-buffer may be empty.
-
-<<If the [[i]]-th input buffer is empty, try to refill it>>=
-if (ptr_in[i] == size_in[i]) {
-	size_in[i] = fread(buffer_in[i], sizeof(struct dict_t), IN_BUFFER_SIZE, f_in[i]);
-	if (ferror(f_in[i]))
-		err(1, "fread on %s", in_filenames[i]);
-	ptr_in[i] = 0;
-}
-
-@ If refill was attempted but the buffer is still empty, we inject [[SENTINEL]].
-
-<<Read the next hash from the [[i]]-th buffer into [[Q]]>>=
-if (size_in[i] == 0)
-	Q.hash = SENTINEL;
-else
-	Q = buffer_in[i][ptr_in[i]++];
-
-@ And now the moment you have all been waiting for: the update of the
-tournament tree. At this stage [[Q]] is no longer the champion.
-
-<<Update tournament tree ; update [[Q]] and [[i]]>>=
-int T = (P + i) / 2;
-while (T >= 1) {
-	if (loser[T].hash < Q.hash) {
-		struct dict_t foo = loser[T];
-		int bar = origin[T];
-		loser[T] = Q;
-		origin[T] = i;
-		Q = foo;
-		i = bar;
+<<Deduplicate to auxiliary array>>=
+u64 *OUT = malloc(total_size * sizeof(*OUT));
+u64 n = 0;
+int duplicates = 0;
+int collisions = 0;
+struct dict_t prev;
+prev.hash = 0;
+prev.preimage.nonce = 0;
+prev.preimage.counter = 0;
+for (u64 i = 0; i < total_size; i++) {
+	if (IN[i].hash != prev.hash) {
+		OUT[n++] = IN[i].hash;
+	} else {
+		/* diagnose duplicate */
+		if ((IN[i].preimage.counter == prev.preimage.counter) 
+					&& (IN[i].preimage.nonce == prev.preimage.nonce))
+			duplicates++;
+		else
+			collisions++;
 	}
-	T = T / 2;
+	prev = IN[i];
 }
+printf("-- item processed = %" PRId64 ", hash collisions=%d, duplicate=%d\n", n, collisions, duplicates);
+
+
+<<Dump output>>=
+printf("-- Saving\n");
+FILE *f_out = fopen(out_filename, "w");
+if (f_out == NULL)
+	err(1, "cannot open %s for writing", out_filename);
+size_t check = fwrite(OUT, n, sizeof(*OUT), f_out);
+if (check != n)
+	err(1, "incomplete fwrite");
+if (fclose(f_out))
+	err(1, "fclose on %s", out_filename);
+
 
 @ \end{document}
