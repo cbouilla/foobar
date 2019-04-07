@@ -10,7 +10,7 @@ This script runs all the preprocessing.
 """
 
 KINDS = {'foo': 0, 'bar': 1, 'foobar': 2}
-PREIMAGE_DIR = '../data/preimages'
+PREIMAGE_DIR = '../fooabar'
 DICT_DIR = '../data/dict'
 HASH_DIR = '../data/hash'
 
