@@ -206,6 +206,7 @@ if (nn_bind(socket_pull, server_address_pull) < 0)
 
 <<Main server loop>>=
 printf("Server ready on port %d\n", server_port);
+last_packet_time = wtime();
 while (1) {
 	<<Wait for incoming message and process it>>
 	<<Potentially store status and display progress information>>
@@ -223,10 +224,9 @@ pfd[1].fd = socket_pull;
 pfd[1].events = NN_POLLIN;
 pfd[1].revents = 0;
 int rc = nn_poll(pfd, 2, 1000);
-if (rc == 0)
-	fprintf(stderr, "Timeout!\n");
 if (rc < 0)
 	errx(1, "nn_poll : %s\n", nn_strerror(nn_errno()));
+<<Update timeout status>>
 
 if (pfd[0].revents & NN_POLLIN) {
 	void *buf = NULL;
@@ -296,7 +296,7 @@ accurate start values of the counter to the miner. Therefore, every minute
 
 <<Global variables>>=
 int64_t counter, last_counter_saved, nonce_received;
-double last_counter_time;
+double last_counter_time, last_packet_time;
 FILE *status_file;
 
 @ We rely on a time function with sub-second precision.
@@ -344,9 +344,39 @@ if (nonce_received > last_counter_saved  + 1000) {
 	fflush(work_file);
 }
 
-@ 
+@ \section{Handling Faulty Miners}
 
-For my own reference: copying nonce files to amazon S3 is done with:
+During normal operation, a timeout of 2s may be caused by network
+disturbances. This is fine. However, if the miner stops sending anything for a
+long period of time, there is a problem, and I want to know about
+
+<<Global variables>>=
+int warned = 0;
+int in_timeout = 0;
+
+<<Update timeout status>>=
+if (rc == 0) {
+	if (!in_timeout)
+		printf("\n");
+	in_timeout = 1;
+	fprintf(stderr, "\rTimeout %.0fs", wtime() - last_packet_time);
+	fflush(stderr);
+	<<Handle long timeout>>
+} else {
+	last_packet_time = wtime();
+	warned = 0;
+	in_timeout = 0;
+}
+
+<<Handle long timeout>>=
+if (wtime() - last_packet_time > 600 && !warned) {
+	char cmd[255];
+	sprintf(cmd, "echo \"this is bad\" | mail -s \"Miner timeout on port %d\" charles.bouillaguet@univ-lille.fr", server_port);
+	system(cmd);
+	warned = 1;
+}
+
+@ For my own reference: copying nonce files to amazon S3 is done with:
 \begin{verbatim}
    aws s3 cp FILE s3://3sum-foobar/
 \end{verbatim}
