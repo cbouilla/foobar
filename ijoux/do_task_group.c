@@ -115,12 +115,25 @@ struct tg_context_t * setup(int argc, char **argv)
 	}
 
 	/* validation */
-	assert(0 < ctx->tg_grid_size);
-	assert(0 < ctx->cpu_grid_size);
-	assert(0 < ctx->per_core_grid_size);
-	assert(world_size == ctx->cpu_grid_size * ctx->cpu_grid_size);
-	assert (0 <= ctx->tg_i && ctx->tg_i < ctx->tg_grid_size);
-	assert (0 <= ctx->tg_j && ctx->tg_j < ctx->tg_grid_size);
+	if (ctx->tg_grid_size < 0)
+		errx(1, "missing --tg-grid-size");
+	if (ctx->cpu_grid_size < 0)
+		errx(1, "missing --cpu-grid-size");
+	if (ctx->per_core_grid_size < 0)
+		errx(1, "missing --per-core-grid-size");
+	if (ctx->hash_dir == NULL)
+		errx(1, "missing --hash-dir");		
+	if (ctx->slice_dir == NULL)
+		errx(1, "missing --slice-dir");		
+
+	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
+		errx(2, "wrong communicator size");
+	
+	if ((ctx->tg_i < 0) || (ctx->tg_i >= ctx->tg_grid_size))
+		errx(3, "invalid i value (not in [0:tg-grid-size]");
+	if ((ctx->tg_j < 0) || (ctx->tg_j >= ctx->tg_grid_size))
+		errx(3, "invalid j value (not in [0:tg-grid-size]");
+
 
 	/* my own coordinates in the CPU grid */
 	ctx->cpu_i = rank / ctx->cpu_grid_size;
