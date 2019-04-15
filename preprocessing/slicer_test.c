@@ -33,7 +33,7 @@ u64 * load(const char *filename, u64 *size_)
         return content;
 }
 
-static const u32 MAX_ISD_ITERATIONS = 1024;
+static const u32 MAX_ISD_ITERATIONS = 100;
 
 struct list_t {
         u64 x;
@@ -485,19 +485,19 @@ int main(int argc, char **argv)
 		                        for (u32 j = 0; j < w; j++)
 		                                weight += __builtin_popcountll(T[i * w + j]);
 		                        if (weight < best_weight) {
-		                                printf("w = %d (%d iterations, row %d)\n", weight, it, i);
+		                                printf("\rw = %d (%d iterations%d)", weight, it, i);
 		                                best_weight = weight;
 		                                best_equation = E[i];
 		                        }
 		                }
-		                if (best_weight < expected_w + 1) {
-		                	printf("weight small enough; early abort\n");
+		                if (best_weight <= expected_w + 1) {
+		                	printf("\nweight small enough; early abort\n");
 		                	break;
 		                }
                         }
                         filter_active(best_equation);
                         equations[k++] = best_equation;
-                        printf("Best weight=%d, equation=%" PRIx64 "\n", best_weight, best_equation);
+                        printf("\nBest weight=%d, equation=%" PRIx64 "\n", best_weight, best_equation);
                         
                         printf("Done an ISD pass. I now have %d equations and %d active vectors\n", k, m);
                 }
