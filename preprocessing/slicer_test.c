@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <math.h>
 
-// #include <m4ri/m4ri.h>
+#include <gmp.h>
 #include "preprocessing.h"
 
 static const u32 MAX_ISD_ITERATIONS = 1024;
@@ -116,8 +116,7 @@ static const uint64_t M6_LO = 0x5555555555555555;
   "algorithmic cryptanalysis" (cf. http://www.joux.biz). It
   was slighlty modified by C. Bouillaguet. Just like the original, it is licensed 
   under a Creative Commons Attribution-Noncommercial-Share Alike 3.0 Unported License. */
-
-void transpose_64(u64 *M, u64 *T)
+void transpose_64(const u64 *M, u64 *T)
 {
         /* to unroll manually */
         for (int l = 0; l < 32; l++) {
@@ -169,11 +168,112 @@ void transpose_64(u64 *M, u64 *T)
 void print_matrix(int n, int m, u64 *M)
 {
         for (int i = 0; i < n; i++) {
+        	int weight = 0;
                 printf("%4d: ", i);
-                for (int j = 0; j < m; j++)
+                for (int j = 0; j < m; j++) {
                         printf("%016" PRIx64 " ", M[i*m + j]);
-                printf("\n");
+                        weight += __builtin_popcountll(M[i*m + j]);
+                }
+                printf("  | %d\n", weight);
         }
+}
+
+void transpose(const u64 *M, int w, u64 *T)
+{
+	for (u32 i = 0; i < w; i++) {
+		u64 S[64];
+		transpose_64(M + i*64, S);
+		for (u32 j = 0; j < 64; j++)
+			T[i + j * w] = S[j];
+	}
+}
+
+
+void swap_columns(u64 *T, u32 w, u64 j, u64 l)
+{
+        i32 lw = l / 64;
+        i32 lbit = l % 64;
+        u64 *Tl = T + lw;
+        for (u32 i = 0; i < 64; i++) {
+                u64 a = T[i * w];
+                u64 b = Tl[i * w];
+                u64 delta = ((a >> j) ^ (b >> lbit)) & 1;
+                T[i * w] ^= delta << j;
+                Tl[i * w] ^= delta << lbit;
+        }
+}
+
+
+int check_rank_defect(const u64 *M, u32 m, u64 *equations, int n_equations) {
+	/* transpose the matrix, in order to access the columns efficiently */
+       	u32 w = ceil(m / 64.);
+	u32 rows = 64 * w;
+       	u64 T[rows];
+       	transpose(M, w, T);
+       	int free = 0;
+
+	/* gaussian elimination; E is the change of basis matrix */
+	u64 E[64];
+	for (u32 i = 0; i < 64; i++)
+		E[i] = 1ull << i;     /* E == identity */
+				
+	/* eliminate the j-th column */
+	for (i32 j = 0; j < 64 - n_equations; j++) {
+		i32 l = j + 1;
+
+		/* search a row with a non-zero coeff ---> it will be the pivot */
+		i32 i = -1;
+		u64 mask = 1ull << j;
+		while (i < 0 && l <= m) {
+			for (i32 k = j; k < 64; k++) {
+				if (((T[k * w] & mask) != 0)) {
+					i = k;
+					break;
+				}
+			}
+			if (i >= 0)
+		                break;    /* found pivot */
+	
+			/* pivot not found. This means that the 64-k first columns 
+			   are linearly dependent. We swap the j-th column with a random
+			   column of index greater than j. */
+			swap_columns(T, w, j, l);
+			l++;
+		}
+
+		if (l > m) {
+			/* pivot not found: rank defect */
+			for (int r = j; r < 64; r++) {
+				for (int s = 0; s < w; s++)
+					if (T[r * w + s] != 0) {
+						printf("T[%d] != 0\n", r);
+						assert(0);
+					}
+				equations[n_equations] = E[r];
+				n_equations++;
+				free++;
+			}
+			printf("---> Rank defect; %d free equations\n", free);
+			return n_equations;
+		}
+                                       
+		/* permute the rows so that the pivot is on the diagonal */
+        	if (j != i) {
+        	        swap(E, i, j);
+        	        for (u32 k = 0; k < w; k++)
+        	                swap(T, i * w + k, j * w + k);
+        	}
+
+                /* use the pivot to eliminate everything else on the column */
+                for (i32 k = 0; k < 64; k++) {
+                        if ((k != j) & ((T[k * w] & mask) != 0)) {
+                                E[k] ^= E[j];         /* record the operation */
+                                for (u32 l = 0; l < w; l++)
+                                        T[k * w + l] ^= T[j * w + l];
+                        }
+                }
+	}
+	return n_equations;  /* no rank defect */
 }
 
 
@@ -241,6 +341,7 @@ int main(int argc, char **argv)
         list_clear(reject);
 
         /* setup: all vectors are "active" */
+        n = 200;
         for (u32 i = 0; i < n; i++) {
                 items[i].x = L[i];
                 list_insert(active, &items[i]);
@@ -252,86 +353,98 @@ int main(int argc, char **argv)
                 printf("Starting slice with %d active vectors\n", m);
                 u64 equations[64];
                 i32 k = 0; /* #equations */
-                #if 0
-                /* choose a random ("cheap") equation and filter the list */
-                while (m >= MAX_ISD_INPUT) {
-                        bool ok = false;
-                        u64 eq;
-                        while (!ok) {
-                                u32 j = lrand48() & 63;
-                                eq = 1ull << j;
-                                ok = true;
-                                for (u32 i = 0; i < k; i++)
-                                        if (eq == equations[i]) {
-                                                ok = false;
-                                                break;
-                                        }
-                        }
-                        equations[k++] = eq;
-
-                        filter_active(eq);
-
-
-                }
-                printf("Picked %d cheap equations, now %d active vectors remain\n", k, m);
-                #endif
+               
                 while (k < l) {
-                        printf("Attacking %d active vectors with ISD (they live in a subspace of dimension %d\n", m, 64-k);
-                        double R = (64. - k) / m;
-                        double expected_w = m * GV(R);
-                        u64 expected_its = pow(2, m/20);
-                        printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.1f, E[iterations] = %" PRId64 "\n", m, 64 - k, R, expected_w, expected_its);
-                        u32 w = ceil(m / 64.);
-                        u32 rows = 64 * w;
-                        u64 M[rows];
-                        u32 i = 0;
-                        for (struct list_t *item = active->next; item != active; item = item->next)
-                                M[i++] = item->x;
-                        assert(i == m);
-                        while (i < rows)
-                                M[i++] = 0x0000000;
+			printf("Attacking %d active vectors with ISD\n", m);
 
-			// Si m < 64 - (l-k), alors on peut leur régler leur compte.
+			
+			/* copy the active vectors into M, and pad with zeros to reach a multiple of 64 */
+        		u32 w = ceil(m / 64.);
+			u32 rows = 64 * w;
+                	u64 M[rows];
+                	u32 i = 0;
+                	for (struct list_t *item = active->next; item != active; item = item->next)
+                	        M[i++] = item->x;
+                	while (i < rows)
+                	        M[i++] = 0x0000000;
+
+                	k = check_rank_defect(M, m, equations, k);
+                	if (k >= l)
+                		break;
+
+                        int d = 64 - k;
+                        double R = ((double) d) / m;
+                        double expected_w = m * GV(R);
+           
+                        // Si m < 64 - (l-k), alors on peut leur régler leur compte.
 			assert(m >= 64 - k);
 
+
+                        mpz_t a, b, c;
+                        mpz_init(a);
+                        mpz_init(b);
+                        mpz_init(c);
+                        mpz_bin_uiui(a, m, expected_w);
+                        mpz_bin_uiui(b, m - d, expected_w - 1);
+                        mpz_mul_ui(b, b, d);
+                        mpz_tdiv_q(c, a, b);
+                        double expected_its = mpz_get_d(c);
+
+                        printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.1f, E[iterations] = %f\n", m, d, R, expected_w, expected_its);
+
+                        /* setup low-weight search */
                         u32 best_weight = m;
                         u64 best_equation = 0;
                         u32 n_iterations = (1 + k) * MAX_ISD_ITERATIONS;
-                        bool stop = false;
+                        printf("Going for %d iterations\n", n_iterations);
+
+                        u64 T[rows];
+                        u64 E[64];
                         for (u32 it = 0; it < n_iterations; it++) {
                                 /* this is one iteration of the Lee-Brickell algorithm */
 
                                 /* random permutation of the rows */
-                                for (i32 i = 0; i < 64; i++) {
+                                for (i32 i = 0; i < 64 - k; i++) {
                                         i32 j = i + (lrand48() % (m - i));
                                         swap(M, i, j);
                                 }
 
                                 /* transpose the matrix, in order to access the columns efficiently */
-                                u64 T[rows];
-                                for (u32 i = 0; i < w; i++) {
-                                        u64 S[64];
-                                        transpose_64(M + i*64, S);
-                                        for (u32 j = 0; j < 64; j++)
-                                                T[i + j * w] = S[j];
-                                }
+                                transpose(M, w, T);
 
+				/* gaussian elimination; E is the change of basis matrix */
+				for (u32 i = 0; i < 64; i++)
+					E[i] = 1ull << i;     /* E == identity */
 
-                                /* gaussian elimination; E is the change of basis matrix */
-                                u64 E[64];
-                                for (u32 i = 0; i < 64; i++)
-                                        E[i] = 1ull << i;     /* E == identity */
-				
+#if 0                               
+				for (u32 i = 0; i < 64 - k; i++) {
+					for (u32 j = 0; j < m; j++) {
+						u64 u = j / 64;
+						u64 v = j % 64;
+						u32 a = __builtin_popcountll(M[j] & E[i]) & 1;
+						u32 b = (T[i * w + u] >> v) & 1;
+						if (a != b) {
+							printf("Just after transpose. Problem. i=%d, j=%d.\n", i, j);
+							printf("E[i] = %016" PRIx64 ", M[j] = %016" PRIx64 "\n", E[i], M[j]);
+							printf("T[i] = ");
+							for (int k = 0; k < w; k++)
+								printf("%016" PRIx64 " ", T[i * w + k]);
+							printf("\n");
+							assert(a == b);
+						}
+					}
+				}
+#endif
 
                                 /* eliminate the j-th column */
-				
+				int n_random_trials = 6;
                                 for (i32 j = 0; j < 64 - k; j++) {
-					
                                         i32 l = j + 1;
+
                                         /* search a row with a non-zero coeff ---> it will be the pivot */
                                         i32 i = -1;
                                         u64 mask = 1ull << j;
-                                        while (i < 0 && l <= m) {
+                                        while (i < 0 && l < m) {
                                                 for (i32 k = j; k < 64; k++) {
                                                         if (((T[k * w] & mask) != 0)) {
                                                                 i = k;
@@ -342,28 +455,28 @@ int main(int argc, char **argv)
                                                         break;    /* found pivot */
 
                                                 /* pivot not found. This means that the 64-k first columns 
-                                                   are linearly dependent. We swap the j-th column with a random
-                                                   column of index greater than j. */
+                                                   are linearly dependent. We swap the j-th column with the l-th. */
 
-                                                i32 lw = l / 64;
-                                                i32 lbit = l % 64;
-                                                u64 *Tl = T + lw;
-                                                for (u32 i = 0; i < 64; i++) {
-                                                        u64 a = T[i * w];
-                                                        u64 b = Tl[i * w];
-                                                        u64 delta = ((a >> j) ^ (b >> lbit)) & 1;
-                                                        a ^= delta << j;
-                                                        b ^= delta << lbit;
-                                                        T[i * w] = a;
-                                                        Tl[i * w] = b;
+                                                i32 o;
+                                                if (n_random_trials >= 0) {
+                                                	o = (j + 1) + (lrand48() % (m - (j + 1)));
+                                                	n_random_trials--;
+                                                } else {
+                                                	o = l;
+                                                	l++;
                                                 }
-						l++;
+                                                swap_columns(T, w, j, o);
+                                        	swap(M, j, o);
+
                                         }
-					if (l > m) {
-						stop = true;
-						break;
-					}
-                                       
+                                        assert(i >= 0);
+                                        // if (i < 0) {
+                                        // 	printf("%d\n", j);
+                                        // 	print_matrix(64, w, T);
+					// 	
+                                        // }
+
+
 					/* permute the rows so that the pivot is on the diagonal */
                                         if (j != i) {
                                                 swap(E, i, j);
@@ -381,38 +494,58 @@ int main(int argc, char **argv)
                                         }
                                 }
 				
-                                /* here, gaussian elimination is finished */
-				
-                                /* look for a low-weight row */
-				if (!stop) {
-		                        for (u32 i = 0; i < 64; i++) {
-		                                u32 weight = 0;
-		                                for (u32 j = 0; j < w; j++)
-		                                        weight += __builtin_popcountll(T[i * w + j]);
-		                                if (0 < weight && weight < best_weight) {
-		                                        printf("w = %d (%d iterations)\n", weight, it);
-		                                        best_weight = weight;
-		                                        best_equation = E[i];
-		                                }
-		                        }
+#if 0
+				/* check thruthfullnes of T vs E[i] and M. In principe T = E * M.t ---> T_ij == */
+				for (u32 i = 0; i < 64 - k; i++) {
+					for (u32 j = 0; j < m; j++) {
+						u64 u = j / 64;
+						u64 v = j % 64;
+						u32 a = __builtin_popcountll(M[j] & E[i]) & 1;
+						u32 b = (T[i * w + u] >> v) & 1;
+						if (a != b) {
+							printf("Just after transpose. Problem. i=%d, j=%d.\n", i, j);
+							printf("E[i] = %016" PRIx64 ", M[j] = %016" PRIx64 "\n", E[i], M[j]);
+							printf("T[i] = ");
+							for (int k = 0; k < w; k++)
+								printf("%016" PRIx64 " ", T[i * w + k]);
+							printf("\n");
+							assert(a == b);
+						}
+					}
 				}
+#endif
 
+                                // if (m < 100) {
+                                // 	print_matrix(64, w, T);
+                                // 	getchar();
+                                // }
+
+                                /* look for a low-weight row */
+		                for (u32 i = 0; i < 64 - k; i++) {
+		                        u32 weight = 0;
+		                        for (u32 j = 0; j < w; j++)
+		                                weight += __builtin_popcountll(T[i * w + j]);
+		                        if (weight < best_weight) {
+		                                printf("w = %d (%d iterations, row %d)\n", weight, it, i);
+		                                best_weight = weight;
+		                                best_equation = E[i];
+		                        }
+		                }
+		                
                         }
-                        printf("weight found = %d\n", best_weight);
-
                         filter_active(best_equation);
-
                         equations[k++] = best_equation;
                         printf("Best weight=%d, equation=%" PRIx64 "\n", best_weight, best_equation);
+                        
                         printf("Done an ISD pass. I now have %d equations and %d active vectors\n", k, m);
                 }
-                printf("Finished: I now have %d equations and %d active vectors\n", l, m);
+                assert(k >= l);
+                printf("Finished: I now have %d equations and %d active vectors\n", k, m);
                 n -= m;
                 
                 /* Here, we would need to save the slice to the file !!!
                    Instead, we do nothing at all... */
-                
-                for (i32 i = 0; i < l; i++)
+                for (i32 i = 0; i < k; i++)
                         printf("eq[%d] = %016" PRIx64 "\n", i, equations[i]);
 
                 /* The active (=good) vectors are discarded. The rejected vectors become active again for the next pass. */
@@ -421,9 +554,6 @@ int main(int argc, char **argv)
                 reject = tmp;
                 list_clear(reject);
                 m = n;
-		//break;
-		
-
         }
         exit(EXIT_SUCCESS);
 }
