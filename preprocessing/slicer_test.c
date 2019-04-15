@@ -302,7 +302,7 @@ int main(int argc, char **argv)
                                 /* this is one iteration of the Lee-Brickell algorithm */
 
                                 /* random permutation of the rows */
-                                for (i32 i = 0; i < 64 - k; i++) {
+                                for (i32 i = 0; i < 64; i++) {
                                         i32 j = i + (lrand48() % (m - i));
                                         swap(M, i, j);
                                 }
@@ -343,20 +343,7 @@ int main(int argc, char **argv)
 
                                                 /* pivot not found. This means that the 64-k first columns 
                                                    are linearly dependent. We swap the j-th column with a random
-                                                   column of index greater than 64-k (FIXME : than j). 
-                                                   POTENTIAL PROBLEM: this could also fail if ALL columns are linearly dependent. 
-                                                   we need to detect this special situation. */
-						//i32 l = j + (lrand48() % (m - j));
-						
-                                                
-						/*if (l >= [nombre total de vecteurs actif]) {
-							// pas de pivot sur cette colonne, ni sur celles d'après
-   							// les lignes du bas sont toutes nulles
-							// E[j], E[j+1], ..., E[l-1] donnent des équations satisfsaites par tous les vecteurs actifs.
-							// interrompre l'itération courante de Lee-Brickell, augmenter k et aviser.
-							// ne pas passer à la suite
-						}*/
-						
+                                                   column of index greater than j. */
 
                                                 i32 lw = l / 64;
                                                 i32 lbit = l % 64;
@@ -386,10 +373,10 @@ int main(int argc, char **argv)
 
                                         /* use the pivot to eliminate everything else on the column */
                                         for (i32 k = 0; k < 64; k++) {
-                                                if ((k != i) & ((T[k * w] & mask) != 0)) {
-                                                        E[k] ^= E[i];         /* record the operation */
-                                                        for (u32 j = 0; j < w; j++)
-                                                                T[k * w + j] ^= T[i * w + j];
+                                                if ((k != j) & ((T[k * w] & mask) != 0)) {
+                                                        E[k] ^= E[j];         /* record the operation */
+                                                        for (u32 l = 0; l < w; l++)
+                                                                T[k * w + l] ^= T[j * w + l];
                                                 }
                                         }
                                 }
