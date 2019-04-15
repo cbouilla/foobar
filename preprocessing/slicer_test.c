@@ -12,6 +12,27 @@
 #include <gmp.h>
 #include "preprocessing.h"
 
+u64 * load(const char *filename, u64 *size_)
+{
+        struct stat infos;
+        if (stat(filename, &infos))
+                err(1, "fstat failed on %s", filename);
+        u64 size = infos.st_size;
+        assert ((size % 8) == 0);
+        u64 *content = aligned_alloc(64, size);
+        if (content == NULL)
+                err(1, "failed to allocate memory");
+        FILE *f = fopen(filename, "r");
+        if (f == NULL)
+                err(1, "fopen failed (%s)", filename);
+        u64 check = fread(content, 1, size, f);
+        if (check != size)
+                errx(1, "incomplete read %s", filename);
+        fclose(f);
+        *size_ = size / 8;
+        return content;
+}
+
 static const u32 MAX_ISD_ITERATIONS = 1024;
 
 struct list_t {
@@ -203,77 +224,110 @@ void swap_columns(u64 *T, u32 w, u64 j, u64 l)
         }
 }
 
-
-int check_rank_defect(const u64 *M, u32 m, u64 *equations, int n_equations) {
-	/* transpose the matrix, in order to access the columns efficiently */
-       	u32 w = ceil(m / 64.);
-	u32 rows = 64 * w;
-       	u64 T[rows];
-       	transpose(M, w, T);
-       	int free = 0;
-
-	/* gaussian elimination; E is the change of basis matrix */
-	u64 E[64];
+/* The input rows are known to span a vector space of dimension less than d.
+   There are 64 input rows and m input columns.
+   Returns j such that columns [0:j] are echelonized.
+   rows [j+1:64] are zero. */
+int echelonize(u64 *T, u32 m, u32 w, int d, u64 *E)
+{
+	/* E is the change of basis matrix */
 	for (u32 i = 0; i < 64; i++)
 		E[i] = 1ull << i;     /* E == identity */
-				
-	/* eliminate the j-th column */
-	for (i32 j = 0; j < 64 - n_equations; j++) {
+
+	printf("Echelonize with m=%d, d=%d\n", m, d);
+
+	int n_random_trials = 6;
+	for (i32 j = 0; j < d; j++) {
+		/* eliminate the j-th column */
 		i32 l = j + 1;
+
+		printf("j = %d\n", j);
 
 		/* search a row with a non-zero coeff ---> it will be the pivot */
 		i32 i = -1;
 		u64 mask = 1ull << j;
-		while (i < 0 && l <= m) {
-			for (i32 k = j; k < 64; k++) {
-				if (((T[k * w] & mask) != 0)) {
-					i = k;
-					break;
-				}
-			}
-			if (i >= 0)
+		while (1) {
+		        for (i32 k = j; k < 64; k++) {
+		        	printf("Examining row %d\n", k);
+		                if (((T[k * w] & mask) != 0)) {
+		                        i = k;
+		                        printf("found i = %d. %016" PRIx64 "\n", i, T[i * w]);
+		                        break;
+		                }
+		        }
+		        if (i >= 0)
 		                break;    /* found pivot */
-	
-			/* pivot not found. This means that the 64-k first columns 
-			   are linearly dependent. We swap the j-th column with a random
-			   column of index greater than j. */
-			swap_columns(T, w, j, l);
-			l++;
-		}
 
-		if (l > m) {
-			/* pivot not found: rank defect */
-			for (int r = j; r < 64; r++) {
-				for (int s = 0; s < w; s++)
-					if (T[r * w + s] != 0) {
-						printf("T[%d] != 0\n", r);
-						assert(0);
-					}
-				equations[n_equations] = E[r];
-				n_equations++;
-				free++;
+			/* pivot not found. This means that the d first columns 
+			   are linearly dependent. We swap the j-th column with the o-th. */
+
+			i32 o;
+			if ((n_random_trials >= 0) && (j + 1 < m)) {
+				o = (j + 1) + (lrand48() % (m - (j + 1)));
+				n_random_trials--;
+			} else {
+				if (l >= m)
+					break;
+				o = l;
+				l++;
 			}
-			printf("---> Rank defect; %d free equations\n", free);
-			return n_equations;
+			printf("trying %d <---> %d\n", j, o);
+			swap_columns(T, w, j, o);
 		}
-                                       
+		if (i < 0)
+			return j;
+                                        
 		/* permute the rows so that the pivot is on the diagonal */
-        	if (j != i) {
-        	        swap(E, i, j);
-        	        for (u32 k = 0; k < w; k++)
-        	                swap(T, i * w + k, j * w + k);
-        	}
+		if (j != i) {
+                	swap(E, i, j);
+                	for (u32 k = 0; k < w; k++)
+                		swap(T, i * w + k, j * w + k);
+		}
 
-                /* use the pivot to eliminate everything else on the column */
-                for (i32 k = 0; k < 64; k++) {
-                        if ((k != j) & ((T[k * w] & mask) != 0)) {
-                                E[k] ^= E[j];         /* record the operation */
-                                for (u32 l = 0; l < w; l++)
-                                        T[k * w + l] ^= T[j * w + l];
-                        }
-                }
+		/* use the pivot to eliminate everything else on the column */
+		for (i32 k = 0; k < 64; k++) {
+			if ((k != j) & ((T[k * w] & mask) != 0)) {
+				E[k] ^= E[j];         /* record the operation */
+				printf("Doing T[%d] <-- T[%d] + T[%d]\n", k, k, j);
+				for (u32 l = 0; l < w; l++)
+					T[k * w + l] ^= T[j * w + l];
+			}
+		}
 	}
-	return n_equations;  /* no rank defect */
+	return d;
+}
+
+/* If the columns of M span a vector space of dimension less than 64 - k, then
+   find new equations that are satisfied by all vectors in M. Returns the total
+   number of equations.
+*/
+int check_rank_defect(const u64 *M, u32 m, u64 *equations, int k) {
+       	u32 w = ceil(m / 64.);
+	u32 rows = 64 * w;
+       	u64 E[64];
+       	u64 T[rows];
+       	int d = 64 - k;
+       	transpose(M, w, T);
+       	
+       	int j = echelonize(T, m, w, d, E);
+       	if (j == d)
+       		return k;
+
+       	printf("j = %d\n", j);
+       	print_matrix(64, w, T);
+
+	/* not enough pivots found: rank defect */
+	for (int r = j; r < d; r++) {
+		for (int s = 0; s < w; s++)
+			if (T[r * w + s] != 0) {
+				printf("T[%d] != 0\n", r);
+				assert(0);
+			}
+		equations[k] = E[r];
+		k++;
+	}
+	printf("---> Rank defect; %d free equations\n", d - j);
+	return k;
 }
 
 
@@ -307,25 +361,13 @@ int main(int argc, char **argv)
                 errx(1, "missing --target-dir");
         in_filename = argv[optind];
 
-        /* load data --> FIXME, use common function */
-        struct stat infos;
-        if (stat(in_filename, &infos))
-                err(1, "fstat (%s)", in_filename);
-        u64 *L = malloc(infos.st_size);
-        if (L == NULL)
-                err(1, "failed to allocate memory");
-        FILE *f_in = fopen(in_filename, "r");
-        if (f_in == NULL)
-                err(1, "fopen failed");
-        size_t check = fread(L, 1, infos.st_size, f_in);
-        if ((check != (size_t) infos.st_size) || ferror(f_in))
-                err(1, "fread : read %zd, expected %zd", check, infos.st_size);
-        if (fclose(f_in))
-                err(1, "fclose %s", in_filename);
-        u32 n = infos.st_size / sizeof(*L);
+        u64 n;
+        u64 *L = load(in_filename, &n);
         if (l == 0) {
                 l = ceil(log2(n));
-                printf("using default l = %d\n", l);
+                if (l < 19)
+                	l = 19;
+                printf("NOTE: Using default l = %d\n", l);
         }
 
         /* setup doubly-linked lists with dummy node */
@@ -349,6 +391,7 @@ int main(int argc, char **argv)
         free(L);
         m = n;         // count of active vectors
 
+        /* slice until the input list is empty */
         while (n > 0) {
                 printf("Starting slice with %d active vectors\n", m);
                 u64 equations[64];
@@ -357,7 +400,6 @@ int main(int argc, char **argv)
                 while (k < l) {
 			printf("Attacking %d active vectors with ISD\n", m);
 
-			
 			/* copy the active vectors into M, and pad with zeros to reach a multiple of 64 */
         		u32 w = ceil(m / 64.);
 			u32 rows = 64 * w;
@@ -376,10 +418,9 @@ int main(int argc, char **argv)
                         double R = ((double) d) / m;
                         double expected_w = m * GV(R);
            
-                        // Si m < 64 - (l-k), alors on peut leur régler leur compte.
-			assert(m >= 64 - k);
+			assert(m >= 64 - k); /* we should not be worse than naive linear algebra */
 
-
+                        /* compute expected number of iteration to reach expected weight */
                         mpz_t a, b, c;
                         mpz_init(a);
                         mpz_init(b);
@@ -389,7 +430,6 @@ int main(int argc, char **argv)
                         mpz_mul_ui(b, b, d);
                         mpz_tdiv_q(c, a, b);
                         double expected_its = mpz_get_d(c);
-
                         printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.1f, E[iterations] = %f\n", m, d, R, expected_w, expected_its);
 
                         /* setup low-weight search */
@@ -415,26 +455,6 @@ int main(int argc, char **argv)
 				/* gaussian elimination; E is the change of basis matrix */
 				for (u32 i = 0; i < 64; i++)
 					E[i] = 1ull << i;     /* E == identity */
-
-#if 0                               
-				for (u32 i = 0; i < 64 - k; i++) {
-					for (u32 j = 0; j < m; j++) {
-						u64 u = j / 64;
-						u64 v = j % 64;
-						u32 a = __builtin_popcountll(M[j] & E[i]) & 1;
-						u32 b = (T[i * w + u] >> v) & 1;
-						if (a != b) {
-							printf("Just after transpose. Problem. i=%d, j=%d.\n", i, j);
-							printf("E[i] = %016" PRIx64 ", M[j] = %016" PRIx64 "\n", E[i], M[j]);
-							printf("T[i] = ");
-							for (int k = 0; k < w; k++)
-								printf("%016" PRIx64 " ", T[i * w + k]);
-							printf("\n");
-							assert(a == b);
-						}
-					}
-				}
-#endif
 
                                 /* eliminate the j-th column */
 				int n_random_trials = 6;
@@ -515,10 +535,6 @@ int main(int argc, char **argv)
 				}
 #endif
 
-                                // if (m < 100) {
-                                // 	print_matrix(64, w, T);
-                                // 	getchar();
-                                // }
 
                                 /* look for a low-weight row */
 		                for (u32 i = 0; i < 64 - k; i++) {
