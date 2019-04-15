@@ -234,24 +234,24 @@ int echelonize(u64 *T, u32 m, u32 w, int d, u64 *E)
 	for (u32 i = 0; i < 64; i++)
 		E[i] = 1ull << i;     /* E == identity */
 
-	printf("Echelonize with m=%d, d=%d\n", m, d);
+	// printf("Echelonize with m=%d, d=%d\n", m, d);
 
 	int n_random_trials = 6;
 	for (i32 j = 0; j < d; j++) {
 		/* eliminate the j-th column */
 		i32 l = j + 1;
 
-		printf("j = %d\n", j);
+		// printf("j = %d\n", j);
 
 		/* search a row with a non-zero coeff ---> it will be the pivot */
 		i32 i = -1;
 		u64 mask = 1ull << j;
 		while (1) {
 		        for (i32 k = j; k < 64; k++) {
-		        	printf("Examining row %d\n", k);
+		        	// printf("Examining row %d\n", k);
 		                if (((T[k * w] & mask) != 0)) {
 		                        i = k;
-		                        printf("found i = %d. %016" PRIx64 "\n", i, T[i * w]);
+		                        // printf("found i = %d. %016" PRIx64 "\n", i, T[i * w]);
 		                        break;
 		                }
 		        }
@@ -271,7 +271,7 @@ int echelonize(u64 *T, u32 m, u32 w, int d, u64 *E)
 				o = l;
 				l++;
 			}
-			printf("trying %d <---> %d\n", j, o);
+			// printf("trying %d <---> %d\n", j, o);
 			swap_columns(T, w, j, o);
 		}
 		if (i < 0)
@@ -288,7 +288,7 @@ int echelonize(u64 *T, u32 m, u32 w, int d, u64 *E)
 		for (i32 k = 0; k < 64; k++) {
 			if ((k != j) & ((T[k * w] & mask) != 0)) {
 				E[k] ^= E[j];         /* record the operation */
-				printf("Doing T[%d] <-- T[%d] + T[%d]\n", k, k, j);
+				// printf("Doing T[%d] <-- T[%d] + T[%d]\n", k, k, j);
 				for (u32 l = 0; l < w; l++)
 					T[k * w + l] ^= T[j * w + l];
 			}
@@ -313,8 +313,8 @@ int check_rank_defect(const u64 *M, u32 m, u64 *equations, int k) {
        	if (j == d)
        		return k;
 
-       	printf("j = %d\n", j);
-       	print_matrix(64, w, T);
+       	// printf("j = %d\n", j);
+       	// print_matrix(64, w, T);
 
 	/* not enough pivots found: rank defect */
 	for (int r = j; r < d; r++) {
@@ -383,7 +383,7 @@ int main(int argc, char **argv)
         list_clear(reject);
 
         /* setup: all vectors are "active" */
-        n = 200;
+        // n = 200;
         for (u32 i = 0; i < n; i++) {
                 items[i].x = L[i];
                 list_insert(active, &items[i]);
@@ -416,9 +416,9 @@ int main(int argc, char **argv)
 
                         int d = 64 - k;
                         double R = ((double) d) / m;
-                        double expected_w = m * GV(R);
+                        double expected_w = ceil(m * GV(R));
            
-			assert(m >= 64 - k); /* we should not be worse than naive linear algebra */
+			assert(m >= d); /* we should not be worse than naive linear algebra */
 
                         /* compute expected number of iteration to reach expected weight */
                         mpz_t a, b, c;
@@ -430,12 +430,14 @@ int main(int argc, char **argv)
                         mpz_mul_ui(b, b, d);
                         mpz_tdiv_q(c, a, b);
                         double expected_its = mpz_get_d(c);
-                        printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.1f, E[iterations] = %f\n", m, d, R, expected_w, expected_its);
+                        printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.0f, E[iterations] = %f\n", m, d, R, expected_w, expected_its);
 
                         /* setup low-weight search */
                         u32 best_weight = m;
                         u64 best_equation = 0;
-                        u32 n_iterations = (1 + k) * MAX_ISD_ITERATIONS;
+                        u32 n_iterations = MAX_ISD_ITERATIONS * 150000 / m;
+                        if (3 * expected_its < n_iterations)
+                        	n_iterations = 3 * expected_its;
                         printf("Going for %d iterations\n", n_iterations);
 
                         u64 T[rows];
@@ -444,7 +446,7 @@ int main(int argc, char **argv)
                                 /* this is one iteration of the Lee-Brickell algorithm */
 
                                 /* random permutation of the rows */
-                                for (i32 i = 0; i < 64 - k; i++) {
+                                for (i32 i = 0; i < d; i++) {
                                         i32 j = i + (lrand48() % (m - i));
                                         swap(M, i, j);
                                 }
@@ -452,67 +454,8 @@ int main(int argc, char **argv)
                                 /* transpose the matrix, in order to access the columns efficiently */
                                 transpose(M, w, T);
 
-				/* gaussian elimination; E is the change of basis matrix */
-				for (u32 i = 0; i < 64; i++)
-					E[i] = 1ull << i;     /* E == identity */
-
-                                /* eliminate the j-th column */
-				int n_random_trials = 6;
-                                for (i32 j = 0; j < 64 - k; j++) {
-                                        i32 l = j + 1;
-
-                                        /* search a row with a non-zero coeff ---> it will be the pivot */
-                                        i32 i = -1;
-                                        u64 mask = 1ull << j;
-                                        while (i < 0 && l < m) {
-                                                for (i32 k = j; k < 64; k++) {
-                                                        if (((T[k * w] & mask) != 0)) {
-                                                                i = k;
-                                                                break;
-                                                        }
-                                                }
-                                                if (i >= 0)
-                                                        break;    /* found pivot */
-
-                                                /* pivot not found. This means that the 64-k first columns 
-                                                   are linearly dependent. We swap the j-th column with the l-th. */
-
-                                                i32 o;
-                                                if (n_random_trials >= 0) {
-                                                	o = (j + 1) + (lrand48() % (m - (j + 1)));
-                                                	n_random_trials--;
-                                                } else {
-                                                	o = l;
-                                                	l++;
-                                                }
-                                                swap_columns(T, w, j, o);
-                                        	swap(M, j, o);
-
-                                        }
-                                        assert(i >= 0);
-                                        // if (i < 0) {
-                                        // 	printf("%d\n", j);
-                                        // 	print_matrix(64, w, T);
-					// 	
-                                        // }
-
-
-					/* permute the rows so that the pivot is on the diagonal */
-                                        if (j != i) {
-                                                swap(E, i, j);
-                                                for (u32 k = 0; k < w; k++)
-                                                        swap(T, i * w + k, j * w + k);
-                                        }
-
-                                        /* use the pivot to eliminate everything else on the column */
-                                        for (i32 k = 0; k < 64; k++) {
-                                                if ((k != j) & ((T[k * w] & mask) != 0)) {
-                                                        E[k] ^= E[j];         /* record the operation */
-                                                        for (u32 l = 0; l < w; l++)
-                                                                T[k * w + l] ^= T[j * w + l];
-                                                }
-                                        }
-                                }
+				int j = echelonize(T, m, w, d, E);
+				assert(j == d);
 				
 #if 0
 				/* check thruthfullnes of T vs E[i] and M. In principe T = E * M.t ---> T_ij == */
@@ -547,7 +490,10 @@ int main(int argc, char **argv)
 		                                best_equation = E[i];
 		                        }
 		                }
-		                
+		                if (best_weight < expected_w + 1) {
+		                	printf("weight small enough; early abort\n");
+		                	break;
+		                }
                         }
                         filter_active(best_equation);
                         equations[k++] = best_equation;
