@@ -9,12 +9,18 @@
 #include <mpi.h>
 
 #include "common.h"
-#include "papi.h"
+// #include "papi.h"
 
 /*double wtime()
 {
 	return PAPI_get_real_usec() / 1e6;
 }*/
+
+
+// u64 cycles()
+// {
+// 	return PAPI_get_real_cyc();
+// }
 
 double wtime()
 {
@@ -30,12 +36,6 @@ long long usec()
 	return 1000000 * ts.tv_sec + ts.tv_usec;
 }
 
-
-u64 cycles()
-{
-	return PAPI_get_real_cyc();
-}
-
 bool big_endian()
 {
 	return (htonl(0x47) == 0x47);
@@ -47,6 +47,41 @@ void *aligned_alloc(size_t alignment, size_t size)
 	if (posix_memalign(&p, alignment, size) != 0)
 		return NULL;
 	return p;
+}
+
+void * load_file(const char *filename, u64 *size_)
+{
+	/* obtain file size */
+        struct stat infos;
+        if (stat(filename, &infos))
+                err(1, "fstat failed on %s", filename);
+        u64 size = infos.st_size;
+        assert ((size % 8) == 0);
+
+        /* allocate memory */
+        u64 *content = aligned_alloc(64, size);
+        if (content == NULL)
+                err(1, "failed to allocate memory");
+        
+        /* read */
+        FILE *f = fopen(filename, "r");
+        if (f == NULL)
+                err(1, "fopen failed (%s)", filename);
+        u64 check = fread(content, 1, size, f);
+        if (check != size)
+                errx(1, "incomplete read %s", filename);
+        fclose(f);
+        *size_ = size;
+
+        /* byte-swap if necessary */
+        if (big_endian()) {
+                #pragma omp parallel for
+                for (u32 i = 0; i < size / 8; i++)
+                        content[i] = bswap_64(content[i]);
+        }
+
+
+        return content;
 }
 
 void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm)
@@ -82,6 +117,8 @@ void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm)
 	}
 	return content;
 }
+
+
 
 struct task_result_t *result_init()
 {

@@ -7,7 +7,7 @@ LDFLAGS = -fopenmp
 #CC = mpixlc_r
 #CFLAGS = -qsmp=omp
 
-LDLIBS = -lm -lpapi
+LDLIBS = -lm
 
 all: programs
 

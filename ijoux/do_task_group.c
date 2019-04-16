@@ -8,17 +8,15 @@
 
 #include "common.h"
 
-#define CPU_VERBOSE 1
-
 /* fonction externe, boite noire */
 struct task_result_t * iterated_joux_task_(struct jtask_t *task, u32 task_index[2]);
 
+
 struct tg_context_t {
-	int tg_grid_size;
+	int partitioning_bits;
 	int cpu_grid_size;
 	int per_core_grid_size;
-	int tg_i;
-	int tg_j;
+	int tg_per_job;
 	int cpu_i;
 	int cpu_j;
 	int rank;
@@ -46,13 +44,13 @@ static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i
 
 
 struct option longopts[8] = {
+	{"partitioning-bits", required_argument, NULL, 'b'},
+	{"tg-per-job", required_argument, NULL, 'j'},
 	{"hash-dir", required_argument, NULL, 'h'},
 	{"slice-dir", required_argument, NULL, 's'},
 	{"tg-grid-size", required_argument, NULL, 't'},
 	{"cpu-grid-size", required_argument, NULL, 'c'},
 	{"per-core-grid-size", required_argument, NULL, 'p'},
-	{"i", required_argument, NULL, 'i'},
-	{"j", required_argument, NULL, 'j'},
 	{NULL, 0, NULL, 0}
 };
 
@@ -75,11 +73,10 @@ struct tg_context_t * setup(int argc, char **argv)
            grid of size 2 ** (partitioning_bits) / (process_grid_size * per_core_grid_size)
         */
         struct tg_context_t *ctx = malloc(sizeof(*ctx));
-	ctx->tg_grid_size = -1;
+	ctx->partitioning_bits = -1;
+	ctx->tg_per_job = -1;
 	ctx->cpu_grid_size = -1;
 	ctx->per_core_grid_size = -1;
-        // ctx->tg_i = -1;
-        // ctx->tg_j = -1;
         ctx->rank = rank;
         ctx->comm_size = world_size;
         ctx->hash_dir = NULL;
@@ -88,8 +85,8 @@ struct tg_context_t * setup(int argc, char **argv)
         signed char ch;
         while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
                 switch (ch) {
-                case 't':
-                        ctx->tg_grid_size = atol(optarg);
+                case 'j':
+                        ctx->tg_per_job = atol(optarg);
                         break;
                 case 'c':
                         ctx->cpu_grid_size = atol(optarg);
@@ -97,12 +94,9 @@ struct tg_context_t * setup(int argc, char **argv)
                 case 'p':
                         ctx->per_core_grid_size = atol(optarg);
                         break;
-                // case 'i':
-                //         ctx->tg_i = atol(optarg);
-                //         break;
-                // case 'j':
-                //         ctx->tg_j = atol(optarg);
-                //         break;
+                case 'b':
+                         ctx->partitioning_bits = atol(optarg);
+                         break;
                 case 'h':
                         ctx->hash_dir = optarg;
                         break;
@@ -115,8 +109,10 @@ struct tg_context_t * setup(int argc, char **argv)
 	}
 
 	/* validation */
-	if (ctx->tg_grid_size < 0)
-		errx(1, "missing --tg-grid-size");
+	if (ctx->partitioning_bits < 0)
+		errx(1, "missing --partitioning-bits");
+	if (ctx->tg_per_job < 0)
+		errx(1, "missing --tg-per-job");
 	if (ctx->cpu_grid_size < 0)
 		errx(1, "missing --cpu-grid-size");
 	if (ctx->per_core_grid_size < 0)
@@ -129,6 +125,10 @@ struct tg_context_t * setup(int argc, char **argv)
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
 		errx(2, "wrong communicator size");
 	
+	int task_grid_size = 1 << ctx->partitioning_bits;
+	if (rank == 0)
+		printf("* Task grid is [%d x %d]")
+
 	// if ((ctx->tg_i < 0) || (ctx->tg_i >= ctx->tg_grid_size))
 	// 	errx(3, "invalid i value (not in [0:tg-grid-size]");
 	// if ((ctx->tg_j < 0) || (ctx->tg_j >= ctx->tg_grid_size))
