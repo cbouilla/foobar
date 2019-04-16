@@ -28,17 +28,17 @@ struct tg_context_t {
 };
 
 
-static void tg_task_base(struct tg_context_t *ctx, u32 base[3])
+static void tg_task_base(struct tg_context_t *ctx, int tg_i, int tg_j, u32 base[3])
 {
-	base[0] = (ctx->tg_i * ctx->cpu_grid_size + ctx->cpu_i) * ctx->per_core_grid_size;
-	base[1] = (ctx->tg_j * ctx->cpu_grid_size + ctx->cpu_j) * ctx->per_core_grid_size;
+	base[0] = (tg_i * ctx->cpu_grid_size + ctx->cpu_i) * ctx->per_core_grid_size;
+	base[1] = (tg_j * ctx->cpu_grid_size + ctx->cpu_j) * ctx->per_core_grid_size;
 	base[2] = base[0] ^ base[1];
 }
 
 
-static void tg_task_idx(struct tg_context_t *ctx, int task_i, int task_j, u32 idx[3])
+static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i, int task_j, u32 idx[3])
 {
-	tg_task_base(ctx, idx);
+	tg_task_base(ctx, tg_i, tg_j, idx);
 	idx[0] += task_i;
 	idx[1] += task_j;
 	idx[2] += task_i ^ task_j;
@@ -57,11 +57,11 @@ struct option longopts[8] = {
 };
 
 
+/* process command-line arguments */
 struct tg_context_t * setup(int argc, char **argv)
 {
 	/* MPI setup */
 	int rank, world_size;
-	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
@@ -78,8 +78,8 @@ struct tg_context_t * setup(int argc, char **argv)
 	ctx->tg_grid_size = -1;
 	ctx->cpu_grid_size = -1;
 	ctx->per_core_grid_size = -1;
-        ctx->tg_i = -1;
-        ctx->tg_j = -1;
+        // ctx->tg_i = -1;
+        // ctx->tg_j = -1;
         ctx->rank = rank;
         ctx->comm_size = world_size;
         ctx->hash_dir = NULL;
@@ -97,12 +97,12 @@ struct tg_context_t * setup(int argc, char **argv)
                 case 'p':
                         ctx->per_core_grid_size = atol(optarg);
                         break;
-                case 'i':
-                        ctx->tg_i = atol(optarg);
-                        break;
-                case 'j':
-                        ctx->tg_j = atol(optarg);
-                        break;
+                // case 'i':
+                //         ctx->tg_i = atol(optarg);
+                //         break;
+                // case 'j':
+                //         ctx->tg_j = atol(optarg);
+                //         break;
                 case 'h':
                         ctx->hash_dir = optarg;
                         break;
@@ -129,10 +129,10 @@ struct tg_context_t * setup(int argc, char **argv)
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
 		errx(2, "wrong communicator size");
 	
-	if ((ctx->tg_i < 0) || (ctx->tg_i >= ctx->tg_grid_size))
-		errx(3, "invalid i value (not in [0:tg-grid-size]");
-	if ((ctx->tg_j < 0) || (ctx->tg_j >= ctx->tg_grid_size))
-		errx(3, "invalid j value (not in [0:tg-grid-size]");
+	// if ((ctx->tg_i < 0) || (ctx->tg_i >= ctx->tg_grid_size))
+	// 	errx(3, "invalid i value (not in [0:tg-grid-size]");
+	// if ((ctx->tg_j < 0) || (ctx->tg_j >= ctx->tg_grid_size))
+	// 	errx(3, "invalid j value (not in [0:tg-grid-size]");
 
 
 	/* my own coordinates in the CPU grid */
@@ -142,7 +142,7 @@ struct tg_context_t * setup(int argc, char **argv)
 }
 
 
-static struct jtask_t * load_tg_data(struct tg_context_t *ctx)
+static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_j)
 {
 	struct jtask_t *all_tasks = malloc(ctx->per_core_grid_size * sizeof(*all_tasks));
 	double start = MPI_Wtime();	
@@ -152,7 +152,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx)
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_J);
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i ^ ctx->cpu_j, 0, &comm_IJ);
 	u32 base[3];
-	tg_task_base(ctx, base);
+	tg_task_base(ctx, tg_i, tg_j, base);
 	
 	/* A */
        for (int r = 0; r < ctx->per_core_grid_size; r++) {
@@ -178,11 +178,14 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx)
 	if (ctx->rank == 0)
 		printf("Total data load time %.fs\n", end_load - start);
 	
+	MPI_Comm_free(&comm_I);
+	MPI_Comm_free(&comm_J);
+	MPI_Comm_free(&comm_IJ);
 	return all_tasks;
 }
 
 
-static struct task_result_t * tg_task_work(struct tg_context_t *ctx, struct jtask_t *all_tasks)
+static struct task_result_t * tg_task_work(struct tg_context_t *ctx, int tg_i, int tg_j, struct jtask_t *all_tasks)
 {
 	struct task_result_t *all_solutions = result_init();
 	double all_tasks_start = MPI_Wtime();
@@ -191,7 +194,7 @@ static struct task_result_t * tg_task_work(struct tg_context_t *ctx, struct jtas
 			/* build task descriptor */
 			struct jtask_t task;
 			u32 task_index[3];
-			tg_task_idx(ctx, r, s, task_index);
+			tg_task_idx(ctx, tg_i, tg_j, r, s, task_index);
 			task.L[0] = all_tasks[r].L[0];
 			task.n[0] = all_tasks[r].n[0];
 			task.L[1] = all_tasks[s].L[1];
@@ -229,7 +232,7 @@ static struct task_result_t * tg_task_work(struct tg_context_t *ctx, struct jtas
 }
 
 
-void tg_gather_and_save(struct tg_context_t * ctx, struct task_result_t * all_solutions)
+void tg_gather_and_save(struct tg_context_t * ctx, int tg_i, int tg_j, struct task_result_t * all_solutions)
 {
 	/* gather solutions to node 0 */
 	double transmission_start = MPI_Wtime();
@@ -259,8 +262,11 @@ void tg_gather_and_save(struct tg_context_t * ctx, struct task_result_t * all_so
 
 	/* If I'm rank zero, I save in a file */
 	if (ctx->rank == 0) {
+		free(solutions_sizes);
+		free(displacements);
+
 		char filename[255];
-		sprintf(filename, "solutions_%02x_%02x.bin", ctx->tg_i, ctx->tg_j);
+		sprintf(filename, "solutions_%02x_%02x.bin", tg_i, tg_j);
 		FILE *f_solutions = fopen(filename, "w");
        		if (f_solutions == NULL)
                 	err(1, "fopen failed (%s)", filename);
@@ -276,23 +282,43 @@ void tg_gather_and_save(struct tg_context_t * ctx, struct task_result_t * all_so
 			printf("[%04" PRIx64 ";%04" PRIx64 ";%04" PRIx64 "] %016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n", 
 				solutions_recv[i].task_index[0], solutions_recv[i].task_index[1], solutions_recv[i].task_index[2],
 				solutions_recv[i].val[0], solutions_recv[i].val[1], solutions_recv[i].val[2]);
+		free(solutions_recv);
 	}
 }
 
 
+void tg_cleanup(struct tg_context_t * ctx,  struct jtask_t *all_tasks, struct task_result_t * all_solutions)
+{
+	result_free(all_solutions);
+	for (int r = 0; r < ctx->per_core_grid_size; r++) {
+	        free(all_tasks[r].L[0]);
+	        free(all_tasks[r].L[1]);
+	        free(all_tasks[r].slices);
+	}
+	free(all_tasks);
+}
+
+
+void do_task_group(struct tg_context_t * ctx, int tg_i, int tg_j)
+{
+	if (ctx->rank == 0)
+		printf("Doing task goup (%d, %d) [task group grid=%d x %d]\n", 
+			tg_i, tg_j, ctx->tg_grid_size, ctx->tg_grid_size);
+
+        struct jtask_t *all_tasks = load_tg_data(ctx, tg_i, tg_j);
+        struct task_result_t * all_solutions = tg_task_work(ctx, tg_i, tg_j, all_tasks);
+	tg_gather_and_save(ctx, tg_i, tg_j, all_solutions);
+}
+
+
+
 int main(int argc, char **argv)
 {
+	MPI_Init(&argc, &argv);
+	
 	struct tg_context_t * ctx = setup(argc, argv);
 
-	if (ctx->rank == 0)
-		printf("Doing task goup (%d, %d) [grid size=%d x %d]\n", 
-			ctx->tg_i, ctx->tg_j, ctx->tg_grid_size, ctx->tg_grid_size);
-
-        struct jtask_t *all_tasks = load_tg_data(ctx);
-
-        struct task_result_t * all_solutions = tg_task_work(ctx, all_tasks);
-	
-	tg_gather_and_save(ctx, all_solutions);
+	do_task_group(ctx, 0, 0);
 
 	MPI_Finalize();
 }

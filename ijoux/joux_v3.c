@@ -370,7 +370,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 
 struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_index)
 {
-	static const bool task_verbose = true;
+	static const bool task_verbose = false;
 	static const bool slice_verbose = false;
 	
 	/* setup */

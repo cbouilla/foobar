@@ -35,8 +35,8 @@ partitioning-bits=15
 The computation is split into a 2D grid of 32768 x 32768 taks (this is imposed
 by the task processing function). Each task takes roughly 30s. This should
 make 9 million hours. Because individual tasks are too short, we will group
-them into "task groups". The intention is that a task group is a sizable unit
-of work. On turing, options are 1h, 10h or 20h.
+them into TASK GROUPs. The intention is that a task group is a sizable unit
+of work.
 
 One viable option is to use u^2 cores and have each core do v^2 tasks. 
 
@@ -52,16 +52,20 @@ u = 64,  v = 8  ---> MRt1
 u = 64,  v = 32 ---> MRt3
 
 u = 128, v =  8 ---> 1Rt1
-u = 128, v = 16 ---> 1Rt2            xxxxxxxxxxxxxx (attention à la RAM)
+u = 128, v = 16 ---> 1Rt2            
 u = 128, v = 32 ---> 1Rt3          
 
-u = 256, v = 8   ---> 4Rt1
+u = 256, v = 8   ---> 4Rt1           xxxxxxxxxxxxxx
 u = 256, v = 32  ---> 4Rt3
 
 
-Each task group corresponds to 2^22 tasks (a slice of 2048 * 2048 of the whole grid).
-
+Each task group corresponds to 2^22 tasks (a slice of 2048 * 2048 of the whole grid). 
 Thus, the computation is split into a 2D grid of 16x16 task groups. Each task group represents 70'000 CPU-hours.
+
+A JOB is composed of several task groups. Checkpointing is done after each task group.
+
+To keep 4R busy for about 20 hours, a JOB is made of 32 TASK GROUPs. 
+Thus, there will be 8 JOBs, and each job is 3Rt3, runs for 17h.
 
 I/O and logistics
 =================
