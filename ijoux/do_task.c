@@ -41,6 +41,7 @@ void do_task(const char *hash_dir, const char  *slice_dir, u32 i, u32 j)
 	sprintf(filename, "%s/%03x", slice_dir, idx[2]);
 	task.slices = load_file(filename, &task.slices_size);
 
+	/* Now, random permutation is done during preprocessing
 	#pragma omp parallel for schedule(static)
 	for (u32 k = 0; k < 2; k++)
 		for (u32 i = 0; i < task.n[k] - 1; i++) {
@@ -49,6 +50,7 @@ void do_task(const char *hash_dir, const char  *slice_dir, u32 i, u32 j)
 			task.L[k][i] = task.L[k][j];
 			task.L[k][j] = x;
 		}
+	*/
 
 	double start = wtime();
 	struct task_result_t *result = iterated_joux_task(&task, idx);

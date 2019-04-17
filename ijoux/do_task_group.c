@@ -8,9 +8,16 @@
 
 #include "common.h"
 
+/* test
+
+./do_task_group --partitioning-bits 0 --tg-per-job 1 --tg-per-job 1
+
+*/
+
 /* fonction externe, boite noire */
 struct task_result_t * iterated_joux_task_(struct jtask_t *task, u32 task_index[2]);
 
+#define CPU_VERBOSE 1
 
 struct tg_context_t {
 	int partitioning_bits;
@@ -43,20 +50,23 @@ static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i
 }
 
 
-struct option longopts[8] = {
+struct option longopts[11] = {
 	{"partitioning-bits", required_argument, NULL, 'b'},
-	{"tg-per-job", required_argument, NULL, 'j'},
+	{"tg-per-job", required_argument, NULL, 'g'},
 	{"hash-dir", required_argument, NULL, 'h'},
 	{"slice-dir", required_argument, NULL, 's'},
 	{"tg-grid-size", required_argument, NULL, 't'},
 	{"cpu-grid-size", required_argument, NULL, 'c'},
 	{"per-core-grid-size", required_argument, NULL, 'p'},
+	{"i", required_argument, NULL, 'i'},
+	{"j", required_argument, NULL, 'j'},
+	{"job", required_argument, NULL, 'o'},
 	{NULL, 0, NULL, 0}
 };
 
 
 /* process command-line arguments */
-struct tg_context_t * setup(int argc, char **argv)
+struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 {
 	/* MPI setup */
 	int rank, world_size;
@@ -81,11 +91,14 @@ struct tg_context_t * setup(int argc, char **argv)
         ctx->comm_size = world_size;
         ctx->hash_dir = NULL;
         ctx->slice_dir = NULL;
-	
+	*i = -1;
+	*j = -1;
+	*job = -1;
+
         signed char ch;
         while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
                 switch (ch) {
-                case 'j':
+                case 'g':
                         ctx->tg_per_job = atol(optarg);
                         break;
                 case 'c':
@@ -103,6 +116,15 @@ struct tg_context_t * setup(int argc, char **argv)
                 case 's':
                         ctx->slice_dir = optarg;
                         break;
+                case 'i':
+                        *i = atol(optarg);
+                        break;
+                case 'j':
+                        *j = atol(optarg);
+                        break;
+                case 'o':
+                        *job = atol(optarg);
+                        break;
                 default:
                         errx(1, "Unknown option\n");
                 }
@@ -111,8 +133,6 @@ struct tg_context_t * setup(int argc, char **argv)
 	/* validation */
 	if (ctx->partitioning_bits < 0)
 		errx(1, "missing --partitioning-bits");
-	if (ctx->tg_per_job < 0)
-		errx(1, "missing --tg-per-job");
 	if (ctx->cpu_grid_size < 0)
 		errx(1, "missing --cpu-grid-size");
 	if (ctx->per_core_grid_size < 0)
@@ -125,15 +145,14 @@ struct tg_context_t * setup(int argc, char **argv)
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
 		errx(2, "wrong communicator size");
 	
-	int task_grid_size = 1 << ctx->partitioning_bits;
-	if (rank == 0)
-		printf("* Task grid is [%d x %d]")
-
-	// if ((ctx->tg_i < 0) || (ctx->tg_i >= ctx->tg_grid_size))
-	// 	errx(3, "invalid i value (not in [0:tg-grid-size]");
-	// if ((ctx->tg_j < 0) || (ctx->tg_j >= ctx->tg_grid_size))
-	// 	errx(3, "invalid j value (not in [0:tg-grid-size]");
-
+	if ((*i >= 0) ^ (*j >= 0))
+		errx(3, "must give both --i and --j");
+	if (!((*i >= 0) ^ (*job >= 0)))
+		errx(3, "--i/--j and --job are mutually exclusive");
+	if ((*i < 0) & (*job < 0))
+		errx(3, "must provide either --job or --i/--j");
+	if (*job >= 0 && ctx->tg_per_job < 0)
+		errx(1, "missing --tg-per-job with --job");
 
 	/* my own coordinates in the CPU grid */
 	ctx->cpu_i = rank / ctx->cpu_grid_size;
@@ -302,23 +321,52 @@ void tg_cleanup(struct tg_context_t * ctx,  struct jtask_t *all_tasks, struct ta
 void do_task_group(struct tg_context_t * ctx, int tg_i, int tg_j)
 {
 	if (ctx->rank == 0)
-		printf("Doing task goup (%d, %d) [task group grid=%d x %d]\n", 
-			tg_i, tg_j, ctx->tg_grid_size, ctx->tg_grid_size);
+		printf("Doing task goup (%d, %d)\n", tg_i, tg_j);
 
-        struct jtask_t *all_tasks = load_tg_data(ctx, tg_i, tg_j);
-        struct task_result_t * all_solutions = tg_task_work(ctx, tg_i, tg_j, all_tasks);
+	struct jtask_t *all_tasks = load_tg_data(ctx, tg_i, tg_j);
+	struct task_result_t * all_solutions = tg_task_work(ctx, tg_i, tg_j, all_tasks);
 	tg_gather_and_save(ctx, tg_i, tg_j, all_solutions);
+	tg_cleanup(ctx, all_tasks, all_solutions);
 }
 
 
+void do_job(struct tg_context_t * ctx, int job) 
+{
+	int task_grid_size = 1 << ctx->partitioning_bits;
+	int tg_grid_size = task_grid_size / ctx->cpu_grid_size / ctx->per_core_grid_size;
+	int tg_from = job * ctx->tg_per_job;
+	int tg_to = (job + 1) * ctx->tg_per_job;
+	int njobs = tg_grid_size * tg_grid_size / ctx->tg_per_job;
+
+	if (job >= njobs)
+		errx(3, "invalid job number");
+
+	if (ctx->rank == 0) {
+		printf("* Task grid       is [%d x %d]\n", task_grid_size, task_grid_size);
+		printf("* Task Group grid is [%d x %d]\n", tg_grid_size, tg_grid_size);
+		printf("* #jobs           is %d\n", njobs);
+	}
+
+	for (int k = tg_from; k < tg_to; k++) {
+		int i = k / tg_grid_size;
+		int j = k % tg_grid_size;
+		/* TODO: skip if checkpointing data exists */
+		do_task_group(ctx, i, j);
+	}
+}
 
 int main(int argc, char **argv)
 {
 	MPI_Init(&argc, &argv);
+	int i, j, job;
+	struct tg_context_t * ctx = setup(argc, argv, &i, &j, &job);
 	
-	struct tg_context_t * ctx = setup(argc, argv);
-
-	do_task_group(ctx, 0, 0);
-
+	if (job < 0) {
+		/* do single task group */
+		do_task_group(ctx, i, j);
+	} else {
+		do_job(ctx, job);
+	}
+	
 	MPI_Finalize();
 }
