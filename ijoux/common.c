@@ -9,18 +9,6 @@
 #include <mpi.h>
 
 #include "common.h"
-// #include "papi.h"
-
-/*double wtime()
-{
-	return PAPI_get_real_usec() / 1e6;
-}*/
-
-
-// u64 cycles()
-// {
-// 	return PAPI_get_real_cyc();
-// }
 
 double wtime()
 {
