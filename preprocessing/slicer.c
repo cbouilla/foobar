@@ -293,13 +293,21 @@ u32 echelonize(u64 *T, u32 m, u32 w, u32 d, u64 *E)
 		}
 
 		/* use the pivot to eliminate everything else on the column */
+		// trick to avoid testing if k != j
+		assert((T[j * w] & mask) != 0);
+		u64 old = T[j * w];
+		T[j * w] ^= mask;
+		assert((T[j * w] & mask) == 0);
 		for (u32 k = 0; k < 64; k++) {
-			if ((k != j) & ((T[k * w] & mask) != 0)) {
+			if ((T[k * w] & mask) != 0) {
 				E[k] ^= E[j];         /* record the operation */
-				for (u32 l = 0; l < w; l++)
+				T[k * w] ^= old;
+				for (u32 l = 1; l < w; l++)
 					T[k * w + l] ^= T[j * w + l];
 			}
 		}
+		T[j * w] ^= mask;
+		assert((T[j * w] & mask) != 0);
 	}
 	return d;
 }

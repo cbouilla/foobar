@@ -1,9 +1,5 @@
-CFLAGS = -std=c99 -g -Wall -Wextra -Werror -O3 -I.
-
-# M4RI
-CFLAGS += -I$(HOME)/prison/m4ri/install/include
-LDFLAGS += -L$(HOME)/prison/m4ri/install/lib
-
+CFLAGS = -std=c11 -g -Wall -Wextra -Werror -O3 -I.
+LDFLAGS = -lm 
 
 all: programs
 
@@ -19,7 +15,8 @@ splitter: CC = mpicc
 sorter.o: hasher.h sorter.c preprocessing.h
 
 slicer.o: preprocessing.h
-slicer: LDLIBS += -lm4ri -lm
+slicer.o: CFLAGS += -fopenmp
+slicer  : LDFLAGS += -fopenmp
 
 dict_checker.o: dict_checker.c hasher.h preprocessing.h
 dict_checker: preprocessing.o sha256.o hasher.o dict_checker.o
@@ -34,4 +31,3 @@ clean:
 	rm -f *.o *.pdf *.aux *.bbl *.blg *.log *.out *.tex
 	rm -f splitter dict_checker sorter merger hash_checker indexer index_checker forger
 	rm -f splitter.pdf dict_checker.pdf sorter.pdf merger.pdf hash_checker.pdf indexer.pdf index_checker.pdf forger.pdf
-	rm -f hasher.c splitter.c dict_checker.c sorter.c merger.c hash_checker.c indexer.c index_checker.c forger.c slicer.c preprocessing.h
