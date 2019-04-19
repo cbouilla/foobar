@@ -65,7 +65,7 @@ Thus, the computation is split into a 2D grid of 16x16 task groups. Each task gr
 A JOB is composed of several task groups. Checkpointing is done after each task group.
 
 To keep 4R busy for about 20 hours, a JOB is made of 32 TASK GROUPs. 
-Thus, there will be 8 JOBs, and each job is 3Rt3, runs for 17h.
+Thus, there will be 8 JOBs, and each job is 4Rt3, runs for 17h.
 
 I/O and logistics
 =================

@@ -602,14 +602,6 @@ int main(int argc, char **argv)
 		u32 i = 0;
 		for (struct list_t *item = active->next; item != active; item = item->next)
 			slice->CM[i++] = naive_gemv(item->x, slice->M);
-
-		/* check inversion */
-		for (u32 i = 0; i < 64; i++)
-			assert(naive_gemv(slice->M[i], slice->Minv) == 1ull << i);
-
-		/* check zero bits */
-		for (u32 i = 0; i < m; i++)
-			 assert((slice->CM[i] & LEFT_MASK(l)) == 0);
 	
 		/* fwrite(slice) */
 		u32 size = sizeof(*slice) + m * sizeof(u64);
