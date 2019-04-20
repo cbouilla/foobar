@@ -10,6 +10,8 @@
 #include <assert.h>
 #include <math.h>
 
+#include <mpi.h>
+
 #include "preprocessing.h"
 
 #define VERBOSE 0
@@ -421,7 +423,7 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 				m, d, R, expected_w);
 		else
 			printf("%d ", m);
-		fflush(stdout);
+		// fflush(stdout);
 
 		/* setup low-weight search */
 		u32 best_weight = m;
@@ -480,49 +482,102 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 	if (VERBOSE)
 		printf("Finished: I now have %d equations and %d active vectors\n", k, m);
 	else
-		printf("%d (%d)\n", m, k);
+		printf("%d\n", m);
 	
 	return k;
 }
 
+void usage()
+{
+	printf("Slice a single hash file:\n");
+	printf("	./slicer [--l INT] [--output OUT] INPUT\n");
+	printf("Slice all hash files:\n");
+	printf("	./slicer [--l INT] [--output-dir PATH] [--input-dir PATH] [--partitioning-bits INT]\n");
+	printf("\n\nThe --l parameter default to 19\n");
+	exit(EXIT_FAILURE);
+}
+
+
 int main(int argc, char **argv)
 {
 	/* process command-line options */
-	struct option longopts[3] = {
+	struct option longopts[6] = {
 		{"output", required_argument, NULL, 't'},
+		{"output-dir", required_argument, NULL, 'o'},
+		{"input-dir", required_argument, NULL, 'i'},
+		{"partitioning-bits", required_argument, NULL, 'b'},
 		{"l", required_argument, NULL, 'l'},
 		{NULL, 0, NULL, 0}
 	};
 	char *target = NULL;
+	char *output_dir = NULL;
+	char *input_dir = NULL;
 	char *in_filename = NULL;
+	int partitioning_bits = -1;
+	i32 l = -1;
 	signed char ch;
-	i32 l = 0;
+	bool multi_mode = false;
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 't':
 			target = optarg;
 			break;
+		case 'o':
+			output_dir = optarg;
+			multi_mode = true;
+			break;
+		case 'i':
+			input_dir = optarg;
+			multi_mode = true;
+			break;
 		case 'l':
 			l = atoi(optarg);
+			break;
+		case 'b':
+			partitioning_bits = atoi(optarg);
+			multi_mode = true;
 			break;
 		default:
 			errx(1, "Unknown option\n");
 		}
 	}
-	if (optind >= argc)
-		errx(1, "missing input file");
-	if (target == NULL)
-		errx(1, "missing --output");
-	in_filename = argv[optind];
+
+	if (l < 0)
+		l = 19;
+
+	if (!multi_mode) {
+		if (optind >= argc)
+			errx(1, "missing input file");
+		if (target == NULL)
+			errx(1, "missing --output");
+		in_filename = argv[optind];
+	} else {
+		if (output_dir == NULL)
+			errx(1, "missing --output-dir");
+		if (input_dir == NULL)
+			errx(1, "missing --input-dir");
+		if (partitioning_bits < 0)
+			errx(1, "missing --partitioning-bits");
+
+		MPI_Init(&argc, &argv);
+		int rank, size;
+		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+		MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+		if (size != (1 << partitioning_bits))
+			errx(1, "bad number of processes (need %d)", 1 << partitioning_bits);
+
+		in_filename = malloc(255);
+		sprintf(in_filename, "%s/foobar.%03x", input_dir, rank);
+
+		target = malloc(255);
+		sprintf(target, "%s/%03x", output_dir, rank);
+	}
+
 
 	u64 n;
 	u64 *L = load(in_filename, &n);
-	if (l == 0) {
-		l = ceil(log2(n));
-		if (l < 19)
-			l = 19;
-		printf("NOTE: Using default l = %d\n", l);
-	}
+	
 
 	double T = 1.0; // total time in s
 	double timeouts[l];
@@ -530,11 +585,6 @@ int main(int argc, char **argv)
 	for (int i = 0; i < l; i++) {
 		timeouts[i] = 1;
 		// TODO : optimize this
-		// timeouts[i] = i;
-		// timeouts[i] = sqrt(i);
-		// timeouts[i] = log(1 + i);
-		// timeouts[i] = exp(i);
-		// timeouts[i] = (i < l/3) ? 0 : i;
 	}
 
 
@@ -618,5 +668,8 @@ int main(int argc, char **argv)
 		n -= m;
 		m = n;
 	}
+
+	if (multi_mode)
+		MPI_Finalize();
 	exit(EXIT_SUCCESS);
 }

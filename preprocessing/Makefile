@@ -15,6 +15,8 @@ splitter: CC = mpicc
 sorter.o: hasher.h sorter.c preprocessing.h
 
 slicer.o: preprocessing.h
+slicer.o: CC=mpicc
+slicer: CC=mpicc
 
 dict_checker.o: dict_checker.c hasher.h preprocessing.h
 dict_checker: preprocessing.o sha256.o hasher.o dict_checker.o
