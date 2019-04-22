@@ -9,6 +9,8 @@
 #include <sys/time.h>
 #include <assert.h>
 #include <math.h>
+#include <arpa/inet.h>
+#include <byteswap.h>
 
 #include <mpi.h>
 
@@ -23,6 +25,18 @@ double wtime()
 	return (double)ts.tv_sec + ts.tv_usec / 1e6;
 }
 
+#ifdef __bgq__
+u64 __builtin_popcountll(u64 x)
+{
+	return __popcnt8(x);
+}
+#endif
+
+bool big_endian()
+{
+	return (htonl(0x47) == 0x47);
+}
+
 u64 * load(const char *filename, u64 *size_)
 {
 	struct stat infos;
@@ -30,7 +44,7 @@ u64 * load(const char *filename, u64 *size_)
 		err(1, "fstat failed on %s", filename);
 	u64 size = infos.st_size;
 	assert ((size % 8) == 0);
-	u64 *content = aligned_alloc(64, size);
+	u64 *content = malloc(size);
 	if (content == NULL)
 		err(1, "failed to allocate memory");
 	FILE *f = fopen(filename, "r");
@@ -41,6 +55,10 @@ u64 * load(const char *filename, u64 *size_)
 		errx(1, "incomplete read %s", filename);
 	fclose(f);
 	*size_ = size / 8;
+	if (big_endian()) {
+		for (u32 i = 0; i < size / 8; i++)
+			content[i] = bswap_64(content[i]);
+	}
 	return content;
 }
 
@@ -346,9 +364,10 @@ u32 check_rank_defect(const u64 *M, u32 m, u64 *equations, int k) {
 
 static u64 myrand() 
 {
-	u64 a = lrand48();
-	u64 b = lrand48();
-	return a + (b << 32);
+	u64 a = lrand48(); // 31 bits
+	u64 b = lrand48(); // 31 bits
+	u64 c = lrand48(); // 31 bits
+	return a + (b << 31) + (c << 62);
 }
 
 static u64 naive_gemv(u64 x, const u64 * M)
@@ -401,7 +420,9 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 		/* copy the active vectors into M, and pad with zeros to reach a multiple of 64 */
 		u32 w = ceil(m / 64.);
 		u32 rows = 64 * w;
-		u64 M[rows];
+		u64 *M = malloc(rows * sizeof(*M));
+		if (M == NULL)
+			err(1, "cannot allocate scratch space");
 		u32 i = 0;
 		for (struct list_t *item = active->next; item != active; item = item->next)
 			M[i++] = item->x;
@@ -423,7 +444,6 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 				m, d, R, expected_w);
 		else
 			printf("%d ", m);
-		// fflush(stdout);
 
 		/* setup low-weight search */
 		u32 best_weight = m;
@@ -477,6 +497,7 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 			printf("\nBest weight=%d, equation=%" PRIx64 "\n", best_weight, best_equation);
 			printf("Done an ISD pass. I now have %d equations and %d active vectors\n", k, m);
 		}
+		free(M);
 	}
 	assert(k >= l);
 	if (VERBOSE)
@@ -500,6 +521,8 @@ void usage()
 
 int main(int argc, char **argv)
 {
+	int rank, size;
+
 	/* process command-line options */
 	struct option longopts[6] = {
 		{"output", required_argument, NULL, 't'},
@@ -560,7 +583,6 @@ int main(int argc, char **argv)
 			errx(1, "missing --partitioning-bits");
 
 		MPI_Init(&argc, &argv);
-		int rank, size;
 		MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 		MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -568,10 +590,12 @@ int main(int argc, char **argv)
 			errx(1, "bad number of processes (need %d)", 1 << partitioning_bits);
 
 		in_filename = malloc(255);
-		sprintf(in_filename, "%s/foobar.%03x", input_dir, rank);
-
 		target = malloc(255);
+
+		sprintf(in_filename, "%s/foobar.%03x", input_dir, rank);
 		sprintf(target, "%s/%03x", output_dir, rank);
+		if (in_filename == NULL || target == NULL)
+			err(1, "cannot allocate filenames");
 	}
 
 
@@ -612,13 +636,22 @@ int main(int argc, char **argv)
 	list_clear(reject);
 
 	/* setup: all vectors are "active" */
-	// n = 200;
 	for (u32 i = 0; i < n; i++) {
 		items[i].x = L[i];
 		list_insert(active, &items[i]);
 	}
 	free(L);
 	m = n;         // count of active vectors
+
+	if (multi_mode) {
+		printf("process %d, starting.\n", rank);
+	}
+
+	u64 output_size = sizeof(struct slice_t) / 8 * (1 + n / (64 - l)) + n;
+	u64 *out_space = malloc(output_size * sizeof(u64));
+	output_size = 0;
+	if (out_space == NULL)
+		err(1, "cannot allocate output");
 
 	/* slice until the input list is empty */
 	while (n > 0) {
@@ -634,10 +667,13 @@ int main(int argc, char **argv)
 				printf("eq[%d] = %016" PRIx64 "\n", i, equations[i]);
 
 		/* pad equations to obtain an invertible 64x64 matrix */
-		struct slice_t *slice = malloc(sizeof(*slice) + sizeof(u64) * m);
+		struct slice_t *slice = (struct slice_t *) (out_space + output_size);
+		output_size += sizeof(*slice) / sizeof(u64) + m;
+
 		slice->n = m;
 		slice->l = k;
 		bool ok = false;
+		int n_trials = 0;
 		while (!ok) {
 			u64 T[64];
 			for (u64 i = 0; i < 64 - k; i++)
@@ -647,18 +683,18 @@ int main(int argc, char **argv)
 			
 			transpose_64(T, slice->M);
 			ok = invert(slice->M, slice->Minv);
+			n_trials++;
+
+			if (n_trials > 1000) {
+				for (u32 i = 0; i < k; i++)
+					printf("eq[%d] = %016" PRIx64 "\n", i, equations[i]);				
+				errx(3, "the impossible happened");
+			}
 		}
 
 		u32 i = 0;
 		for (struct list_t *item = active->next; item != active; item = item->next)
 			slice->CM[i++] = naive_gemv(item->x, slice->M);
-	
-		/* fwrite(slice) */
-		u32 size = sizeof(*slice) + m * sizeof(u64);
-		size_t check = fwrite(slice, 1, size, f_out);
-		if (check != size)
-			err(1, "fwrite inconsistensy %zd vs %d", check, size);
-		free(slice);
 
 		/* The active (=good) vectors are discarded. The rejected vectors become active again for the next pass. */
 		struct list_t *tmp = active;
@@ -670,6 +706,23 @@ int main(int argc, char **argv)
 	}
 
 	if (multi_mode)
+		printf("Process %d, writing\n", rank);
+
+	if (big_endian()) {
+		for (u32 i = 0; i < output_size; i++)
+			out_space[i] = bswap_64(out_space[i]);
+	}
+
+	size_t check = fwrite(out_space, 8, output_size, f_out);
+	if (check != output_size)
+		err(1, "fwrite inconsistensy %zd vs %d", check, size);
+	int rc = fclose(f_out);
+	if (rc != 0)
+		err(1, "cannot close output");
+
+	if (multi_mode) {
+		printf("Process %d, over and out\n", rank);
 		MPI_Finalize();
+	}
 	exit(EXIT_SUCCESS);
 }
