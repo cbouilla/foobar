@@ -14,10 +14,10 @@ all: programs
 common.o: common.h
 joux_v3.o: common.h datastructures.h
 
-programs: joux_standalone do_task_group
-joux_standalone: common.o joux_v3.o
+programs: do_task do_task_group
+do_task: common.o joux_v3.o
 do_task_group: common.o joux_v3.o
 
 clean:
 	rm -rf *.o
-	rm -rf joux_standalone do_task_group
+	rm -rf do_task do_task_group
