@@ -15,7 +15,7 @@ parser.add_argument("--verbose", help="display more information", action="store_
 parser.add_argument("--cores", help="number of cores of this machine", type=int, default=1)
 parser.add_argument("--check", help="run check programs", action="store_true")
 parser.add_argument("--slice", help="run the slicer [for joux's algo]", action="store_true")
-parser.add_argument("--group", help="run the grouper", type=int, desk="group_size")
+parser.add_argument("--group", help="run the grouper", type=int, dest="group_size")
 args = parser.parse_args()
 
 print("Running with k = {}".format(args.k))
@@ -29,7 +29,7 @@ PREIMAGE_DIR = '../data/preimages'
 PREIMAGE_DIR = '../foobar'
 DICT_DIR = '../data/dict'
 HASH_DIR = '../data/hash'
-SLICE_DIR = '../data/alt_slice'
+SLICE_DIR = '../data/slice_alt'
 TG_DIR = '../data/task_groups'
 
 SPLITTER = './splitter'
@@ -216,13 +216,28 @@ def slicing():
 
 
 def grouping_kind(path, kind):
-    for i in range(1 << (args.k - args.group_size)):
-        output_file = '{}/foo.{:03x}'.format(HASH_DIR, i)
+    assert ((1 << args.k) % args.group_size) == 0
+    for i in range((1 << args.k) // args.group_size):
+        output_file = '{}/{}.{:03x}'.format(TG_DIR, kind, i)
         input_files = []
-        for j in range(1 << args.group_size):
-            input_files.append('{}/foo.{:03x}'.format(TG_DIR, i * (1 << args.group_size) + j))
-        
-        cmds = 'python3 grouper.py {in} > {out}'.format(in=' '.join(input_files), out=output_file)
+        for j in range(args.group_size):
+            if kind == 'foobar':
+                input_files.append('{}/{:03x}'.format(path, i * args.group_size + j))
+            else:
+                input_files.append('{}/{}.{:03x}'.format(path, kind, i * args.group_size + j))
+
+
+        if os.path.exists(output_file):
+            output_mtime = os.stat(output_file).st_mtime
+            input_mtime = 0
+            for f in input_files:
+                input_mtime = max(input_mtime, os.stat(f).st_mtime)
+            if input_mtime < output_mtime:
+                if args.verbose:
+                    print('# skipping {} [already grouped]'.format(output_file))
+                continue
+
+        cmds = 'python3 grouper.py {ins} > {out}'.format(ins=' '.join(input_files), out=output_file)
         if args.verbose:
             print(cmds)
         if not args.dry_run:
@@ -236,20 +251,20 @@ def grouping():
 
 if args.stats:
     preimage_stats()
-    dict_stats()    
+    dict_stats()
     hash_stats()
     sys.exit()
 
 ensure_dirs()
-    
+
 print("1. Splitting (preimage --> dictionaries), [split_bits={}]".format(args.k))
 splitting()
-#if args.check:
-#    print("X. Checking (unsorted) dictionaries")
-#    check_dict()
+if args.check:
+    print("X. Checking (unsorted) dictionaries")
+    check_dict()
 
-print("2. Sorting (dictionaries -> dictionaries)")
-sorting()
+#print("2. Sorting (dictionaries -> dictionaries)")
+#sorting()
 #if args.check:
 #    print("Y. Checking (sorted) dictionaries")
 #    check_dict()
