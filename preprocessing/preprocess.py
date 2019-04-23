@@ -15,6 +15,7 @@ parser.add_argument("--verbose", help="display more information", action="store_
 parser.add_argument("--cores", help="number of cores of this machine", type=int, default=1)
 parser.add_argument("--check", help="run check programs", action="store_true")
 parser.add_argument("--slice", help="run the slicer [for joux's algo]", action="store_true")
+parser.add_argument("--group", help="run the grouper", type=int, desk="group_size")
 args = parser.parse_args()
 
 print("Running with k = {}".format(args.k))
@@ -28,7 +29,9 @@ PREIMAGE_DIR = '../data/preimages'
 PREIMAGE_DIR = '../foobar'
 DICT_DIR = '../data/dict'
 HASH_DIR = '../data/hash'
-SLICE_DIR = '../data/slice'
+SLICE_DIR = '../data/alt_slice'
+TG_DIR = '../data/task_groups'
+
 SPLITTER = './splitter'
 DICT_CHECKER = './dict_checker'
 SORTER = './sorter'
@@ -36,13 +39,13 @@ MERGER = './merger'
 HASH_CHECKER = './hash_checker'
 SLICER = './slicer'
 
-SLICE_L = 20
+SLICE_L = 19
 
-do_split = True
+do_split = False
 check_split = False
-do_sort = True
-check_sort = False
-do_merge = True
+#do_sort = False
+#check_sort = False
+do_merge = False
 check_merge = False
 
 n_preimages = {}
@@ -135,24 +138,6 @@ def splitting():
                 subprocess.run(cmdline).check_returncode()
 
 
-def sorting():
-    """
-    Sort all dictionnaries.
-    """
-    jobs = []
-    for i in range(1 << args.k):
-        for file in sorted(glob.glob('{}/{:03x}/*.unsorted'.format(DICT_DIR, i))):
-            file_sorted = file[:-9] + '.sorted'
-            if os.path.exists(file_sorted) and os.path.getsize(file) == os.path.getsize(file_sorted):
-                if args.verbose:
-                    print("# Skiping {} [already sorted]".format(file))
-                continue
-            cmds = [SORTER, file]
-            if args.verbose:
-                print(" ".join(cmds))
-            if not args.dry_run:
-                subprocess.run(cmds).check_returncode()
-
 def check_dict():
     """
     Verify all dictionnaries.
@@ -230,6 +215,25 @@ def slicing():
             subprocess.run(cmds, stdout=subprocess.DEVNULL).check_returncode()
 
 
+def grouping_kind(path, kind):
+    for i in range(1 << (args.k - args.group_size)):
+        output_file = '{}/foo.{:03x}'.format(HASH_DIR, i)
+        input_files = []
+        for j in range(1 << args.group_size):
+            input_files.append('{}/foo.{:03x}'.format(TG_DIR, i * (1 << args.group_size) + j))
+        
+        cmds = 'python3 grouper.py {in} > {out}'.format(in=' '.join(input_files), out=output_file)
+        if args.verbose:
+            print(cmds)
+        if not args.dry_run:
+            subprocess.run(cmds, shell=True).check_returncode()
+
+def grouping():
+    grouping_kind(HASH_DIR, 'foo')
+    grouping_kind(HASH_DIR, 'bar')
+    grouping_kind(SLICE_DIR, 'foobar')
+
+
 if args.stats:
     preimage_stats()
     dict_stats()    
@@ -259,3 +263,6 @@ if args.check:
 if args.slice:
     print("4. Slicing (hash files -> slice files)")
     slicing()
+
+print("5. grouping (hash & slice files -> task group files)")
+grouping()
