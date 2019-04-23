@@ -8,7 +8,7 @@ struct jtask_t {
 	u64 *L[2];
 	u64 n[2];
 	struct slice_t *slices;
-	u64 slices_size;
+	u64 slices_size;        /* in u64, not in bytes */
 };
 
 struct solution_t {

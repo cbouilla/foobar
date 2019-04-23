@@ -29,6 +29,7 @@ struct tg_context_t {
 	int rank;
 	int comm_size;
 	char *input_dir;
+	void * data[3];
 };
 
 
@@ -135,14 +136,14 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 		errx(1, "missing --input-dir");
 
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
-		errx(2, "wrong communicator size");
+		errx(2, "wrong communicator size (MPI says %d, I wanted %d)", world_size, ctx->cpu_grid_size * ctx->cpu_grid_size);
 	
 	if ((*i >= 0) ^ (*j >= 0))
 		errx(3, "must give both --i and --j");
-	if (!((*i >= 0) ^ (*job >= 0)))
-		errx(3, "--i/--j and --job are mutually exclusive");
 	if ((*i < 0) & (*job < 0))
 		errx(3, "must provide either --job or --i/--j");
+	if (!((*i >= 0) ^ (*job >= 0)))
+		errx(3, "--i/--j and --job are mutually exclusive");
 	if (*job >= 0 && ctx->tg_per_job < 0)
 		errx(1, "missing --tg-per-job with --job");
 
@@ -174,6 +175,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 		all_tasks[r].L[0] = A + A[r + 1];
 		all_tasks[r].n[0] = A[r + 2] - A[r + 1];
 	}
+	ctx->data[0] = A;
 
 	/* B */
 	sprintf(filename, "%s/bar.%03x", ctx->input_dir, tg_j);
@@ -184,14 +186,18 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 		all_tasks[r].L[1] = B + B[r + 1];
 		all_tasks[r].n[1] = B[r + 2] - B[r + 1];
 	}
+	ctx->data[1] = B;
 	
 	/* C */
 	sprintf(filename, "%s/foobar.%03x", ctx->input_dir, tg_i ^ tg_j);
 	u64 *C = load_file_MPI(filename, &devnull, comm_IJ);
 	if (C[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (foobar)");
-        for (u64 r = 0; r < C[0]; r++)
+        for (u64 r = 0; r < C[0]; r++) {
 	        all_tasks[r].slices = (struct slice_t *) (C + C[r + 1]);
+	        all_tasks[r].slices_size = C[r + 2] - C[r + 1];
+        }
+        ctx->data[2] = C;
 
 	double end_load = MPI_Wtime();
 	if (ctx->rank == 0)
@@ -306,15 +312,11 @@ void tg_gather_and_save(struct tg_context_t * ctx, int tg_i, int tg_j, struct ta
 }
 
 
-void tg_cleanup(struct tg_context_t * ctx,  struct jtask_t *all_tasks, struct task_result_t * all_solutions)
+void tg_cleanup(struct tg_context_t * ctx, struct task_result_t * all_solutions)
 {
 	result_free(all_solutions);
-	for (int r = 0; r < ctx->per_core_grid_size; r++) {
-	        free(all_tasks[r].L[0]);
-	        free(all_tasks[r].L[1]);
-	        free(all_tasks[r].slices);
-	}
-	free(all_tasks);
+	for (int i = 0; i < 3; i++)
+		free(ctx->data[i]);
 }
 
 
@@ -326,7 +328,7 @@ void do_task_group(struct tg_context_t * ctx, int tg_i, int tg_j)
 	struct jtask_t *all_tasks = load_tg_data(ctx, tg_i, tg_j);
 	struct task_result_t * all_solutions = tg_task_work(ctx, tg_i, tg_j, all_tasks);
 	tg_gather_and_save(ctx, tg_i, tg_j, all_solutions);
-	tg_cleanup(ctx, all_tasks, all_solutions);
+	tg_cleanup(ctx, all_solutions);
 }
 
 

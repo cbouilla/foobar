@@ -40,6 +40,8 @@ void do_task(const char *hash_dir, const char  *slice_dir, u32 i, u32 j)
 	char filename[255];
 	sprintf(filename, "%s/%03x", slice_dir, idx[2]);
 	task.slices = load_file(filename, &task.slices_size);
+	assert((task.slices_size % 8) == 0);
+	task.slices_size /= 8;
 
 	/* Now, random permutation is done during preprocessing
 	#pragma omp parallel for schedule(static)

@@ -412,16 +412,13 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	/* process all slices */
 	struct slice_t *slice = task->slices;
 	u32 i = 0;
-	while (1) {
+	u64 *end = ((u64 *) task->slices) + task->slices_size;
+	while ((u64 *) slice < end) {
 		process_slice(&self, slice, task_index, slice_verbose);
 		i++;
-		u32 n = slice->n;
-		u8 *ptr = (u8 *) slice;
-		ptr += sizeof(struct slice_t) + sizeof(u64) * n;
-		u8 *end = ((u8 *) task->slices) + task->slices_size;
-		if (ptr >= end)
-			break;
-		slice = (struct slice_t *)ptr;
+		
+		u64 *ptr = ((u64 *) slice) + sizeof(*slice) / sizeof(*ptr) + slice->n;
+		slice = (struct slice_t *) ptr;
 	}
 
 	/* cleanup */
