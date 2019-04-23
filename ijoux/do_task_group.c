@@ -28,8 +28,7 @@ struct tg_context_t {
 	int cpu_j;
 	int rank;
 	int comm_size;
-	char *hash_dir;
-	char *slice_dir;
+	char *input_dir;
 };
 
 
@@ -53,8 +52,7 @@ static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i
 struct option longopts[11] = {
 	{"partitioning-bits", required_argument, NULL, 'b'},
 	{"tg-per-job", required_argument, NULL, 'g'},
-	{"hash-dir", required_argument, NULL, 'h'},
-	{"slice-dir", required_argument, NULL, 's'},
+	{"input-dir", required_argument, NULL, 'h'},
 	{"tg-grid-size", required_argument, NULL, 't'},
 	{"cpu-grid-size", required_argument, NULL, 'c'},
 	{"per-core-grid-size", required_argument, NULL, 'p'},
@@ -89,8 +87,7 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 	ctx->per_core_grid_size = -1;
         ctx->rank = rank;
         ctx->comm_size = world_size;
-        ctx->hash_dir = NULL;
-        ctx->slice_dir = NULL;
+        ctx->input_dir = NULL;
 	*i = -1;
 	*j = -1;
 	*job = -1;
@@ -111,10 +108,7 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
                          ctx->partitioning_bits = atol(optarg);
                          break;
                 case 'h':
-                        ctx->hash_dir = optarg;
-                        break;
-                case 's':
-                        ctx->slice_dir = optarg;
+                        ctx->input_dir = optarg;
                         break;
                 case 'i':
                         *i = atol(optarg);
@@ -137,10 +131,8 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 		errx(1, "missing --cpu-grid-size");
 	if (ctx->per_core_grid_size < 0)
 		errx(1, "missing --per-core-grid-size");
-	if (ctx->hash_dir == NULL)
-		errx(1, "missing --hash-dir");		
-	if (ctx->slice_dir == NULL)
-		errx(1, "missing --slice-dir");		
+	if (ctx->input_dir == NULL)
+		errx(1, "missing --input-dir");
 
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
 		errx(2, "wrong communicator size");
@@ -166,33 +158,41 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	struct jtask_t *all_tasks = malloc(ctx->per_core_grid_size * sizeof(*all_tasks));
 	double start = MPI_Wtime();	
 	char filename[255];
+
 	MPI_Comm comm_I, comm_J, comm_IJ;
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_I);
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_J);
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i ^ ctx->cpu_j, 0, &comm_IJ);
-	u32 base[3];
-	tg_task_base(ctx, tg_i, tg_j, base);
 	
 	/* A */
-       for (int r = 0; r < ctx->per_core_grid_size; r++) {
-		sprintf(filename, "%s/foo.%03x", ctx->hash_dir, base[0] + r);
-	        all_tasks[r].L[0] = load_file_MPI(filename, &all_tasks[r].n[0], comm_I);
-	        all_tasks[r].n[0] /= 8;
+	sprintf(filename, "%s/foo.%03x", ctx->input_dir, tg_i);
+	u64 devnull;
+	u64 *A = load_file_MPI(filename, &devnull, comm_I);
+	if (A[0] != (u64) ctx->per_core_grid_size)
+		errx(4, "wrong task-group size (foo)");
+	for (u64 r = 0; r < A[0]; r++) {
+		all_tasks[r].L[0] = A + A[r + 1];
+		all_tasks[r].n[0] = A[r + 2] - A[r + 1];
 	}
 
 	/* B */
- 	for (int r = 0; r < ctx->per_core_grid_size; r++) {
-                sprintf(filename, "%s/bar.%03x", ctx->hash_dir, base[1] + r);
-                all_tasks[r].L[1] = load_file_MPI(filename, &all_tasks[r].n[1], comm_J);
-                all_tasks[r].n[1] /= 8;
-        }
-
-	/* C */
-        for (int r = 0; r < ctx->per_core_grid_size; r++) {
-        	sprintf(filename, "%s/%03x", ctx->slice_dir, base[2] + r);
-	        all_tasks[r].slices = load_file_MPI(filename, &all_tasks[r].slices_size, comm_IJ);
+	sprintf(filename, "%s/bar.%03x", ctx->input_dir, tg_j);
+	u64 *B = load_file_MPI(filename, &devnull, comm_J);
+	if (B[0] != (u64) ctx->per_core_grid_size)
+		errx(4, "wrong task-group size (bar)");
+	for (u64 r = 0; r < B[0]; r++) {
+		all_tasks[r].L[1] = B + B[r + 1];
+		all_tasks[r].n[1] = B[r + 2] - B[r + 1];
 	}
 	
+	/* C */
+	sprintf(filename, "%s/foobar.%03x", ctx->input_dir, tg_i ^ tg_j);
+	u64 *C = load_file_MPI(filename, &devnull, comm_IJ);
+	if (C[0] != (u64) ctx->per_core_grid_size)
+		errx(4, "wrong task-group size (foobar)");
+        for (u64 r = 0; r < C[0]; r++)
+	        all_tasks[r].slices = (struct slice_t *) (C + C[r + 1]);
+
 	double end_load = MPI_Wtime();
 	if (ctx->rank == 0)
 		printf("Total data load time %.fs\n", end_load - start);
