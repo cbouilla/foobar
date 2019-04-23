@@ -6,15 +6,16 @@ filenames = sys.argv[1:]
 prefix = array.array('Q')
 assert prefix.itemsize == 8
 
-prefix.append(len(filenames))
+n = len(filenames)
+prefix.append(n)
 
-s = 0
-i = 0
+s = 2 + n
 for f in filenames:
-    size =  os.path.getsize(f)
+    l = os.path.getsize(f)
+    assert (l % 8) == 0
+    size = l // 8
     prefix.append(s)
     s += size
-    i += 1
 prefix.append(s)
 
 sys.stdout.buffer.write(prefix.tobytes())
