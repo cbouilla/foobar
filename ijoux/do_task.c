@@ -8,14 +8,11 @@
 #include <string.h>
 #include <math.h>
 
-#include <omp.h>
-#include <mpi.h>
-
 #include "common.h"
 
 void usage()
 {
-	printf("--i=I --j=J             Solve task (i, j)\n");
+	printf("--i=I --j=J             Solve task (i, j) given in HEXADECIMAL\n");
 	printf("--n=N                   Solve the first N tasks\n");
 	printf("--hash-dir=PATH         Location of hash files\n");
 	printf("--slice-dir=PATH        Location of slice files\n\n");
@@ -23,7 +20,7 @@ void usage()
 
 void do_task(const char *hash_dir, const char  *slice_dir, u32 i, u32 j)
 {
-	printf("Task (%d, %d, %d) : ", i, j, i^j);
+	printf("[%04x ; %04x ; %04x] ", i, j, i^j);
 	fflush(stdout);
 	u32 idx[3] = {i, j, i ^ j};
 	struct jtask_t task;
@@ -93,10 +90,10 @@ int main(int argc, char **argv)
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 'i':
-			i = atoi(optarg);
+			i = strtol(optarg, NULL, 16);
 			break;
 		case 'j':
-			j = atoi(optarg);
+			j = strtol(optarg, NULL, 16);
 			break;
 		case 'n':
 			n = atoi(optarg);
