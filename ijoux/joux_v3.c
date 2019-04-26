@@ -9,7 +9,7 @@
 #include <strings.h>
 
 #include <omp.h>
-#include <papi.h>
+// #include <papi.h>
 
 #include "common.h"
 #include "datastructures.h"

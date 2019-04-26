@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <err.h>
 #include <getopt.h>
+#include <byteswap.h>
 
 #include <mpi.h>
 
@@ -18,6 +19,41 @@
 struct task_result_t * iterated_joux_task_(struct jtask_t *task, u32 task_index[2]);
 
 #define CPU_VERBOSE 1
+
+void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm)
+{
+	/* open the file (collective operation) */
+	MPI_File fh;
+	int rc = MPI_File_open(comm, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+	if (rc != MPI_SUCCESS)
+		errx(1, "error opening %s", filename);
+
+	/* obtain file size */
+	MPI_Offset size;
+	MPI_File_get_size(fh, &size);
+	assert((size % 8) == 0);
+
+	/* allocate memory */
+	u64 *content = aligned_alloc(64, size);
+	if (content == NULL)
+		err(1, "failed to allocate memory");
+
+	/* read (collective) */
+	MPI_File_read_all(fh, content, size, MPI_BYTE, MPI_STATUS_IGNORE);
+
+	/* we're done */
+	MPI_File_close(&fh);
+	*size_ = size;
+
+	/* byte-swap if necessary */
+	if (big_endian()) {
+                #pragma omp parallel for
+		for (u32 i = 0; i < size / 8; i++)
+			content[i] = bswap_64(content[i]);
+	}
+	return content;
+}
+
 
 struct tg_context_t {
 	int partitioning_bits;

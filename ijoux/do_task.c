@@ -74,10 +74,7 @@ void do_task(const char *hash_dir, const char  *slice_dir, u32 i, u32 j)
 }
 
 int main(int argc, char **argv)
-{
-	/* setup libraries */
-	MPI_Init(&argc, &argv);
-	
+{	
 	/* parse command-line options */
 	struct option longopts[6] = {
 		{"i", required_argument, NULL, 'i'},
@@ -151,5 +148,4 @@ int main(int argc, char **argv)
 			}
 	}
 	printf("FINISHED in %.1fs\n", wtime() - start);
-	MPI_Finalize();
 }

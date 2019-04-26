@@ -2,7 +2,6 @@
 #include "../types.h"
 #include "../preprocessing/preprocessing.h"
 
-#include <mpi.h>
 
 struct jtask_t {
 	u64 *L[2];
@@ -41,7 +40,6 @@ long long usec();
 
 bool big_endian();
 void *aligned_alloc(size_t alignment, size_t size);
-void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm);
 void *load_file(const char *filename, u64 * size_);
 struct task_result_t *result_init();
 void report_solution(struct task_result_t *result, const struct solution_t *solution);
