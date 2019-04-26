@@ -271,6 +271,7 @@ static void checkup(struct slice_ctx_t *ctx, u32 size, u64 (*preselected)[3], u6
 static void process_slice(struct context_t *self, const struct slice_t *slice,
 		      const u32 *task_index, bool verbose)
 {
+	(void) verbose;
 	struct slice_ctx_t ctx = {.slice = slice };
 	ctx.result = result_init();
 	u64 H[512];
@@ -308,7 +309,7 @@ static void process_slice(struct context_t *self, const struct slice_t *slice,
 	/************* phase 3: subjoins */
 
 	long long subj_start = usec();
-	u32 n_preselected[4];
+	u32 n_preselected[4] = {0, 0, 0, 0};
 	#pragma omp parallel num_threads(self->T_subj)
 	{
 		u32 probes = 0;
@@ -413,7 +414,7 @@ struct task_result_t *iterated_joux_task(struct jtask_t *task, const u32 *task_i
 	struct slice_t *slice = task->slices;
 	u32 i = 0;
 	u64 *end = ((u64 *) task->slices) + task->slices_size;
-	while ((u64 *) slice < end) {
+	while (((u64 *) slice) < end) {
 		process_slice(&self, slice, task_index, slice_verbose);
 		i++;
 		

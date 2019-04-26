@@ -56,7 +56,7 @@ void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm)
 
 
 struct tg_context_t {
-	int partitioning_bits;
+	int task_grid_size;
 	int cpu_grid_size;
 	int per_core_grid_size;
 	int tg_per_job;
@@ -87,7 +87,7 @@ static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i
 
 
 struct option longopts[11] = {
-	{"partitioning-bits", required_argument, NULL, 'b'},
+	{"task-grid-size", required_argument, NULL, 'b'},
 	{"tg-per-job", required_argument, NULL, 'g'},
 	{"input-dir", required_argument, NULL, 'h'},
 	{"tg-grid-size", required_argument, NULL, 't'},
@@ -118,7 +118,7 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
            grid of size 2 ** (partitioning_bits) / (process_grid_size * per_core_grid_size)
         */
         struct tg_context_t *ctx = malloc(sizeof(*ctx));
-	ctx->partitioning_bits = -1;
+	ctx->task_grid_size = -1;
 	ctx->tg_per_job = -1;
 	ctx->cpu_grid_size = -1;
 	ctx->per_core_grid_size = -1;
@@ -142,7 +142,7 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
                         ctx->per_core_grid_size = atol(optarg);
                         break;
                 case 'b':
-                         ctx->partitioning_bits = atol(optarg);
+                         ctx->task_grid_size = atol(optarg);
                          break;
                 case 'h':
                         ctx->input_dir = optarg;
@@ -162,8 +162,6 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 	}
 
 	/* validation */
-	if (ctx->partitioning_bits < 0)
-		errx(1, "missing --partitioning-bits");
 	if (ctx->cpu_grid_size < 0)
 		errx(1, "missing --cpu-grid-size");
 	if (ctx->per_core_grid_size < 0)
@@ -173,16 +171,19 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 
 	if (world_size != ctx->cpu_grid_size * ctx->cpu_grid_size)
 		errx(2, "wrong communicator size (MPI says %d, I wanted %d)", world_size, ctx->cpu_grid_size * ctx->cpu_grid_size);
-	
-	if ((*i >= 0) ^ (*j >= 0))
-		errx(3, "must give both --i and --j");
+
 	if ((*i < 0) & (*job < 0))
 		errx(3, "must provide either --job or --i/--j");
 	if (!((*i >= 0) ^ (*job >= 0)))
 		errx(3, "--i/--j and --job are mutually exclusive");
+	if ((*i >= 0) ^ (*j >= 0))
+		errx(3, "must give both --i and --j");
+		
 	if (*job >= 0 && ctx->tg_per_job < 0)
 		errx(1, "missing --tg-per-job with --job");
-
+	if (*job >= 0 && ctx->task_grid_size < 0)
+		errx(1, "missing --task-grid-size with --job");
+	
 	/* my own coordinates in the CPU grid */
 	ctx->cpu_i = rank / ctx->cpu_grid_size;
 	ctx->cpu_j = rank % ctx->cpu_grid_size;
@@ -265,11 +266,17 @@ static struct task_result_t * tg_task_work(struct tg_context_t *ctx, int tg_i, i
 
 			double task_start = MPI_Wtime();	
 			
+			if (CPU_VERBOSE) {
+				printf(" [%04x ; %04x ; %04x] : ", 
+					task_index[0], task_index[1], task_index[2]);
+				fflush(stdout);
+			}
+
+
 			struct task_result_t * result = iterated_joux_task(&task, task_index);
 		
 			if (CPU_VERBOSE)
-				printf("Task (%04x, %04x): %.1fs\n", task_index[0], 
-					task_index[1], MPI_Wtime() - task_start);
+				printf("%.1fs; %d solutions\n", MPI_Wtime() - task_start, result->size);
 			
 			/* copy task solutions into global all_solutions array */
 			for (u32 u = 0; u < result->size; u++) {
@@ -370,8 +377,7 @@ void do_task_group(struct tg_context_t * ctx, int tg_i, int tg_j)
 
 void do_job(struct tg_context_t * ctx, int job) 
 {
-	int task_grid_size = 1 << ctx->partitioning_bits;
-	int tg_grid_size = task_grid_size / ctx->cpu_grid_size / ctx->per_core_grid_size;
+	int tg_grid_size = ctx->task_grid_size / ctx->cpu_grid_size / ctx->per_core_grid_size;
 	int tg_from = job * ctx->tg_per_job;
 	int tg_to = (job + 1) * ctx->tg_per_job;
 	int njobs = tg_grid_size * tg_grid_size / ctx->tg_per_job;
@@ -380,7 +386,7 @@ void do_job(struct tg_context_t * ctx, int job)
 		errx(3, "invalid job number");
 
 	if (ctx->rank == 0) {
-		printf("* Task grid       is [%d x %d]\n", task_grid_size, task_grid_size);
+		printf("* Task grid       is [%d x %d]\n", ctx->task_grid_size, ctx->task_grid_size);
 		printf("* Task Group grid is [%d x %d]\n", tg_grid_size, tg_grid_size);
 		printf("* #jobs           is %d\n", njobs);
 	}
