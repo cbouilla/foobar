@@ -196,6 +196,8 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	struct jtask_t *all_tasks = malloc(ctx->per_core_grid_size * sizeof(*all_tasks));
 	double start = MPI_Wtime();	
 	char filename[255];
+	u32 base[3];
+	tg_task_base(ctx, tg_i, tg_j, base);
 
 	MPI_Comm comm_I, comm_J, comm_IJ;
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_I);
@@ -203,7 +205,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i ^ ctx->cpu_j, 0, &comm_IJ);
 	
 	/* A */
-	sprintf(filename, "%s/foo.%03x", ctx->input_dir, tg_i);
+	sprintf(filename, "%s/foo.%03x", ctx->input_dir, base[0]);
 	u64 devnull;
 	u64 *A = load_file_MPI(filename, &devnull, comm_I);
 	if (A[0] != (u64) ctx->per_core_grid_size)
@@ -215,7 +217,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	ctx->data[0] = A;
 
 	/* B */
-	sprintf(filename, "%s/bar.%03x", ctx->input_dir, tg_j);
+	sprintf(filename, "%s/bar.%03x", ctx->input_dir, base[1]);
 	u64 *B = load_file_MPI(filename, &devnull, comm_J);
 	if (B[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (bar)");
@@ -226,7 +228,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	ctx->data[1] = B;
 	
 	/* C */
-	sprintf(filename, "%s/foobar.%03x", ctx->input_dir, tg_i ^ tg_j);
+	sprintf(filename, "%s/foobar.%03x", ctx->input_dir, base[2]);
 	u64 *C = load_file_MPI(filename, &devnull, comm_IJ);
 	if (C[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (foobar)");
