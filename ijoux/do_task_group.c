@@ -201,7 +201,7 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 
 	MPI_Comm comm_I, comm_J, comm_IJ;
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_I);
-	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_J);
+	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_j, 0, &comm_J);
 	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i ^ ctx->cpu_j, 0, &comm_IJ);
 	
 	/* A */
