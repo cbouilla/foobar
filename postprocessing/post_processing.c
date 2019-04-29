@@ -189,11 +189,14 @@ void check_solutions(const char * filename, const char *dict_dir, u32 k)
 
 int main(int argc, char *argv[])
 {	
-	int k = 0;
-        struct option longopts[2] = {
-                {"k", required_argument, NULL, 'k'},
+        struct option longopts[3] = {
+        	{"dict-dir", required_argument, NULL, 'd'},
+                {"partitioning-bits", required_argument, NULL, 'k'},
                 {NULL, 0, NULL, 0}
         };
+
+        int k = -1;
+	char *dict_dir = NULL;
 
         signed char ch;
         while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
@@ -201,13 +204,22 @@ int main(int argc, char *argv[])
                 case 'k':
                         k = atol(optarg);
                         break;
+                case 'd':
+                        dict_dir = optarg;
+                        break;
                 default:
                         errx(1, "Unknown option\n");
                 }
         }
-	
-	printf("Début, k=%d\n", k);
-	check_solutions("../solutions/solutions.bin", "../data/dict", k);
+        if (k < 0)
+        	errx(1, "missing --partitioning-bits");
+       	if (dict_dir == NULL)
+        	errx(1, "missing --dict-dir");
+	if (optind != argc - 1)
+                errx(1, "missing solution file(name)");
+        char *solutions_filename = argv[optind];
+
+	check_solutions(solutions_filename, dict_dir, k);
 }
 
 
