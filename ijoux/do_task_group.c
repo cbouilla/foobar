@@ -71,7 +71,7 @@ struct tg_context_t {
 
 static void tg_task_base(struct tg_context_t *ctx, int tg_i, int tg_j, u32 base[3])
 {
-	base[0] = (tg_i * ctx->cpu_grid_size + ctx->cpu_i) * ctx->per_core_grid_size;
+	base[0] = (tg_i * ctx->cpu_grid_size + ctx->cpu_i) ;
 	base[1] = (tg_j * ctx->cpu_grid_size + ctx->cpu_j) * ctx->per_core_grid_size;
 	base[2] = base[0] ^ base[1];
 }
@@ -80,9 +80,9 @@ static void tg_task_base(struct tg_context_t *ctx, int tg_i, int tg_j, u32 base[
 static void tg_task_idx(struct tg_context_t *ctx, int tg_i, int tg_j, int task_i, int task_j, u32 idx[3])
 {
 	tg_task_base(ctx, tg_i, tg_j, idx);
-	idx[0] += task_i;
-	idx[1] += task_j;
-	idx[2] += task_i ^ task_j;
+	idx[0] = idx[0] * ctx->per_core_grid_size + task_i;
+	idx[1] = idx[1] * ctx->per_core_grid_size + task_j;
+	idx[2] = idx[0] ^ idx[1];
 }
 
 
@@ -200,9 +200,9 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	tg_task_base(ctx, tg_i, tg_j, base);
 
 	MPI_Comm comm_I, comm_J, comm_IJ;
-	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i, 0, &comm_I);
-	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_j, 0, &comm_J);
-	MPI_Comm_split(MPI_COMM_WORLD, ctx->cpu_i ^ ctx->cpu_j, 0, &comm_IJ);
+	MPI_Comm_split(MPI_COMM_WORLD, base[0], 0, &comm_I);
+	MPI_Comm_split(MPI_COMM_WORLD, base[1], 0, &comm_J);
+	MPI_Comm_split(MPI_COMM_WORLD, base[2], 0, &comm_IJ);
 	
 	/* A */
 	sprintf(filename, "%s/foo.%03x", ctx->input_dir, base[0]);
