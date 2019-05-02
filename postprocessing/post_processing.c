@@ -85,7 +85,12 @@ void check_solutions(const char * filename, const char *dict_dir)
 	struct preimage_t (* preimages)[3] = malloc(sizeof(*preimages) * nb_solutions);
 	u32 (*origin)[3] = malloc(sizeof(*origin) * nb_solutions);
 
+	printf("#solutions : %ld\n", nb_solutions);
+
 	char *kind_prefix[3] = {"foo", "bar", "foobar"};
+	u32 best = 0;
+	u32 best_i = 0;
+
 	for (u32 i = 0; i < nb_solutions; i++) {
                 for (u32 kind = 0; kind < 3; kind++) {
                 	/* init */
@@ -123,13 +128,13 @@ void check_solutions(const char * filename, const char *dict_dir)
 				if (check != size / sizeof(struct dict_t))
                 			errx(1, "incomplete read %s", filename);
 
-                		/* look for the solution value */
-				for (u32 j = 0; j < check; j++) {
-					if (buffer[j].hash == solutions[i].val[kind]) {
-				               	printf("found hash %016" PRIx64 " in %s\n", solutions[i].val[kind], filename);
-						preimages[i][kind].counter = buffer[j].preimage.counter;
-						preimages[i][kind].nonce = buffer[j].preimage.nonce;
-						origin[i][kind] = i;
+				/* look for the solution value */
+				for (u32 l = 0; l < check; l++) {
+					if (buffer[l].hash == solutions[i].val[kind]) {
+				               	// printf("found hash %016" PRIx64 " in %s\n", solutions[i].val[kind], filename);
+						preimages[i][kind].counter = buffer[l].preimage.counter;
+						preimages[i][kind].nonce = buffer[l].preimage.nonce;
+						origin[i][kind] = j;
 						found = true;
 						break;
 					}
@@ -140,59 +145,19 @@ void check_solutions(const char * filename, const char *dict_dir)
 			if (!found)
 				errx(2, "missing value !");
 		}
-	}
-
-	/*char *pre_filename = "preimages.bin";
-	FILE *f_preimages = fopen(pre_filename, "w");
-       	if (f_preimages == NULL)
-               	err(1, "fopen failed (%s)", filename);
-	u32 ch = fwrite(preimages, sizeof(struct preimage_t), nb_solutions , f_preimages);
-	if (ch != nb_solutions * 3)
-	               errx(1, "incomplete write %s", filename);
-        fclose(f_preimages);
-	*/
-
-	printf("Le nombre de solutions : %ld\n", nb_solutions);
-		/*for (int k = 0; k < nb_solutions; k++) {
-			 printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-                                                solutions[k].x,
-                                                solutions[k].y,
-                                                solutions[k].z);
-		}*/
-	
-		/*for (u32 k = 0; k < nb_solutions; k++) {
-			for (u32 j = 0; j < 3; j++) {
-				printf("PREIMAGE[%d][%d].counter : %d\n", k, j, preimages[k][j].counter);
-				printf("PREIMAGE[%d][%d].nonce : %d\n", k, j, preimages[k][j].nonce);
-			}
-		}*/
-		
-	u32 best = 0;
-	u32 best_i = 0;
-	struct preimage_t best_preimages[3];
-	for (u32 kind = 0; kind < 3; kind++) {
-		best_preimages[kind].counter = preimages[0][kind].counter;
-		best_preimages[kind].nonce = preimages[0][kind].nonce;
-	}
-		
-	for (u32 i = 0; i < nb_solutions; i++) {
 		
 		u32 bits = print_result(preimages, origin, i);
 
 		if (bits > best) {
 			best = bits;
 			best_i = i;
-			for (u32 kind = 0; kind < 3; kind++) {
-				best_preimages[kind].counter = preimages[i][kind].counter;
-			        best_preimages[kind].nonce = preimages[i][kind].nonce;
-			}
 		}
 	}
 	printf("\nBEST :\n");
 	print_result(preimages, origin, best_i);
 	printf("\n         COUNTER /    NONCE\n");
 	for (u32 kind = 0; kind < 3; kind++)
-		printf("%016" PRIx64 " / %08x\n", best_preimages[kind].counter, best_preimages[kind].nonce);
+		printf("%016" PRIx64 " / %08x\n", preimages[best_i][kind].counter, preimages[best_i][kind].nonce);
 }
 
 
