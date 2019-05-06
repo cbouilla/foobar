@@ -72,3 +72,14 @@ I/O and logistics
 
 Maybe group input for a task group into a single file ? 2048 x 16Mb file for each list.
 
+--------------------------------------------------------------------------------------------
+
+bar.18 vérollé à 100%
+bar.19 OK
+bar.20 OK
+21 OK
+22 OK
+
+/!\  a priori aucun autre bar vérolé, et foo OK (sauf le premier mais on le savait).
+
+collision entre des bars de date proche...

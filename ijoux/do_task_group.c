@@ -13,6 +13,8 @@
 
 ./do_task_group --partitioning-bits 0 --tg-per-job 1 --tg-per-job 1
 
+./do_task_group --tg-per-job 1 --cpu-grid-size 1 --per-core-grid-size 8 --input-dir ../data/task_groups/ --task-grid-size 8 --job 0
+
 */
 
 /* fonction externe, boite noire */
@@ -179,10 +181,14 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 	if ((*i >= 0) ^ (*j >= 0))
 		errx(3, "must give both --i and --j");
 		
-	if (*job >= 0 && ctx->tg_per_job < 0)
-		errx(1, "missing --tg-per-job with --job");
-	if (*job >= 0 && ctx->task_grid_size < 0)
-		errx(1, "missing --task-grid-size with --job");
+	if (*job >= 0) {
+		if (ctx->tg_per_job < 0)
+			errx(1, "missing --tg-per-job with --job");
+		if (ctx->task_grid_size < 0)
+			errx(1, "missing --task-grid-size with --job");
+		if (ctx->task_grid_size < ctx->cpu_grid_size * ctx->per_core_grid_size)
+			errx(1, "inconsistent parameters (task-grid-size too small)");
+	}
 	
 	/* my own coordinates in the CPU grid */
 	ctx->cpu_i = rank / ctx->cpu_grid_size;
@@ -301,6 +307,10 @@ static struct task_result_t * tg_task_work(struct tg_context_t *ctx, int tg_i, i
 	return all_solutions;
 }
 
+void tg_solution_filename(int tg_i, int tg_j, char *filename)
+{
+	sprintf(filename, "solutions_%02x_%02x.bin", tg_i, tg_j);
+}
 
 void tg_gather_and_save(struct tg_context_t * ctx, int tg_i, int tg_j, struct task_result_t * all_solutions)
 {
@@ -336,9 +346,9 @@ void tg_gather_and_save(struct tg_context_t * ctx, int tg_i, int tg_j, struct ta
 		free(displacements);
 
 		char filename[255];
-		sprintf(filename, "solutions_%02x_%02x.bin", tg_i, tg_j);
+		tg_solution_filename(tg_i, tg_j, filename);
 		FILE *f_solutions = fopen(filename, "w");
-       		if (f_solutions == NULL)
+		if (f_solutions == NULL)
                 	err(1, "fopen failed (%s)", filename);
 		int check = fwrite(solutions_recv, sizeof(struct solution_t), d / 6, f_solutions);
 		if (check != d / 6)
@@ -367,6 +377,18 @@ void tg_cleanup(struct tg_context_t * ctx, struct task_result_t * all_solutions)
 
 void do_task_group(struct tg_context_t * ctx, int tg_i, int tg_j)
 {
+	/* check if checkpointed */
+	char filename[255];
+	tg_solution_filename(tg_i, tg_j, filename);
+	FILE *f_solutions = fopen(filename, "r");
+	if (f_solutions != NULL) {
+		/* solution file exists. SKIP ! */		
+		fclose(f_solutions);
+		if (ctx->rank == 0)
+			printf("SKIPPING task goup (%d, %d)\n", tg_i, tg_j);
+		return;
+	}
+
 	if (ctx->rank == 0)
 		printf("Doing task goup (%d, %d)\n", tg_i, tg_j);
 
@@ -396,10 +418,11 @@ void do_job(struct tg_context_t * ctx, int job)
 	for (int k = tg_from; k < tg_to; k++) {
 		int i = k / tg_grid_size;
 		int j = k % tg_grid_size;
-		/* TODO: skip if checkpointing data exists */
+
 		do_task_group(ctx, i, j);
 	}
 }
+
 
 int main(int argc, char **argv)
 {

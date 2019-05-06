@@ -18,6 +18,8 @@ slicer.o: preprocessing.h
 slicer.o: CC=mpicc
 slicer: CC=mpicc
 
+doctor: doctor.o preprocessing.o sha256.o hasher.o
+
 dict_checker.o: dict_checker.c hasher.h preprocessing.h
 dict_checker: preprocessing.o sha256.o hasher.o dict_checker.o
 
