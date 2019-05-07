@@ -708,6 +708,7 @@ int main(int argc, char **argv)
 	if (multi_mode)
 		printf("Process %d, writing\n", rank);
 
+	/* the slice files must be little-endian. If I'm big-endian (=turing), I swap */
 	if (big_endian()) {
 		for (u32 i = 0; i < output_size; i++)
 			out_space[i] = bswap_64(out_space[i]);
