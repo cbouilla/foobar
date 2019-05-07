@@ -3,7 +3,7 @@ LDFLAGS = -lm
 
 all: programs
 
-programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker # indexer index_checker
+programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker old_slicer
 
 hasher.o: hasher.c hasher.h preprocessing.h ../types.h
 
@@ -17,6 +17,9 @@ sorter.o: hasher.h sorter.c preprocessing.h
 slicer.o: preprocessing.h
 slicer.o: CC=mpicc
 slicer: CC=mpicc
+
+old_slicer.o: preprocessing.h
+old_slicer: LDFLAGS += -lm4ri
 
 doctor: doctor.o preprocessing.o sha256.o hasher.o
 
