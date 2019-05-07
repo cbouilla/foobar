@@ -20,7 +20,8 @@ int main(int argc, char **argv)
         char *target_dir = NULL;
         char *in_filename = NULL;
         signed char ch;
-        u32 l = 0;
+        u32 l = 19;
+
         while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
                 switch (ch) {
                 case 't':
@@ -116,7 +117,7 @@ int main(int argc, char **argv)
                 u32 size = sizeof(*out) + height * sizeof(u64);
                 check = fwrite(out, 1, size, f_out);
                 if (check != size)
-                        err(1, "fwrite inconsistensy %zd vs %d", check, size);
+                        err(1, "fwrite inconsistency %zd vs %d", check, size);
 
                 mzd_free(A);
                 mzd_free(At);
