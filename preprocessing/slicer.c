@@ -17,7 +17,8 @@
 #include "preprocessing.h"
 
 #define VERBOSE 0
-u64 remaining_time;
+#define QUIET 1
+
 double wtime()
 {
 	struct timeval ts;
@@ -413,23 +414,21 @@ bool invert(const u64 *M_, u64 *Minv)
 }
 
 
-int slice_it(u32 l, u64 *equations, double *timeouts, u64 remaining_time)
-{
-	u64 nb_slices = ceil(m/(64-l));
-	u64 slice_time = remaining_time / nb_slices;
-	remaining_time = remaining_time - slice_time;
-	double T = slice_time * 3600; // total time in s
-	printf ("Remain%f\n",remaining_time);
-	
-	for (int i = 0; i < l; i++) {
+int slice_it(u32 l, u64 *equations, double T)
+{	
+	if (!QUIET)
+		printf("--> ");
+
+	double timeouts[l];
+	for (u32 i = 0; i < l; i++) {
 		timeouts[i] = 1;
 	} 
 	double total = 0;
-	for (int i = 0; i < l; i++)
+	for (u32 i = 0; i < l; i++)
 		total += timeouts[i];
-	for (int i = 0; i < l; i++)
+	for (u32 i = 0; i < l; i++)
 		timeouts[i] *= T / total;
-	//printf ("Timeout%d\n",timeouts[0]); 
+	
 	u32 k = 0;
 	while (k < l) {
 		/* copy the active vectors into M, and pad with zeros to reach a multiple of 64 */
@@ -457,7 +456,7 @@ int slice_it(u32 l, u64 *equations, double *timeouts, u64 remaining_time)
 		if (VERBOSE)
 			printf("length=%d, dimension=%d, Rate = %.3f, GV bound: %.0f\n", 
 				m, d, R, expected_w);
-		else
+		else if (!QUIET)
 			printf("%d ", m);
 
 		/* setup low-weight search */
@@ -517,7 +516,7 @@ int slice_it(u32 l, u64 *equations, double *timeouts, u64 remaining_time)
 	assert(k >= l);
 	if (VERBOSE)
 		printf("Finished: I now have %d equations and %d active vectors\n", k, m);
-	else
+	else if (!QUIET)
 		printf("%d\n", m);
 	return k;
 }
@@ -553,9 +552,10 @@ int main(int argc, char **argv)
 	char *in_filename = NULL;
 	int partitioning_bits = -1;
 	i32 l = -1;
-	remaining_time = -1;
-	signed char ch;
+	double remaining_time = -1;
 	bool multi_mode = false;
+
+	signed char ch;
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
 		switch (ch) {
 		case 't':
@@ -577,17 +577,20 @@ int main(int argc, char **argv)
 			multi_mode = true;
 			break;
 		case 'c':
-			remaining_time = atoi(optarg);
+			remaining_time = atof(optarg);   // in HOURS
 			break;
 		default:
 			errx(1, "Unknown option\n");
 		}
 	}
 
+	/* default settings */
+	double end_time = INFINITY;
 	if (l < 0)
 		l = 19;
-	if (remaining_time < 0)
-			remaining_time = 1;
+	if (remaining_time >= 0)
+		end_time = wtime() + 3600 * remaining_time;
+
 	if (!multi_mode) {
 		if (optind >= argc)
 			errx(1, "missing input file");
@@ -618,27 +621,9 @@ int main(int argc, char **argv)
 			err(1, "cannot allocate filenames");
 	}
 
-
 	u64 n;
 	u64 *L = load(in_filename, &n);
 	
-
-	double T = 1.0; // total time in s
-	double timeouts[l];
-	
-	for (int i = 0; i < l; i++) {
-		timeouts[i] = 1;
-		// TODO : optimize this
-	}
-
-
-	/* normalization */
-	double total = 0;
-	for (int i = 0; i < l; i++)
-		total += timeouts[i];
-	for (int i = 0; i < l; i++)
-		timeouts[i] *= T / total;
-
 	FILE *f_out = fopen(target, "w");
 	if (f_out == NULL)
 		err(1, "cannot open %s\n", target);
@@ -663,28 +648,39 @@ int main(int argc, char **argv)
 	free(L);
 	m = n;         // count of active vectors
 
-	if (multi_mode) {
-		printf("process %d, starting.\n", rank);
-	}
-
 	u64 output_size = sizeof(struct slice_t) / 8 * (1 + n / (64 - l)) + n;
 	u64 *out_space = malloc(output_size * sizeof(u64));
 	output_size = 0;
 	if (out_space == NULL)
 		err(1, "cannot allocate output");
 
-	/* slice until the input list is empty */
-	while (n > 0) {
-		printf("--> ");
-		u64 equations[64];
+	if (!QUIET && multi_mode)
+		printf("process %d, starting.\n", rank);
 
-		u32 k = slice_it(l, equations, timeouts,remaining_time);
+	/* slice until the input list is empty */
+	int slices_done = 0;
+	int vectors_done = 0;
+	while (n > 0) {
+		/* time control */
+		double avg_slice_size = (double) vectors_done / (double) slices_done;
+		double nb_slices = ceil(n / (64 - l));
+		double remaining_time = end_time - wtime();
+		/* 1s default time per slice if nothing specified */
+		double slice_time = (remaining_time < INFINITY) ? remaining_time / nb_slices : 1.0;
+
+		if (!QUIET)
+			printf ("Starting slice %d, timeout=%.2fs. Less than %.0f slices remain. %.1fs remain. %.2fms/vector remain. Avg slice size: %.1f\n", 
+				slices_done, slice_time, nb_slices, remaining_time, 1000. * remaining_time / n, avg_slice_size);
+
+		/* compute the equations */
+		u64 equations[64];		
+		u32 k = slice_it(l, equations, slice_time);
 		
-		/* Here, we would need to save the slice to the file !!!
-		   Instead, we do nothing at all... */
 		if (VERBOSE)
 			for (u32 i = 0; i < k; i++)
 				printf("eq[%d] = %016" PRIx64 "\n", i, equations[i]);
+
+		/* compute the slice and save it on disk */
 
 		/* pad equations to obtain an invertible 64x64 matrix */
 		struct slice_t *slice = (struct slice_t *) (out_space + output_size);
@@ -721,11 +717,13 @@ int main(int argc, char **argv)
 		active = reject;
 		reject = tmp;
 		list_clear(reject);
+		vectors_done += m;
+		slices_done++;
 		n -= m;
 		m = n;
 	}
 
-	if (multi_mode)
+	if (!QUIET && multi_mode)
 		printf("Process %d, writing\n", rank);
 
 	/* the slice files must be little-endian. If I'm big-endian (=turing), I swap */
@@ -742,7 +740,8 @@ int main(int argc, char **argv)
 		err(1, "cannot close output");
 
 	if (multi_mode) {
-		printf("Process %d, over and out\n", rank);
+		if (!QUIET)
+			printf("Process %d, over and out\n", rank);
 		MPI_Finalize();
 	}
 	exit(EXIT_SUCCESS);
