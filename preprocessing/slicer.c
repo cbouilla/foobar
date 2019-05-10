@@ -17,7 +17,7 @@
 #include "preprocessing.h"
 
 #define VERBOSE 0
-
+u64 remaining_time;
 double wtime()
 {
 	struct timeval ts;
@@ -413,8 +413,23 @@ bool invert(const u64 *M_, u64 *Minv)
 }
 
 
-int slice_it(u32 l, u64 *equations, double *timeouts)
+int slice_it(u32 l, u64 *equations, double *timeouts, u64 remaining_time)
 {
+	u64 nb_slices = ceil(m/(64-l));
+	u64 slice_time = remaining_time / nb_slices;
+	remaining_time = remaining_time - slice_time;
+	double T = slice_time * 3600; // total time in s
+	printf ("Remain%f\n",remaining_time);
+	
+	for (int i = 0; i < l; i++) {
+		timeouts[i] = 1;
+	} 
+	double total = 0;
+	for (int i = 0; i < l; i++)
+		total += timeouts[i];
+	for (int i = 0; i < l; i++)
+		timeouts[i] *= T / total;
+	//printf ("Timeout%d\n",timeouts[0]); 
 	u32 k = 0;
 	while (k < l) {
 		/* copy the active vectors into M, and pad with zeros to reach a multiple of 64 */
@@ -504,7 +519,6 @@ int slice_it(u32 l, u64 *equations, double *timeouts)
 		printf("Finished: I now have %d equations and %d active vectors\n", k, m);
 	else
 		printf("%d\n", m);
-	
 	return k;
 }
 
@@ -524,12 +538,13 @@ int main(int argc, char **argv)
 	int rank, size;
 
 	/* process command-line options */
-	struct option longopts[6] = {
+	struct option longopts[7] = {
 		{"output", required_argument, NULL, 't'},
 		{"output-dir", required_argument, NULL, 'o'},
 		{"input-dir", required_argument, NULL, 'i'},
 		{"partitioning-bits", required_argument, NULL, 'b'},
 		{"l", required_argument, NULL, 'l'},
+		{"time-control", required_argument, NULL, 'c'},
 		{NULL, 0, NULL, 0}
 	};
 	char *target = NULL;
@@ -538,6 +553,7 @@ int main(int argc, char **argv)
 	char *in_filename = NULL;
 	int partitioning_bits = -1;
 	i32 l = -1;
+	remaining_time = -1;
 	signed char ch;
 	bool multi_mode = false;
 	while ((ch = getopt_long(argc, argv, "", longopts, NULL)) != -1) {
@@ -560,6 +576,9 @@ int main(int argc, char **argv)
 			partitioning_bits = atoi(optarg);
 			multi_mode = true;
 			break;
+		case 'c':
+			remaining_time = atoi(optarg);
+			break;
 		default:
 			errx(1, "Unknown option\n");
 		}
@@ -567,7 +586,8 @@ int main(int argc, char **argv)
 
 	if (l < 0)
 		l = 19;
-
+	if (remaining_time < 0)
+			remaining_time = 1;
 	if (!multi_mode) {
 		if (optind >= argc)
 			errx(1, "missing input file");
@@ -658,7 +678,7 @@ int main(int argc, char **argv)
 		printf("--> ");
 		u64 equations[64];
 
-		u32 k = slice_it(l, equations, timeouts);
+		u32 k = slice_it(l, equations, timeouts,remaining_time);
 		
 		/* Here, we would need to save the slice to the file !!!
 		   Instead, we do nothing at all... */
