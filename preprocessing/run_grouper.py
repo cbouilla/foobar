@@ -9,6 +9,9 @@ import argparse
 parser = argparse.ArgumentParser(description="This script runs all the preprocessing")
 parser.add_argument("--partitioning-bits", help="number of bits to split", type=int, required=True, dest="k")
 parser.add_argument("--group", help="run the grouper", type=int, dest="group_size")
+parser.add_argument("--dry-run", help="print commands but don't run them", action="store_true")
+parser.add_argument("--verbose", help="display more information", action="store_true")
+
 args = parser.parse_args()
 
 
