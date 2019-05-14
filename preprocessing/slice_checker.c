@@ -164,5 +164,6 @@ int main(int argc, char **argv)
 			exit(EXIT_FAILURE);
 		}
 
+	printf("Average slice size: %.1f\n", (double) n_hashes / (double) i);
 	exit(EXIT_SUCCESS);
 }
