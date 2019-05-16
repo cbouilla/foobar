@@ -166,7 +166,7 @@ static void matmul_init(const u64 * M, struct matmul_table_t *T)
 	}
 }
 
-static inline void gemm(const u64 * IN, u64 * OUT, u32 n, const struct matmul_table_t *M)
+static void gemm(const u64 * IN, u64 * OUT, u32 n, const struct matmul_table_t *M)
 {
 	#pragma omp for schedule(static)
 	for (u32 i = 0; i < n; i++)
