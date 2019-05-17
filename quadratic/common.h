@@ -3,7 +3,6 @@
 
 
 struct task_id_t {
-        u32 k;
         u32 idx[3];
 };
 

@@ -278,7 +278,6 @@ printf("\n");
 	
 #line 258 "quadratic_v2.nw"
 struct context_t self;
-self.k = task->k;
 self.result = result;
 self.grid_size = grid_size;
 for (u32 i = 0; i < 3; i++) {
