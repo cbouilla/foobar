@@ -6,7 +6,7 @@ struct hash_table_t {
         u64 *H;    // of size mask + 1
 };
 
-#define CUCKOO_MASK 0xfff
+#define CUCKOO_MASK 0x7ff   // 8Kbyte
 
 u32 hashtable_size(u32 n_items);
 struct hash_table_t * hashtable_build(const u64 * L, u32 lo, u32 hi);
@@ -26,8 +26,6 @@ static inline bool hashtable_lookup(const struct hash_table_t *s, const u64 x)
         return false;
 }
 
-u32 * cuckoo_build(u64 * const L, u32 lo, u32 hi);
-
 static inline u32 H0(u64 x)
 {
         return x & CUCKOO_MASK;
@@ -38,16 +36,6 @@ static inline u32 H1(u64 x)
         return (x >> 16) & CUCKOO_MASK;
 }
 
-
-static inline bool cuckoo_lookup(const u32 *H, const u64 x)
-{
-        const u32 x_low = x;
-        const u32 h1 = H0(x);
-        const u32 h2 = H1(x);
-        const u32 probe1 = H[h1];
-        const u32 probe2 = H[h2];
-        return (probe1 == x_low) || (probe2 == x_low);
-}
 
 static inline bool cuckoo_lookup_4way(const u32 *H, 
                      const u64 x0, const u64 x1, const u64 x2, const u64 x3)

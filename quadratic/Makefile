@@ -1,5 +1,6 @@
-CFLAGS = -std=c11 -g -Wall -Wextra -O3 -I/usr/local/include -Werror
-LDLIBS = -lm -lpapi
+CFLAGS = -std=c11 -g -O3 -Wall -Wextra -Werror -fopenmp
+LDFLAGS = -fopenmp
+LDLIBS = -lm # -lpapi
 #TANGLEFLAGS = -L
 all: programs # doc.pdf
 
@@ -7,24 +8,15 @@ programs: quad_standalone #server quad_client peek
 doc.pdf: common.pdf datastructures.pdf quadratic_v1.pdf quad_standalone.pdf server.pdf quad_client.pdf peek.pdf
 	pdftk $^ cat output $@
 
-sources: common.c common.h datastructures.h datastructures.c quad_standalone.c quadratic_v2.c
-
 quadratic_v1.o: common.h datastructures.h
+
 quadratic_v1.5.o: common.h datastructures.h
+
 quadratic_v2.o: common.h datastructures.h
 quadratic_v2.o: CFLAGS += -mavx2
 
 quad_standalone.o: quad_standalone.c common.h datastructures.h
-quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v2.o
-
-server.o: server.c server.h
-server: LDLIBS += -lnanomsg
-
-quad_client.o: server.h common.h datastructures.h
-quad_client: LDLIBS += -lnanomsg
-quad_client: quad_client.o common.o datastructures.o quadratic_v1.o
-
-peek.o: peek.c server.h common.h
+quad_standalone: quad_standalone.o common.o datastructures.o quadratic_v1.o
 
 ## NOWEB IMPLICIT RULES
 %.c : %.nw

@@ -5,13 +5,21 @@
 #include <err.h>
 #include <getopt.h>
 #include <string.h>
+#include <math.h>
 
 #include "common.h"
 #include "datastructures.h"
 
-/* in quadratic.c */
-struct task_result_t * quadratic_task(const char *hash_dir, struct task_id_t *task);
+/* in quadratic_v?.c */
+struct task_result_t * quadratic_task(const struct qtask_t *task, const u32 *task_idx);
 
+
+int cmp(const void *a_, const void *b_)
+{
+        u64 *a = (u64 *) a_;
+        u64 *b = (u64 *) b_;
+        return (*a > *b) - (*a < *b);
+}
 
 void usage()
 {
@@ -21,18 +29,74 @@ void usage()
 }
 
 
+struct qtask_t *load_task(const char *hash_dir, u32 *idx)
+{
+	struct qtask_t * task = malloc(sizeof(*task));
+	
+	/* load data */
+	u64 size[3];
+	for (int kind = 0;  kind < 3; kind++) { 
+		char filename[255];
+		char *kind_name[3] = {"foo", "bar", "foobar"};
+		sprintf(filename, "%s/%s.%03x", hash_dir, kind_name[kind], idx[kind]);
+
+		u64 *L = load_file(filename, &size[kind]);
+		qsort(L, size[kind], sizeof(*L), cmp);
+
+		/* assert that the hash file is sorted */
+		for (u64 i = 1; i < size[kind]; i++)
+			assert(L[i] > L[i - 1]);
+
+		task->slice[kind] = L;
+	}
+
+	/* compute index */
+	u32 l = floor(log2(size[0] / 512));
+	task->grid_size = 1 << l;
+	for (u32 kind = 0; kind < 3; kind++) {
+		u32 * index = malloc(sizeof(u32) * (task->grid_size + 1));
+		u64 * slice = task->slice[kind];
+		u64 n = size[kind];
+		index[0] = 0;
+		u32 i = 0;
+		for (u32 prefix = 0; prefix < task->grid_size; prefix++) {    
+			while ((i < n) && ((slice[i] >> (64ull - l)) == prefix))
+				i++;
+			index[prefix + 1] = i;
+		}
+		
+		/* verification */
+		for (u32 prefix = 0; prefix < task->grid_size; prefix++)
+			for (u32 it = index[prefix]; it < index[prefix + 1]; it++)
+				assert((slice[it] >> (64ull - l)) == prefix);
+		assert(index[task->grid_size] == size[kind]);
+		task->index[kind] = index;
+	}
+
+	return task;
+}
+
+void free_task(struct qtask_t * task)
+{
+	for (u32 kind = 0;  kind < 3; kind++) {
+		free(task->slice[kind]);
+		free(task->index[kind]);
+	}
+	free(task);
+}
+
 void do_task(const char *hash_dir, u32 i, u32 j)
 {
 	printf("[%04x ; %04x ; %04x] ", i, j, i^j);
 	fflush(stdout);
 	
-	double start = wtime();
-	struct task_id_t task;
-	task.idx[0] = i;
-	task.idx[1] = j;
-	task.idx[2] = i ^ j;
+	
+	u32 idx[3] = {i, j, i ^ j};
+	struct qtask_t * task = load_task(hash_dir, idx);
 
-	struct task_result_t *result = quadratic_task(hash_dir, &task);
+	double start = wtime();
+
+	struct task_result_t *result = quadratic_task(task, idx);
 
 	printf("%.2fs\n", wtime() - start);
 
@@ -41,11 +105,12 @@ void do_task(const char *hash_dir, u32 i, u32 j)
 		for (u32 u = 0; u < result->size; u++) {
 			struct solution_t * sol = &result->solutions[u];
 			printf("%016" PRIx64 " ^ %016" PRIx64 " ^ %016" PRIx64 " == 0\n",
-					sol->x, sol->y, sol->z);
+					sol->val[0], sol->val[1], sol->val[2]);
 		}
 	}
 
-	// result_free(result);
+	result_free(result);
+	free_task(task);
 }
 
 
