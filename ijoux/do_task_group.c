@@ -20,39 +20,30 @@
 /* fonction externe, boite noire */
 struct task_result_t * iterated_joux_task_(struct jtask_t *task, u32 task_index[2]);
 
-#define CPU_VERBOSE 1
+#define CPU_VERBOSE 0
 
-void *load_file_MPI(const char *filename, u64 * size_, MPI_Comm comm)
+void *load_file_MPI(const char *filename, u64 * size, MPI_Comm comm)
 {
-	/* open the file (collective operation) */
-	MPI_File fh;
-	int rc = MPI_File_open(comm, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-	if (rc != MPI_SUCCESS)
-		errx(1, "error opening %s", filename);
+	int rank;
+	u64 *content = NULL;
 
-	/* obtain file size */
-	MPI_Offset size;
-	MPI_File_get_size(fh, &size);
-	assert((size % 8) == 0);
+	MPI_Comm_rank(comm, &rank);
 
-	/* allocate memory */
-	u64 *content = aligned_alloc(64, size);
-	if (content == NULL)
-		err(1, "failed to allocate memory");
-
-	/* read (collective) */
-	MPI_File_read_all(fh, content, size, MPI_BYTE, MPI_STATUS_IGNORE);
-
-	/* we're done */
-	MPI_File_close(&fh);
-	*size_ = size;
-
-	/* byte-swap if necessary */
-	if (big_endian()) {
-                #pragma omp parallel for
-		for (u32 i = 0; i < size / 8; i++)
-			content[i] = bswap_64(content[i]);
+	if (rank == 0)   // load the file
+		content = load_file(filename, size);
+	
+	/* broadcast its size */
+	MPI_Bcast(size, 1, MPI_UINT64_T, 0, comm);
+	
+	if (rank != 0) {
+		content = aligned_alloc(64, *size * 8);
+		if (content == NULL)
+			err(1, "failed to allocate memory (non-root)");
 	}
+
+	/* broadcast its content */
+	MPI_Bcast(content, *size, MPI_UINT64_T, 0, comm);
+
 	return content;
 }
 
@@ -199,21 +190,18 @@ struct tg_context_t * setup(int argc, char **argv, int *i, int *j, int *job)
 
 static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_j)
 {
-	struct jtask_t *all_tasks = malloc(ctx->per_core_grid_size * sizeof(*all_tasks));
-	double start = MPI_Wtime();	
 	char filename[255];
 	u32 base[3];
+	MPI_Comm comm_I, comm_J, comm_IJ;
+	u64 devnull;
+
+	double start = MPI_Wtime();
+	struct jtask_t *all_tasks = malloc(ctx->per_core_grid_size * sizeof(*all_tasks));
 	tg_task_base(ctx, tg_i, tg_j, base);
 
-	MPI_Comm comm_I, comm_J, comm_IJ;
-	MPI_Comm_split(MPI_COMM_WORLD, base[0], 0, &comm_I);
-	MPI_Comm_split(MPI_COMM_WORLD, base[1], 0, &comm_J);
-	MPI_Comm_split(MPI_COMM_WORLD, base[2], 0, &comm_IJ);
-	
-	u64 devnull;
-	
 	/* A */
 	sprintf(filename, "%s/foo.%03x", ctx->input_dir, base[0]);
+	MPI_Comm_split(MPI_COMM_WORLD, base[0], 0, &comm_I);
 	u64 *A = load_file_MPI(filename, &devnull, comm_I);
 	if (A[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (foo)");
@@ -222,9 +210,11 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 		all_tasks[r].n[0] = A[r + 2] - A[r + 1];
 	}
 	ctx->data[0] = A;
+	MPI_Comm_free(&comm_I);
 
 	/* B */
 	sprintf(filename, "%s/bar.%03x", ctx->input_dir, base[1]);
+	MPI_Comm_split(MPI_COMM_WORLD, base[1], 0, &comm_J);	
 	u64 *B = load_file_MPI(filename, &devnull, comm_J);
 	if (B[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (bar)");
@@ -233,9 +223,11 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 		all_tasks[r].n[1] = B[r + 2] - B[r + 1];
 	}
 	ctx->data[1] = B;
-	
+	MPI_Comm_free(&comm_J);
+
 	/* C */
 	sprintf(filename, "%s/foobar.%03x", ctx->input_dir, base[2]);
+	MPI_Comm_split(MPI_COMM_WORLD, base[2], 0, &comm_IJ);
 	u64 *C = load_file_MPI(filename, &devnull, comm_IJ);
 	if (C[0] != (u64) ctx->per_core_grid_size)
 		errx(4, "wrong task-group size (foobar)");
@@ -244,14 +236,13 @@ static struct jtask_t * load_tg_data(struct tg_context_t *ctx, int tg_i, int tg_
 	        all_tasks[r].slices_size = C[r + 2] - C[r + 1];
         }
         ctx->data[2] = C;
+	MPI_Comm_free(&comm_IJ);
 
 	double end_load = MPI_Wtime();
 	if (ctx->rank == 0)
 		printf("Total data load time %.fs\n", end_load - start);
 	
-	MPI_Comm_free(&comm_I);
-	MPI_Comm_free(&comm_J);
-	MPI_Comm_free(&comm_IJ);
+	
 	return all_tasks;
 }
 
