@@ -3,7 +3,7 @@ LDFLAGS = -lm
 
 all: programs
 
-programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker old_slicer slice_stats
+programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker old_slicer slice_stats light_splitter
 
 hasher.o: hasher.c hasher.h preprocessing.h ../types.h
 
@@ -11,6 +11,10 @@ splitter.o: splitter.c sha256.h hasher.h preprocessing.h
 splitter.o: CC = mpicc
 splitter: preprocessing.o sha256.o hasher.o splitter.o
 splitter: CC = mpicc
+
+light_splitter.o: CFLAGS += -fopenmp
+light_splitter: LDFLAGS += -fopenmp
+light_splitter: preprocessing.o sha256.o hasher.o light_splitter.o
 
 sorter.o: hasher.h sorter.c preprocessing.h
 
