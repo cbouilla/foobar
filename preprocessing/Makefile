@@ -3,7 +3,7 @@ LDFLAGS = -lm
 
 all: programs
 
-programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker old_slicer
+programs: splitter dict_checker sorter merger hash_checker forger slicer slice_checker old_slicer slice_stats
 
 hasher.o: hasher.c hasher.h preprocessing.h ../types.h
 
