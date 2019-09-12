@@ -56,25 +56,31 @@ int main(int argc, char **argv)
 	if (slice_filename == NULL)
 		errx(1, "missing --slice");
 	
-	printf("Loading slices...");
-	fflush(stdout);
 	u64 slices_size;
 	struct slice_t * slice = (struct slice_t *) load(slice_filename, &slices_size);
 	u64 *slice_end = ((u64 *) slice) + slices_size;
-	printf("%" PRId64 "\n", slices_size);
+
+	u64 total[200];
+	for (int i = 0; i < 200; i++)
+		total[i] = 0;
 
 	/* process all slices */
 	u64 i = 0;
 	while ((u64 *) slice < slice_end) {
-		u64 l = slice->l;
 		u64 n = slice->n;
-		printf("%d; %d\n", (int) l, (int) n);
+
+		assert(n < 200);
+		total[n]++;
 
 		/* advance to next slice */
 		i++;
 		u64 *ptr = (u64 *) slice + sizeof(struct slice_t)/8 + n;
 		slice = (struct slice_t *) ptr;
 	}
+
+	for (int i = 0; i < 200; i++)
+		if (total[i])
+			printf("%d; %d\n", i, (int) total[i]);
 
 	exit(EXIT_SUCCESS);
 }
