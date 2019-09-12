@@ -108,3 +108,4 @@ opkg
 /ijoux/do_task_group
 /preprocessing/slice_checker
 /postprocessing/post_processing
+/preprocessing/slice_stats
