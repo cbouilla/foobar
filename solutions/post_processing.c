@@ -68,7 +68,12 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	for (u32 p = 0; p < 8; p++)
 		printf("%08x ", sum[7 - p]);
 	u32 bits = (sum[4] == 0) ? 128 : 128 - ceil(log2(sum[4]));
-	printf(" --- %d bits\n", bits);
+	printf(" --- %d bits", bits);
+
+	u32 hash[8];
+	compute_middle_hash(3, &preimages[i][3], hash);
+	bits = 33 + (32 - ceil(log2(hash[7])));
+	printf(" --- clamped to %d bits\n", bits);
 	return bits;
 }
 
