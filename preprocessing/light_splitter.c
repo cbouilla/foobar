@@ -50,8 +50,7 @@ int main(int argc, char **argv)
                                 n_invalid++;
                                 continue;
                         }
-                        u64 x = extract_partial_hash(full_hash);
-                        u64 y = x >> 48;
+                        u32 y = full_hash[6] >> 16;
                         
                         #pragma omp atomic update
                         stats[y]++;
