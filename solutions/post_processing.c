@@ -71,7 +71,7 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	printf(" --- %d bits", bits);
 
 	bits = 32 + ((hash[6] == 0) ? 32 : 32 - ceil(log2(hash[6])));
-	printf(" --- clamped to %d bits [%08x %08x]\n", bits, hash[6]], hash[7]);
+	printf(" --- clamped to %d bits [%08x %08x]\n", bits, hash[6], hash[7]);
 	return bits;
 }
 
