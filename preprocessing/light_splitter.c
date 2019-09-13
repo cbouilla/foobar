@@ -12,6 +12,8 @@
 
 static const u32 READER_BUFFER_SIZE = 65536;
 
+u32 stats[65536];
+
 int main(int argc, char **argv)
 {
         assert(argc == 2);
@@ -23,6 +25,13 @@ int main(int argc, char **argv)
         FILE *f = fopen(in_filename, "r");
         if (f == NULL)
                 err(1, "fopen on %s", in_filename);
+
+        char out_filename[255];
+        char *input_base = basename(in_filename);
+        sprintf(out_filename, "%s.stats", input_base);
+        FILE *g = fopen(out_filename, "w");
+        if (g == NULL)
+                err(1, "fopen on %s", out_filename);
 
         double start = omp_get_wtime();
 
@@ -41,6 +50,11 @@ int main(int argc, char **argv)
                                 n_invalid++;
                                 continue;
                         }
+                        u64 x = extract_partial_hash(full_hash);
+                        u64 y = x >> 48;
+                        
+                        #pragma omp atomic update
+                        stats[y]++;
                 }
                 n_processed += (int) n_items;
                 double t = omp_get_wtime();
@@ -49,7 +63,10 @@ int main(int argc, char **argv)
                 fflush(stderr);
         }
         fclose(f);
-        
+
+        fwrite(stats, sizeof(u32), 65536, g);        
+        fclose(g);
+
         printf("%d preimages read. %d invalid.\n", n_processed, n_invalid);              
         exit(EXIT_SUCCESS);
 }
