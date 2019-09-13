@@ -26,6 +26,8 @@ static inline void build_plaintext_block(int kind, struct preimage_t *preimage, 
 
 }
 extern bool compute_full_hash(int kind, struct preimage_t *preimage, u32 *hash);
+extern void compute_middle_hash(int kind, struct preimage_t *preimage, u32 *hash);
+
 static inline u64 extract_partial_hash(u32 *hash) {
         return (((u64) hash[5]) << 32) ^ hash[6] ^ (hash[4] & 0x80000000);
 
