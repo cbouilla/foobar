@@ -73,7 +73,7 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	u32 hash[8];
 	compute_middle_hash(2, &preimages[i][2], hash);
 	bits = 33 + (32 - ceil(log2(hash[7])));
-	printf(" --- clamped to %d bits\n", bits);
+	printf(" --- clamped to %d bits [%08x %08x]\n", bits, hash[7], hash[8]);
 	return bits;
 }
 
