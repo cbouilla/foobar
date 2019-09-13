@@ -67,7 +67,7 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	printf("SUM = ");
 	for (u32 p = 0; p < 8; p++)
 		printf("%08x ", sum[7 - p]);
-	u32 bits = 128 - ceil(log2(sum[4]));
+	u32 bits = (sum[4] == 0) ? 128 : 128 - ceil(log2(sum[4]));
 	printf(" --- %d bits", bits);
 
 	u32 hash[8];
