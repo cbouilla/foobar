@@ -54,8 +54,8 @@ u64 * load_file(const char *filename, u64 *size_)
 u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 {
 	u32 sum[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+	u32 hash[8];
 	for (u32 kind = 0; kind < 3; kind++) {
-		u32 hash[8];
 		bool valid = compute_full_hash(kind, &preimages[i][kind], hash);
 		if (!valid)
 			warnx("bizarre, invalid preimage");
@@ -70,10 +70,8 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	u32 bits = (sum[4] == 0) ? 128 : 128 - ceil(log2(sum[4]));
 	printf(" --- %d bits", bits);
 
-	u32 hash[8];
-	compute_middle_hash(2, &preimages[i][2], hash);
-	bits = 32 + ((hash[1] == 0) ? 32 : 32 - ceil(log2(hash[1])));
-	printf(" --- clamped to %d bits [%08x %08x]\n", bits, hash[0], hash[1]);
+	bits = 32 + ((hash[6] == 0) ? 32 : 32 - ceil(log2(hash[6])));
+	printf(" --- clamped to %d bits [%08x %08x]\n", bits, hash[6]], hash[7]);
 	return bits;
 }
 
