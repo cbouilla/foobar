@@ -64,10 +64,15 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	}
 
 	printf("[%04x ; %04x ; %04x] ", origin[i][0], origin[i][1], origin[i][2]);
+	for (u32 kind = 0; kind < 3; kind++) {
+		printf("%016" PRIx64 ":%08x", preimages[i][kind].counter, preimages[i][kind].nonce);
+		if (kind != 2) 
+			printf(" | ");
+	}
 	// printf("SUM = ");
 	// for (u32 p = 0; p < 8; p++)
 	// 	printf("%08x ", sum[7 - p]);
-	u32 bits = (sum[4] == 0) ? 128 : 128 - ceil(log2(sum[4]));
+	u32 bits = (sum[4] == 0) ? 128 : 128 - floor(log2(sum[4])) - 1;
 	// printf(" --- %d bits", bits);
 
 	for (u32 kind = 0; kind < 3; kind++) {
@@ -78,7 +83,7 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 		//u32 bits = 32 + ((hash[kind][6] == 0) ? 32 : 32 - ceil(log2(hash[kind][6])));
 		//printf(" --- clamped to %d bits [%08x %08x]", bits, hash[kind][6], hash[kind][7]);
 	}
-	printf("\n");
+	printf(" --- bits=%d\n", bits);
 	return bits;
 }
 
