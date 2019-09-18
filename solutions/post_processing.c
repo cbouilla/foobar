@@ -75,14 +75,14 @@ u32 print_result(struct preimage_t (* preimages)[3], u32 (*origin)[3], u32 i)
 	u32 bits = (sum[4] == 0) ? 128 : 128 - floor(log2(sum[4])) - 1;
 	// printf(" --- %d bits", bits);
 
-	for (u32 kind = 0; kind < 3; kind++) {
-		for (u32 p = 0; p < 8; p++)
-		 	printf("%08x ", hash[kind][p]);
-		if (kind != 2) 
-			printf(" | ");
-		//u32 bits = 32 + ((hash[kind][6] == 0) ? 32 : 32 - ceil(log2(hash[kind][6])));
-		//printf(" --- clamped to %d bits [%08x %08x]", bits, hash[kind][6], hash[kind][7]);
-	}
+	// for (u32 kind = 0; kind < 3; kind++) {
+	// 	for (u32 p = 0; p < 8; p++)
+	// 	 	printf("%08x ", hash[kind][p]);
+	// 	if (kind != 2) 
+	// 		printf(" | ");
+	// 	//u32 bits = 32 + ((hash[kind][6] == 0) ? 32 : 32 - ceil(log2(hash[kind][6])));
+	// 	//printf(" --- clamped to %d bits [%08x %08x]", bits, hash[kind][6], hash[kind][7]);
+	// }
 	printf(" --- bits=%d\n", bits);
 	return bits;
 }
